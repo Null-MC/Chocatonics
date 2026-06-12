@@ -113,9 +113,9 @@ void main() {
 
 	#ifdef POM
 		vec2 tempOffset = taa_offsets[framemod8];
-		vec2 adjustedTexCoord = fract(vtexcoord.st)*vtexcoordam.pq+vtexcoordam.st;
-		vec3 fragpos = toScreenSpace(gl_FragCoord.xyz*vec3(texelSize/RENDER_SCALE,1.0)-vec3(vec2(tempOffset)*texelSize*0.5,0.0));
-		vec3 viewVector = normalize(tbnMatrix*fragpos);
+		vec2 adjustedTexCoord = fract(vtexcoord.st) * vtexcoordam.pq + vtexcoordam.st;
+		vec3 fragpos = toScreenSpace(gl_FragCoord.xyz * vec3(texelSize/RENDER_SCALE, 1.0) - vec3(vec2(tempOffset)*texelSize*0.5, 0.0));
+		vec3 viewVector = normalize(tbnMatrix * fragpos);
 		float dist = length(fragpos);
 
 		#ifdef Depth_Write_POM
@@ -186,9 +186,6 @@ void main() {
 			data0.a = textureGrad(gtexture, adjustedTexCoord.xy, vec2(0.0), vec2(0.0)).a;
 		#endif
 
-//		if (data0.a > alphaTestRef) data0.a = normalMat.a;
-//		else data0.a = 0.0;
-
 		normal = applyBump(tbnMatrix, textureGrad(normals, adjustedTexCoord.xy, dcdx, dcdy).xyz * 2.0 - 1.0);
 
 		data0.rgb *= color.rgb;
@@ -200,16 +197,10 @@ void main() {
 
 		float avgBlockLum = luma(textureLod(gtexture, lmtexcoord.xy, 128).rgb * color.rgb);
 		data0.rgb = saturate(data0.rgb * pow(avgBlockLum, -0.33) * 0.85);
-		//data0.rgb = vec3(avgBlockLum);
-		//data0.rgb = clamp(data0.rgb*pow((0.55+avgBlockLum),-(1.0/2.233)),0.0,1.0);
-		//if (toLinear(data0.rgb).g > 0.25) data0.rgb=vec3(1.,0.,0.);
 
 		#ifdef DISABLE_ALPHA_MIPMAPS
 			data0.a = textureLod(gtexture, lmtexcoord.xy, 0).a;
 		#endif
-
-//		if (data0.a > alphaTestRef) data0.a = normalMat.a;
-//		else data0.a = 0.0;
 
 		#ifdef MC_NORMAL_MAP
 			normal = applyBump(tbnMatrix, texture(normals, lmtexcoord.xy).rgb * 2.0 - 1.0);

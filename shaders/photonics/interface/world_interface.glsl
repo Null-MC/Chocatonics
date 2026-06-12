@@ -41,7 +41,7 @@ vec3 load_player_position() {
     float depth = texelFetch(TEX_DEPTH, uv, 0).r;
 
     vec2 tempOffset = vec2(0.0);
-    #ifdef TAA
+    #ifdef TAA_ENABLED
         //tempOffset = -taa_offsets[framemod8];
     #endif
 
@@ -74,7 +74,7 @@ bool is_hand_at() {
 }
 
 vec2 get_taa_jitter() {
-    #ifdef TAA
+    #ifdef TAA_ENABLED
         return 2.0 * taa_offsets[framemod8] * texelSize;
     #else
         return vec2(0.0);

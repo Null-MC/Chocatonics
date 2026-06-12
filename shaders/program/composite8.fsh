@@ -267,7 +267,7 @@ vec3 TAA_hq() {
 layout(location = 0) out vec3 outColor5;
 
 void main() {
-	#ifdef TAA
+	#ifdef TAA_ENABLED
 		float dither = R2_dither(gl_FragCoord.xy, frameCounter);
 		vec3 color = fp10Dither(TAA_hq(), triangularize(dither));
 		outColor5 = clamp(color, 6.11*1e-5, 65000.0);

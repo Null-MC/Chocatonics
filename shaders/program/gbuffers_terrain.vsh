@@ -82,8 +82,10 @@ void main() {
 		tangent = vec4(normalize(gl_NormalMatrix * at_tangent.rgb), at_tangent.w);
 	#endif
 
-	normalMat = vec4(normalize(gl_NormalMatrix * gl_Normal), mc_Entity.x == 10004 || mc_Entity.x == 10003 || mc_Entity.x == 10001 ? 0.5 : 1.0);
-	normalMat.a = mc_Entity.x == 10006 ? 0.6 : normalMat.a;
+	normalMat.xyz = normalize(gl_NormalMatrix * gl_Normal);
+	normalMat.w = mc_Entity.x == 10004 || mc_Entity.x == 10003 || mc_Entity.x == 10001 ? 0.5 : 1.0;
+
+	if (mc_Entity.x == 10006) normalMat.a = 0.6;
 
 	#ifdef WAVY_PLANTS
 		if ((mc_Entity.x == 10001 && istopv) && abs(position.z) < 64.0) {
@@ -117,7 +119,7 @@ void main() {
 		gl_Position.xy = gl_Position.xy * RENDER_SCALE + RENDER_SCALE * gl_Position.w - gl_Position.w;
 	#endif
 
-	#ifdef TAA
+	#ifdef TAA_ENABLED
 		gl_Position.xy += taa_offsets[framemod8] * gl_Position.w * texelSize;
 	#endif
 }

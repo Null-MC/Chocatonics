@@ -39,7 +39,7 @@ void main() {
 	tempOffsets = HaltonSeq2(frameCounter % 10000);
 	TAA_Offset = taa_offsets[frameCounter % 8];
 
-	#ifndef TAA
+	#ifndef TAA_ENABLED
 		TAA_Offset = vec2(0.0);
 	#endif
 

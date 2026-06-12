@@ -59,12 +59,17 @@ vec3 toLinear(const in vec3 sRGB){
 }
 
 
+#define TEX_GB_COLOR colortex8
+#define TEX_GB_NORMAL colortex9
+#define TEX_GB_SPECULAR colortex10
+
+
 const vec2[8] taa_offsets = vec2[8](
-    vec2(1./8.,-3./8.),
-    vec2(-1.,3.)/8.,
-    vec2(5.0,1.)/8.,
-    vec2(-3,-5.)/8.,
-    vec2(-5.,5.)/8.,
-    vec2(-7.,-1.)/8.,
-    vec2(3,7.)/8.,
-    vec2(7.,-7.)/8.);
+    vec2( 1.0, -3.0) / 8.0,
+    vec2(-1.0,  3.0) / 8.0,
+    vec2( 5.0,  1.0) / 8.0,
+    vec2(-3.0, -5.0) / 8.0,
+    vec2(-5.0,  5.0) / 8.0,
+    vec2(-7.0, -1.0) / 8.0,
+    vec2( 3.0,  7.0) / 8.0,
+    vec2( 7.0, -7.0) / 8.0);

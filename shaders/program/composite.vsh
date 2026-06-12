@@ -21,7 +21,7 @@ uniform mat4 gbufferModelViewInverse;
 void main() {
 	TAA_Offset = taa_offsets[frameCounter % 8];
 
-	#ifndef TAA
+	#ifndef TAA_ENABLED
 		TAA_Offset = vec2(0.0);
 	#endif
 
