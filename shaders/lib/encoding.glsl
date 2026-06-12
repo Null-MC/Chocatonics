@@ -1,6 +1,6 @@
 // encode normal in two channels (xy),torch(z) and sky lightmap (w)
-vec4 encode(const in vec3 n) {
-    return vec4(n.xy * inversesqrt(n.z * 8.0 + 8.0) + 0.5, vec2(lmtexcoord.z, lmtexcoord.w));
+vec4 encode(const in vec3 n, const in vec2 lmtexcoord) {
+    return vec4(n.xy * inversesqrt(n.z * 8.0 + 8.0) + 0.5, lmtexcoord);
 }
 
 // encoding by jodie

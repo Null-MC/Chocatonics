@@ -3,23 +3,30 @@
 #include "/lib/common.glsl"
 #include "/lib/settings.glsl"
 
-#ifdef POM
-	in vec4 vtexcoordam; // .st for add, .pq for mul
-	in vec4 vtexcoord;
-#endif
 
-in vec4 lmtexcoord;
-in vec4 color;
-in vec4 normalMat;
+in VertexData {
+	vec4 lmtexcoord;
+	vec4 color;
+	vec4 normalMat;
 
-#ifdef MC_NORMAL_MAP
-	in vec4 tangent;
-#endif
+	#ifdef POM
+		vec4 vtexcoordam; // .st for add, .pq for mul
+		vec4 vtexcoord;
+	#endif
+
+	#ifdef MC_NORMAL_MAP
+		vec4 tangent;
+	#endif
+} vIn;
 
 uniform sampler2D gtexture;
 
 #ifdef MC_NORMAL_MAP
 	uniform sampler2D normals;
+#endif
+
+#ifdef MC_TEXTURE_FORMAT_LAB_PBR
+	uniform sampler2D specular;
 #endif
 
 uniform vec2 texelSize;
@@ -42,6 +49,8 @@ uniform vec3 cameraPosition;
 
 #include "/lib/ign.glsl"
 #include "/lib/encoding.glsl"
+#include "/lib/material.glsl"
+#include "/lib/octohedral.glsl"
 #include "/lib/projections.glsl"
 
 
@@ -53,8 +62,8 @@ const float MIX_OCCLUSION_DISTANCE = MAX_DIST*0.9;
 const int   MAX_OCCLUSION_POINTS   = MAX_ITERATIONS;
 
 #ifdef POM
-	vec2 dcdx = dFdx(vtexcoord.st * vtexcoordam.pq) * exp2(Texture_MipMap_Bias);
-	vec2 dcdy = dFdy(vtexcoord.st * vtexcoordam.pq) * exp2(Texture_MipMap_Bias);
+	vec2 dcdx = dFdx(vIn.vtexcoord.st * vIn.vtexcoordam.pq) * exp2(Texture_MipMap_Bias);
+	vec2 dcdy = dFdy(vIn.vtexcoord.st * vIn.vtexcoordam.pq) * exp2(Texture_MipMap_Bias);
 #endif
 
 mat3 inverse(mat3 m) {
@@ -86,34 +95,37 @@ mat3 inverse(mat3 m) {
 
 #ifdef POM
 	vec4 readNormal(in vec2 coord) {
-		return textureGrad(normals, fract(coord) * vtexcoordam.pq + vtexcoordam.st, dcdx, dcdy);
+		return textureGrad(normals, fract(coord) * vIn.vtexcoordam.pq + vIn.vtexcoordam.st, dcdx, dcdy);
 	}
 
 	vec4 readTexture(in vec2 coord) {
-		return textureGrad(gtexture, fract(coord) * vtexcoordam.pq + vtexcoordam.st, dcdx, dcdy);
+		return textureGrad(gtexture, fract(coord) * vIn.vtexcoordam.pq + vIn.vtexcoordam.st, dcdx, dcdy);
 	}
 #endif
 
 
-/* RENDERTARGETS: 1 */
-layout(location = 0) out vec4 outColor1;
+/* RENDERTARGETS: 8,9,10,11 */
+layout(location = 0) out vec4 outColor;
+layout(location = 1) out vec4 outNormal;
+layout(location = 2) out vec4 outSpecular;
+layout(location = 3) out vec4 outWorld;
 
 void main() {
 	float noise = IGN_time(frameTimeCounter);
-	vec3 normal = normalMat.xyz;
+	vec3 normal = vIn.normalMat.xyz;
 
 	#ifdef MC_NORMAL_MAP
-		vec3 tangent2 = normalize(cross(tangent.rgb, normal) * tangent.w);
+		vec3 tangent2 = normalize(cross(vIn.tangent.rgb, normal) * vIn.tangent.w);
 
 		mat3 tbnMatrix = mat3(
-			tangent.x, tangent2.x, normal.x,
-			tangent.y, tangent2.y, normal.y,
-			tangent.z, tangent2.z, normal.z);
+			vIn.tangent.x, tangent2.x, normal.x,
+			vIn.tangent.y, tangent2.y, normal.y,
+			vIn.tangent.z, tangent2.z, normal.z);
 	#endif
 
 	#ifdef POM
 		vec2 tempOffset = taa_offsets[framemod8];
-		vec2 adjustedTexCoord = fract(vtexcoord.st) * vtexcoordam.pq + vtexcoordam.st;
+		vec2 adjustedTexCoord = fract(vIn.vtexcoord.st) * vIn.vtexcoordam.pq + vIn.vtexcoordam.st;
 		vec3 fragpos = toScreenSpace(gl_FragCoord.xyz * vec3(texelSize/RENDER_SCALE, 1.0) - vec3(vec2(tempOffset)*texelSize*0.5, 0.0));
 		vec3 viewVector = normalize(tbnMatrix * fragpos);
 		float dist = length(fragpos);
@@ -124,9 +136,9 @@ void main() {
 
 		if (dist < MAX_OCCLUSION_DISTANCE) {
   			#ifndef AutoGeneratePOMTextures
-				if (viewVector.z < 0.0 && readNormal(vtexcoord.st).a < 0.9999 && readNormal(vtexcoord.st).a > 0.00001) {
+				if (viewVector.z < 0.0 && readNormal(vIn.vtexcoord.st).a < 0.9999 && readNormal(vIn.vtexcoord.st).a > 0.00001) {
 					vec3 interval = viewVector.xyz / -viewVector.z / MAX_OCCLUSION_POINTS * POM_DEPTH;
-					vec3 coord = vec3(vtexcoord.st, 1.0);
+					vec3 coord = vec3(vIn.vtexcoord.st, 1.0);
 
 					coord += noise*interval;
 					float sumVec = noise;
@@ -143,9 +155,10 @@ void main() {
 						}
 					}
 
-					adjustedTexCoord = mix(fract(coord.st)*vtexcoordam.pq+vtexcoordam.st , adjustedTexCoord , max(dist-MIX_OCCLUSION_DISTANCE,0.0)/(MAX_OCCLUSION_DISTANCE-MIX_OCCLUSION_DISTANCE));
+					adjustedTexCoord = mix(fract(coord.st) * vIn.vtexcoordam.pq + vIn.vtexcoordam.st, adjustedTexCoord, max(dist - MIX_OCCLUSION_DISTANCE, 0.0) / (MAX_OCCLUSION_DISTANCE-MIX_OCCLUSION_DISTANCE));
 
-					vec3 truePos = fragpos + sumVec*inverse(tbnMatrix)*interval;
+					vec3 truePos = fragpos + sumVec * inverse(tbnMatrix) * interval;
+
 					#ifdef Depth_Write_POM
 						gl_FragDepth = toClipSpace3(truePos).z;
 					#endif
@@ -153,10 +166,10 @@ void main() {
   			#else
 				if (viewVector.z < 0.0) {
 					vec3 interval = viewVector.xyz / -viewVector.z / MAX_OCCLUSION_POINTS * POM_DEPTH;
-					vec3 coord = vec3(vtexcoord.st, 1.0);
+					vec3 coord = vec3(vIn.vtexcoord.st, 1.0);
 					coord += noise*interval;
 					float sumVec = noise;
-					float lum0 = luma(textureLod(gtexture, lmtexcoord.xy, 100).rgb);
+					float lum0 = luma(textureLod(gtexture, vIn.lmtexcoord.xy, 100).rgb);
 
 					for (int loopCount = 0; (loopCount < MAX_OCCLUSION_POINTS) && (1.0 - POM_DEPTH + POM_DEPTH*luma(readTexture(coord.st).rgb)/lum0*0.5 < coord.p) && coord.p >= 0.0; ++loopCount) {
 						 coord = coord+interval;
@@ -170,7 +183,7 @@ void main() {
 						}
 					}
 
-					adjustedTexCoord = mix(fract(coord.st) * vtexcoordam.pq + vtexcoordam.st, adjustedTexCoord, max(dist - MIX_OCCLUSION_DISTANCE, 0.0) / (MAX_OCCLUSION_DISTANCE - MIX_OCCLUSION_DISTANCE));
+					adjustedTexCoord = mix(fract(coord.st) * vIn.vtexcoordam.pq + vIn.vtexcoordam.st, adjustedTexCoord, max(dist - MIX_OCCLUSION_DISTANCE, 0.0) / (MAX_OCCLUSION_DISTANCE - MIX_OCCLUSION_DISTANCE));
 
 					vec3 truePos = fragpos + sumVec * inverse(tbnMatrix) * interval;
 
@@ -181,40 +194,54 @@ void main() {
 			#endif
 		}
 
-		vec4 data0 = textureGrad(gtexture, adjustedTexCoord.xy, dcdx, dcdy);
+		vec4 color = textureGrad(gtexture, adjustedTexCoord.xy, dcdx, dcdy);
 		#ifdef DISABLE_ALPHA_MIPMAPS
-			data0.a = textureGrad(gtexture, adjustedTexCoord.xy, vec2(0.0), vec2(0.0)).a;
+			color.a = textureGrad(gtexture, adjustedTexCoord.xy, vec2(0.0), vec2(0.0)).a;
 		#endif
+
+		color.rgb *= vIn.color.rgb;
 
 		normal = applyBump(tbnMatrix, textureGrad(normals, adjustedTexCoord.xy, dcdx, dcdy).xyz * 2.0 - 1.0);
 
-		data0.rgb *= color.rgb;
-
-		vec4 data1 = saturate(noise * exp2(-8.0) + encode(normal));
+		#ifdef MC_TEXTURE_FORMAT_LAB_PBR
+			vec4 specularData = textureGrad(specular, adjustedTexCoord.xy, dcdx, dcdy);
+		#endif
 	#else
-		vec4 data0 = texture(gtexture, lmtexcoord.xy, Texture_MipMap_Bias);
-		data0.rgb *= color.rgb;
+		vec4 color = texture(gtexture, vIn.lmtexcoord.xy, Texture_MipMap_Bias);
+		color.rgb *= vIn.color.rgb;
 
-		float avgBlockLum = luma(textureLod(gtexture, lmtexcoord.xy, 128).rgb * color.rgb);
-		data0.rgb = saturate(data0.rgb * pow(avgBlockLum, -0.33) * 0.85);
+		float avgBlockLum = luma(textureLod(gtexture, vIn.lmtexcoord.xy, 128).rgb * vIn.color.rgb);
+		color.rgb = saturate(color.rgb * pow(avgBlockLum, -0.33) * 0.85);
 
 		#ifdef DISABLE_ALPHA_MIPMAPS
-			data0.a = textureLod(gtexture, lmtexcoord.xy, 0).a;
+			color.a = textureLod(gtexture, vIn.lmtexcoord.xy, 0).a;
 		#endif
 
 		#ifdef MC_NORMAL_MAP
-			normal = applyBump(tbnMatrix, texture(normals, lmtexcoord.xy).rgb * 2.0 - 1.0);
+			normal = applyBump(tbnMatrix, texture(normals, vIn.lmtexcoord.xy).rgb * 2.0 - 1.0);
 		#endif
 
-		vec4 data1 = saturate(noise / 256.0 + encode(normal));
+		#ifdef MC_TEXTURE_FORMAT_LAB_PBR
+			vec4 specularData = texture(specular, vIn.lmtexcoord.xy);
+		#endif
 	#endif
 
-	if (data0.a < alphaTestRef) discard;
-	data0.a = normalMat.a;
+	if (color.a < alphaTestRef) discard;
 
-	outColor1 = vec4(
-		encodeVec2(data0.x, data1.x),
-		encodeVec2(data0.y, data1.y),
-		encodeVec2(data0.z, data1.z),
-		encodeVec2(data1.w, data0.w));
+	#ifdef MC_TEXTURE_FORMAT_LAB_PBR
+		float roughness = specularData.r;
+		float f0 = specularData.g;
+		float sss = mat_sss_lab(specularData.b);
+		float emission = mat_emission_lab(specularData.a);
+	#else
+		const float roughness = 1.0;
+		const float f0 = 0.04;
+		const float sss = 0.0;
+		const float emission = 0.0;
+	#endif
+
+	outColor = color;
+	outNormal = vec4(OctEncode(vIn.normalMat.xyz), OctEncode(normal));
+	outSpecular = vec4(roughness, f0, sss, emission);
+	outWorld = vec4(vIn.lmtexcoord.zw, 0.0, vIn.normalMat.a);
 }

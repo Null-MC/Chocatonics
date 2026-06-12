@@ -62,6 +62,7 @@ vec3 toLinear(const in vec3 sRGB){
 #define TEX_GB_COLOR colortex8
 #define TEX_GB_NORMAL colortex9
 #define TEX_GB_SPECULAR colortex10
+#define TEX_GB_WORLD colortex11
 
 
 const vec2[8] taa_offsets = vec2[8](

@@ -40,7 +40,7 @@ void main() {
 	if (data0.a < alphaTestRef) discard;
 	data0.a = normalMat.a * 0.5 + 0.5;
 
-	vec4 data1 = saturate(encode(normal));
+	vec4 data1 = saturate(encode(normal, lmtexcoord.zw));
 
 	outColor1 = vec4(
 		encodeVec2(data0.x, data1.x),

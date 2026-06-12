@@ -7,7 +7,7 @@
 
 
 layout (local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
-const vec2 workGroupsRender = vec2(RENDER_SCALE, RENDER_SCALE);
+const vec2 workGroupsRender = vec2(RENDER_SCALE_X, RENDER_SCALE_Y);
 
 shared vec3 sharedBuffer[18*18];
 
@@ -15,6 +15,9 @@ layout(rgba16f) uniform writeonly image2D imgTAA_min;
 layout(rgba16f) uniform writeonly image2D imgTAA_max;
 
 uniform sampler2D colortex3;
+
+uniform float viewWidth;
+uniform float viewHeight;
 
 
 vec2 viewSizeScaled = vec2(viewWidth, viewHeight) * RENDER_SCALE;

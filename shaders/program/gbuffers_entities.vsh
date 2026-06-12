@@ -1,5 +1,4 @@
-#version 120
-#extension GL_EXT_gpu_shader4 : enable
+#version 430 compatibility
 
 #include "/lib/common.glsl"
 #include "/lib/settings.glsl"
@@ -9,13 +8,15 @@
 	attribute vec4 at_tangent;
 #endif
 
-varying vec4 lmtexcoord;
-varying vec4 color;
-varying vec4 normalMat;
+out VertexData {
+	vec4 lmtexcoord;
+	vec4 color;
+	vec4 normalMat;
 
-#ifdef MC_NORMAL_MAP
-	varying vec4 tangent;
-#endif
+	#ifdef MC_NORMAL_MAP
+		vec4 tangent;
+	#endif
+} vOut;
 
 uniform int blockEntityId;
 uniform vec2 texelSize;
@@ -23,16 +24,19 @@ uniform int framemod8;
 
 
 void main() {
-	lmtexcoord.xy = (gl_MultiTexCoord0).xy;
-	lmtexcoord.zw = gl_MultiTexCoord1.xy / 255.0;
-	gl_Position = ftransform();
-	color = gl_Color;
+	vOut.lmtexcoord.xy = (gl_MultiTexCoord0).xy;
+	vOut.lmtexcoord.zw = gl_MultiTexCoord1.xy / 255.0;
 
-	normalMat = vec4(normalize(gl_NormalMatrix * gl_Normal), blockEntityId == 10006 ? 1.0 : 1.0);
+	vOut.color = gl_Color;
+
+	vOut.normalMat.xyz = normalize(gl_NormalMatrix * gl_Normal);
+	vOut.normalMat.w = blockEntityId == 10006 ? 1.0 : 1.0; // TODO: ???
 
 	#ifdef MC_NORMAL_MAP
-		tangent = vec4(normalize(gl_NormalMatrix * at_tangent.rgb), at_tangent.w);
+		vOut.tangent = vec4(normalize(gl_NormalMatrix * at_tangent.rgb), at_tangent.w);
 	#endif
+
+	gl_Position = ftransform();
 
 	#ifdef TAA_UPSCALING
 		gl_Position.xy = gl_Position.xy * RENDER_SCALE + RENDER_SCALE * gl_Position.w - gl_Position.w;

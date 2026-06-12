@@ -1,13 +1,14 @@
-#version 120
-#extension GL_EXT_gpu_shader4 : enable
+#version 430 compatibility
 
 #include "/lib/common.glsl"
 #include "/lib/settings.glsl"
 
 
-varying vec4 lmtexcoord;
-varying vec4 color;
-varying vec4 normalMat;
+out VertexData {
+	vec4 lmtexcoord;
+	vec4 color;
+	vec4 normalMat;
+} vOut;
 
 uniform int blockEntityId;
 uniform vec2 texelSize;
@@ -20,13 +21,14 @@ vec4 toClipSpace3(vec3 viewSpacePosition) {
 
 
 void main() {
-	lmtexcoord.xy = (gl_MultiTexCoord0).xy;
-	lmtexcoord.zw = gl_MultiTexCoord1.xy / 255.0;
-	color = gl_Color;
+	vOut.lmtexcoord.xy = (gl_MultiTexCoord0).xy;
+	vOut.lmtexcoord.zw = gl_MultiTexCoord1.xy / 255.0;
+	vOut.color = gl_Color;
 
-	normalMat = vec4(normalize(gl_NormalMatrix * gl_Normal), blockEntityId == 10010 ? 0.6 : 1.0);
+	vOut.normalMat.xyz = normalize(gl_NormalMatrix * gl_Normal);
+	vOut.normalMat.w = blockEntityId == 10010 ? 0.6 : 1.0;
 
-	vec3 position = mat3(gl_ModelViewMatrix) * vec3(gl_Vertex) + gl_ModelViewMatrix[3].xyz;
+	vec3 position = mul3(gl_ModelViewMatrix, gl_Vertex.xyz);
 	gl_Position = toClipSpace3(position);
 
 	#ifdef TAA_UPSCALING
@@ -34,6 +36,6 @@ void main() {
 	#endif
 
 	#ifdef TAA_ENABLED
-		gl_Position.xy += taa_offsets[framemod8] * gl_Position.w*texelSize;
+		gl_Position.xy += taa_offsets[framemod8] * gl_Position.w * texelSize;
 	#endif
 }

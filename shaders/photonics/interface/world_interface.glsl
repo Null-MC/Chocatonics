@@ -16,8 +16,9 @@
 //    #undef SHADOW_CLOUDS
 //#endif
 
+
 uniform sampler2D TEX_DEPTH;
-uniform sampler2D colortex1;
+uniform sampler2D TEX_GB_NORMAL;
 
 uniform float near;
 uniform float far;
@@ -33,6 +34,7 @@ uniform mat4 shadowModelView;
 uniform mat4 shadowProjection;
 
 #include "/lib/decode.glsl"
+#include "/lib/octohedral.glsl"
 #include "/lib/projections.glsl"
 
 
@@ -53,14 +55,10 @@ vec3 load_player_position() {
 
 void load_fragment_data(out vec3 geometry_normal, out vec3 texture_normal) {
     ivec2 uv = ivec2(gl_FragCoord.xy);
-    vec4 data = texelFetch(colortex1, uv, 0);
-    vec4 dataUnpacked0 = vec4(decodeVec2(data.x), decodeVec2(data.y));
-     vec4 dataUnpacked1 = vec4(decodeVec2(data.z), decodeVec2(data.w));
-    geometry_normal = mat3(gbufferModelViewInverse) * decode(dataUnpacked0.yw);
+    vec4 normalData = texelFetch(TEX_GB_NORMAL, uv, 0);
 
-    // TODO
-    texture_normal = geometry_normal;
-//    texture_normal = mat3(gbufferModelViewInverse) * decode(dataUnpacked1.yw);
+    geometry_normal = mat3(gbufferModelViewInverse) * OctDecode(normalData.xy);
+    texture_normal  = mat3(gbufferModelViewInverse) * OctDecode(normalData.zw);
 }
 
 bool is_in_world() {

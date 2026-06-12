@@ -8,11 +8,14 @@
 flat varying vec3 WsunVec;
 flat varying vec2 TAA_Offset;
 
+uniform sampler2D TEX_GB_NORMAL;
+uniform sampler2D TEX_GB_SPECULAR;
+uniform sampler2D TEX_GB_WORLD;
 uniform sampler2D depthtex1;
-uniform sampler2D colortex1;
+//uniform sampler2D colortex1;
 uniform sampler2D shadowtex0;
 uniform sampler2D noisetex;
-uniform sampler2D texBlueNoise;
+//uniform sampler2D texBlueNoise;
 
 uniform vec3 sunVec;
 uniform vec2 texelSize;
@@ -34,6 +37,7 @@ uniform float near;
 #include "/lib/ign.glsl"
 #include "/lib/decode.glsl"
 #include "/lib/blueNoise.glsl"
+#include "/lib/octohedral.glsl"
 #include "/lib/projections.glsl"
 #include "/lib/Shadow_Params.glsl"
 #include "/lib/shadowSampling.glsl"
@@ -51,14 +55,17 @@ void main() {
 	vec2 tempOffset = TAA_Offset;
 
 	if (z < 1.0) {
-		vec4 data = texture2D(colortex1, texcoord);
-		vec4 dataUnpacked0 = vec4(decodeVec2(data.x), decodeVec2(data.y));
-		vec4 dataUnpacked1 = vec4(decodeVec2(data.z), decodeVec2(data.w));
-		vec3 normal = mat3(gbufferModelViewInverse) * decode(dataUnpacked0.yw);
-		vec2 lightmap = dataUnpacked1.yz;
-		bool translucent = abs(dataUnpacked1.w-0.5) < 0.01;
-		bool translucent2 = abs(dataUnpacked1.w-0.6) < 0.01;	// Weak translucency
-		bool hand = abs(dataUnpacked1.w-0.75) < 0.01;
+		vec4 normalData = texture(TEX_GB_NORMAL, texcoord);
+		vec3 normal = mat3(gbufferModelViewInverse) * OctDecode(normalData.xy);
+
+		vec4 specularData = texture(TEX_GB_SPECULAR, texcoord);
+		float sss = specularData.b;
+
+		vec4 worldData = texture(TEX_GB_WORLD, texcoord);
+		vec2 lightmap = worldData.xy;
+
+//		bool hand = abs(dataUnpacked1.w-0.75) < 0.01;
+		bool hand = false;
 
 		if (!hand) {
 			float NdotL = saturate(dot(normal, WsunVec));
@@ -67,7 +74,7 @@ void main() {
 			vec3 fragpos = toScreenSpace(vec3(texcoord/RENDER_SCALE - vec2(tempOffset)*texelSize*0.5, z));
 
 			#ifdef Variable_Penumbra_Shadows
-				if (NdotL > 0.001 || translucent || translucent2) {
+				if (NdotL > 0.001 || sss > 0.001) {
 					vec3 p3 = toWorldSpace(fragpos);
 					vec3 projectedShadowPosition = mul3(shadowModelView, p3);
 					projectedShadowPosition = diagonal3(shadowProjection) * projectedShadowPosition + shadowProjection[3].xyz;

@@ -18,8 +18,12 @@ flat varying vec2 TAA_Offset;
 flat varying float tempOffsets;
 flat varying vec3 refractedSunVec;
 
+uniform sampler2D TEX_GB_COLOR;
+uniform sampler2D TEX_GB_NORMAL;
+uniform sampler2D TEX_GB_SPECULAR;
+uniform sampler2D TEX_GB_WORLD;
 uniform sampler2D colortex0;//clouds
-uniform sampler2D colortex1;//albedo(rgb),material(alpha) RGBA16
+//uniform sampler2D colortex1;//albedo(rgb),material(alpha) RGBA16
 uniform sampler2D colortex4;//Skybox
 uniform sampler2D colortex3;
 uniform sampler2D colortex5;
@@ -77,6 +81,7 @@ vec3 toScreenSpacePrev(vec3 p) {
 #include "/lib/decode.glsl"
 #include "/lib/bicubic.glsl"
 #include "/lib/blueNoise.glsl"
+#include "/lib/octohedral.glsl"
 #include "/lib/projections.glsl"
 #include "/lib/waterOptions.glsl"
 #include "/lib/Shadow_Params.glsl"
@@ -402,10 +407,11 @@ void main() {
 			color += drawSun(dot(lightCol.a * WsunVec, np3), 0, lightCol.rgb/150.0, vec3(0.0));
 		}
 
-		color += skyFromTex(np3,colortex4)/150. + toLinear(texture2D(colortex1,texcoord).rgb)/10.*4.0*ffstep(0.985,-dot(lightCol.a*WsunVec,np3));
-		color = color*cloud.a+cloud.rgb;
+		vec3 albedo = toLinear(texture(TEX_GB_COLOR, texcoord).rgb);
+		color += skyFromTex(np3, colortex4)/150.0 + albedo/10.0 * 4.0*ffstep(0.985, -dot(lightCol.a * WsunVec, np3));
+		color = color * cloud.a + cloud.rgb;
 
-		outColor3 = clamp(fp10Dither(color*8./3.,triangularize(noise)),0.0,65000.);
+		outColor3 = clamp(fp10Dither(color * 8.0/3.0, triangularize(noise)), 0.0, 65000.0);
 
 		//if (outColor3.r > 65000.) outColor3 = vec3(0.0);
 		vec4 trpData = texture2D(colortex7, texcoord);
@@ -431,19 +437,25 @@ void main() {
 		vec4 trpData = texture2D(colortex7, texcoord);
 		bool iswater = texture2D(colortex7, texcoord).a > 0.99;
 
-		vec4 data = texture2D(colortex1, texcoord);
-		vec4 dataUnpacked0 = vec4(decodeVec2(data.x), decodeVec2(data.y));
-		vec4 dataUnpacked1 = vec4(decodeVec2(data.z), decodeVec2(data.w));
+		vec4 color = texture(TEX_GB_COLOR, texcoord);
+		vec3 albedo = toLinear(color.rgb);
 
-		vec3 albedo = toLinear(vec3(dataUnpacked0.xz, dataUnpacked1.x));
-		//if (luma(albedo) < 0.15) albedo = vec3(1.0,0.,0.);
-		vec3 normal = mat3(gbufferModelViewInverse) * decode(dataUnpacked0.yw);
+		vec4 normalData = texture(TEX_GB_NORMAL, texcoord);
+		vec3 geo_normal = mat3(gbufferModelViewInverse) * OctDecode(normalData.xy);
+		vec3 tex_normal = mat3(gbufferModelViewInverse) * OctDecode(normalData.zw);
+		vec3 normal = tex_normal;
 
-		vec2 lightmap = dataUnpacked1.yz;
-		bool translucent = abs(dataUnpacked1.w-0.5) < 0.01;	// Strong translucency
-		bool translucent2 = abs(dataUnpacked1.w-0.6) < 0.01;	// Weak translucency
-		bool hand = abs(dataUnpacked1.w-0.75) < 0.01;
-		bool emissive = abs(dataUnpacked1.w-0.9) < 0.01;
+		vec4 specularData = texture(TEX_GB_SPECULAR, texcoord);
+		float emissive = specularData.a;
+
+		vec4 worldData = texture(TEX_GB_WORLD, texcoord);
+		vec2 lightmap = worldData.xy;
+
+		bool hand = false;
+
+//		bool hand = abs(dataUnpacked1.w-0.75) < 0.01;
+//		bool emissive = abs(dataUnpacked1.w-0.9) < 0.01;
+
 		float NdotLGeom = dot(normal, WsunVec);
 		float NdotL = NdotLGeom;
 
@@ -465,7 +477,7 @@ void main() {
 		#endif
 
 		vec3 SSS = vec3(0.0);
-		float sssAmount = 0.0;
+		float sssAmount = specularData.b;
 
 		#ifdef Variable_Penumbra_Shadows
 			// compute shadows only if not backfacing the sun
@@ -473,9 +485,8 @@ void main() {
 			// always compute all shadows at close range where artifacts may be more visible
 			if (diffuseSun > 0.001)
 		#else
-			if (translucent) {
-				sssAmount = 0.5;
-				diffuseSun = mix(max(phaseg(dot(np3, WsunVec),0.5), 2.0 * phaseg(dot(np3, WsunVec),0.1))*3.14150*1.6, diffuseSun, 0.3);
+			if (sssAmount > 0.5) {
+				diffuseSun = mix(max(phaseg(dot(np3, WsunVec), 0.5), 2.0 * phaseg(dot(np3, WsunVec), 0.1)) * PI*1.6, diffuseSun, 0.3);
 			}
 
 			if (diffuseSun > 0.000)
@@ -497,7 +508,7 @@ void main() {
 				#ifdef Variable_Penumbra_Shadows
 					float diffthresh = distortThresh/6000.0 * threshMul;
 				#else
-					float diffthresh = translucent ? 0.0001 : distortThresh/6000.0 * threshMul;
+					float diffthresh = sss > 0.0 ? 0.0001 : distortThresh/6000.0 * threshMul;
 				#endif
 
 				#ifdef POM
@@ -543,8 +554,8 @@ void main() {
 
 		// custom shading model for translucent objects
 		#ifdef Variable_Penumbra_Shadows
-			if (translucent) {
-				sssAmount = 0.5;
+			if (sssAmount > 0.5) {
+//				sssAmount = 0.5;
 				vec3 extinction = 1.0 - albedo*0.85;
 				// Should be somewhat energy conserving
 				SSS = exp(-filtered.y*11.0*extinction) + 3.0*exp(-filtered.y*11./3.*extinction);
@@ -554,8 +565,8 @@ void main() {
 				SSS *= sqrt(lightmap.y);
 			}
 
-			if (translucent2) {
-				sssAmount = 0.2;
+			if (sssAmount > 0.2) {
+//				sssAmount = 0.2;
 				vec3 extinction = 1.0 - albedo*0.85;
 				// Should be somewhat energy conserving
 				SSS = exp(-filtered.y*11.0*extinction) + 3.0*exp(-filtered.y*11./3.*extinction);
@@ -628,8 +639,10 @@ void main() {
 
 		float emitting = 0.0;
 
-		if (emissive || (hand && heldBlockLightValue > 0.1)) {
-			emitting = luma(albedo) * 3.0 * Emissive_Strength;
+//		emitting = luma(albedo) * 3.0 * Emissive_Strength;
+		emitting = emissive*emissive * 5.0 * Emissive_Strength;
+
+		if (hand && heldBlockLightValue > 0.1) {
 			custom_lightmap.y = 0.0;
 		}
 
