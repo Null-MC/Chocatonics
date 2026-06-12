@@ -70,7 +70,7 @@ uniform ivec2 eyeBrightnessSmooth;
 
 vec3 toScreenSpacePrev(vec3 p) {
 	vec4 iProjDiag = vec4(gbufferProjectionInverse[0].x, gbufferProjectionInverse[1].y, gbufferProjectionInverse[2].zw);
-    vec3 p3 = p * 2. - 1.;
+    vec3 p3 = p * 2.0 - 1.0;
     vec4 fragposition = iProjDiag * p3.xyzz + gbufferProjectionInverse[3];
     return fragposition.xyz / fragposition.w;
 }
@@ -103,20 +103,12 @@ float lengthVec(vec3 vec) {
 	return sqrt(dot(vec, vec));
 }
 
-float linZ(float depth) {
-    return (2.0 * near) / (far + near - depth * (far - near));
-	// l = (2*n)/(f+n-d(f-n))
-	// f+n-d(f-n) = 2n/l
-	// -d(f-n) = ((2n/l)-f-n)
-	// d = -((2n/l)-f-n)/(f-n)
-}
-
 float invLinZ (float lindepth){
 	return -((2.0*near/lindepth)-far-near)/(far-near);
 }
 
 float rayTraceShadow(vec3 dir, vec3 position, float dither) {
-    const float quality = 16.0;
+    const int quality = 16;
 
     vec3 clipPosition = toClipSpace3(position);
 	//prevents the ray from going behind the camera
@@ -126,26 +118,24 @@ float rayTraceShadow(vec3 dir, vec3 position, float dither) {
     vec3 direction = toClipSpace3(position+dir*rayLength)-clipPosition;  //convert to clip space
     direction.xyz = direction.xyz/max(abs(direction.x)/texelSize.x,abs(direction.y)/texelSize.y);	//fixed step size
 
-    vec3 stepv = direction *3. * clamp(MC_RENDER_QUALITY,1.,2.0)*vec3(RENDER_SCALE,1.0);
+    vec3 stepv = direction * 3.0 * clamp(MC_RENDER_QUALITY, 1.0, 2.0) * vec3(RENDER_SCALE_2, 1.0);
 
-	vec3 spos = clipPosition*vec3(RENDER_SCALE,1.0)+vec3(TAA_Offset*vec2(texelSize.x,texelSize.y)*0.5,0.0)+stepv*dither;
+	vec3 spos = clipPosition * vec3(RENDER_SCALE_2, 1.0) + vec3(TAA_Offset * texelSize.xy * 0.5, 0.0) + stepv * dither;
 
-	for (int i = 0; i < int(quality); i++) {
+	for (int i = 0; i < quality; i++) {
 		spos += stepv;
 
-		float sp = texture2D(depthtex1,spos.xy).x;
-        if (sp < spos.z) {
-			float dist = abs(linZ(sp)-linZ(spos.z))/linZ(spos.z);
+		float sp = texture(depthtex1, spos.xy).x;
 
-			if (dist < 0.01 ) return 0.0;
+        if (sp < spos.z) {
+			float z2 = linZ(spos.z, near, far);
+			float dist = abs(linZ(sp, near, far) - z2) / z2;
+
+			if (dist < 0.01) return 0.0;
 		}
 	}
 
     return 1.0;
-}
-
-float ld(float dist) {
-    return (2.0 * near) / (far + near - dist * (far - near));
 }
 
 vec2 tapLocation_AO(int sampleNumber, float spinAngle, int nb, float nbRot, float r0) {
@@ -171,7 +161,7 @@ float waterCaustics(vec3 wPos, vec3 lightSource) {
 		vec2(cos(radiance), -sin(radiance)),
 		vec2(sin(radiance),  cos(radiance)));
 
-	vec2 displ = texture2D(noisetex, pos * vec2(3.0, 1.0) / 96.0 + movement).bb * 2.0 - 1.0;
+	vec2 displ = texture(noisetex, pos * vec2(3.0, 1.0) / 96.0 + movement).bb * 2.0 - 1.0;
 	pos = pos/2.0 + vec2(1.74 * frameTimeCounter);
 
 	for (int i = 0; i < 3; i++) {
@@ -239,34 +229,35 @@ vec3 RT(vec3 dir, vec3 position, float noise, vec3 N) {
 	float rayLength = ((position.z + dir.z * sqrt(3.0)*far) > -sqrt(3.0)*near) ?
 	   								(-sqrt(3.0)*near -position.z) / dir.z : sqrt(3.0)*far;
 
-	vec3 end = toClipSpace3(position+dir*rayLength);
-	vec3 direction = end-clipPosition;  //convert to clip space
-	float len = max(abs(direction.x)/texelSize.x,abs(direction.y)/texelSize.y)/stepSize;
-	//get at which length the ray intersects with the edge of the screen
-	vec3 maxLengths = (step(0.,direction)-clipPosition) / direction;
-	float mult = min(min(maxLengths.x,maxLengths.y),maxLengths.z);
-	vec3 stepv = direction/len;
+	vec3 end = toClipSpace3(dir * rayLength + position);
+	vec3 direction = end - clipPosition;  //convert to clip space
+	float len = maxOf(abs(direction.xy) / texelSize.xy) / stepSize;
+	// get at which length the ray intersects with the edge of the screen
+	vec3 maxLengths = (step(0.0, direction) - clipPosition) / direction;
+	float mult = min(min(maxLengths.x, maxLengths.y), maxLengths.z);
+	vec3 stepv = direction / len;
 	int iterations = min(int(min(len, mult*len)-2), maxSteps);
-	//Do one iteration for closest texel (good contact shadows)
-	vec3 spos = clipPosition*vec3(RENDER_SCALE,1.0) + stepv/stepSize*6.0;
-	spos.xy += TAA_Offset*texelSize*0.5*RENDER_SCALE;
-	float sp = sqrt(texelFetch2D(colortex4,ivec2(spos.xy/texelSize/4),0).w/65000.0);
-	float currZ = linZ(spos.z);
+	// Do one iteration for closest texel (good contact shadows)
+	vec3 spos = clipPosition * vec3(RENDER_SCALE_2, 1.0) + stepv/stepSize*6.0;
+	spos.xy += TAA_Offset * texelSize * 0.5*RENDER_SCALE;
+	float sp = sqrt(texelFetch(colortex4, ivec2(spos.xy/texelSize/4), 0).w / 65000.0);
+	float currZ = linZ(spos.z, near, far);
 
 	if (sp < currZ) {
-		float dist = abs(sp-currZ)/currZ;
-		if (dist <= 0.035) return vec3(spos.xy, invLinZ(sp))/vec3(RENDER_SCALE,1.0);
+		float dist = abs(sp - currZ) / currZ;
+		if (dist <= 0.035) return vec3(spos.xy, invLinZ(sp)) / vec3(RENDER_SCALE_2, 1.0);
 	}
 
-	stepv *= vec3(RENDER_SCALE, 1.0);
-	spos += stepv*noise;
+	stepv *= vec3(RENDER_SCALE_2, 1.0);
+	spos += stepv * noise;
 
 	for (int i = 0; i < iterations; i++) {
-		float sp = sqrt(texelFetch2D(colortex4,ivec2(spos.xy/texelSize/4),0).w/65000.0);
-		float currZ = linZ(spos.z);
+		float sp = sqrt(texelFetch(colortex4, ivec2(spos.xy/texelSize/4), 0).w / 65000.0);
+		float currZ = linZ(spos.z, near, far);
+
 		if (sp < currZ) {
-			float dist = abs(sp-currZ)/currZ;
-			if (dist <= 0.035) return vec3(spos.xy, invLinZ(sp))/vec3(RENDER_SCALE,1.0);
+			float dist = abs(sp - currZ) / currZ;
+			if (dist <= 0.035) return vec3(spos.xy, invLinZ(sp)) / vec3(RENDER_SCALE_2, 1.0);
 		}
 
 		spos += stepv;
@@ -277,7 +268,7 @@ vec3 RT(vec3 dir, vec3 position, float noise, vec3 N) {
 
 vec3 cosineHemisphereSample(vec2 Xi) {
     float r = sqrt(Xi.x);
-    float theta = 2.0 * 3.14159265359 * Xi.y;
+    float theta = 2.0 * PI * Xi.y;
 
     float x = r * cos(theta);
     float y = r * sin(theta);
@@ -309,13 +300,16 @@ vec3 rtGI(vec3 normal, vec4 noise, vec3 fragpos, vec3 ambient, float translucent
 
 		if (rayHit.z < 1.0) {
 			vec3 previousPosition = mat3(gbufferModelViewInverse) * toScreenSpace(rayHit) + gbufferModelViewInverse[3].xyz + cameraPosition - previousCameraPosition;
-			previousPosition = mat3(gbufferPreviousModelView) * previousPosition + gbufferPreviousModelView[3].xyz;
+			previousPosition = mul3(gbufferPreviousModelView, previousPosition);
 			previousPosition.xy = projMAD(gbufferPreviousProjection, previousPosition).xy / -previousPosition.z * 0.5 + 0.5;
 
-			if (previousPosition.x > 0.0 && previousPosition.y > 0.0 && previousPosition.x < 1.0 && previousPosition.x < 1.0)
-				intRadiance += texture2D(colortex5,previousPosition.xy).rgb + ambient*albedo*translucent;
-			else
-				intRadiance += ambient + ambient*translucent*albedo;
+//			if (previousPosition.x > 0.0 && previousPosition.y > 0.0 && previousPosition.x < 1.0 && previousPosition.y < 1.0)
+			if (all(equal(saturate(previousPosition.xy), previousPosition.xy))) {
+				intRadiance += texture(colortex5, previousPosition.xy).rgb + ambient * albedo * translucent;
+			}
+			else {
+				intRadiance += ambient + ambient * translucent * albedo;
+			}
 
 			occlusion += 1.0;
 		}
@@ -346,7 +340,7 @@ void ssao(inout float occlusion, vec3 fragpos, float mulfov, float dither, vec3 
 	occlusion = 0.0;
 
 	vec2 acc = -vec2(TAA_Offset) * texelSize * 0.5;
-	float mult = (dot(normal,normalize(fragpos))+1.0)*0.5+0.5;
+	float mult = (dot(normal, normalize(fragpos)) + 1.0) * 0.5 + 0.5;
 
 	vec2 v = fract(vec2(dither, R2_dither(gl_FragCoord.xy, frameCounter)) + (frameCounter % 10000) * vec2(0.75487765, 0.56984026));
 
@@ -354,23 +348,24 @@ void ssao(inout float occlusion, vec3 fragpos, float mulfov, float dither, vec3 
 		vec2 sp = tapLocation_AO(j, v.x, 7, 88.0, v.y);
 		vec2 sampleOffset = sp*rd;
 		ivec2 offset = ivec2(gl_FragCoord.xy + sampleOffset * vec2(viewWidth, viewHeight * aspectRatio) * RENDER_SCALE);
-		if (offset.x >= 0 && offset.y >= 0 && offset.x < viewWidth*RENDER_SCALE.x && offset.y < viewHeight*RENDER_SCALE.y ) {
-			vec3 t0 = toScreenSpace(vec3(offset*texelSize+acc+0.5*texelSize,texelFetch2D(depthtex1,offset,0).x) * vec3(1.0/RENDER_SCALE, 1.0));
+//		if (offset.x >= 0 && offset.y >= 0 && offset.x < viewWidth*RENDER_SCALE && offset.y < viewHeight*RENDER_SCALE) {
+		if (all(equal(clamp(offset, ivec2(0), vec2(viewWidth, viewHeight)*RENDER_SCALE), offset))) {
+			vec3 t0 = toScreenSpace(vec3((offset + 0.5) * texelSize + acc, texelFetch(depthtex1, offset, 0).x) * vec3(1.0/RENDER_SCALE_2, 1.0));
 
 			vec3 vec = t0.xyz - fragpos;
-			float dsquared = dot(vec,vec);
-			if (dsquared > 1e-5){
-				if (dsquared < maxR2){
-					float NdotV = clamp(dot(vec*inversesqrt(dsquared), normalize(normal)),0.,1.);
-					occlusion += NdotV * clamp(1.0-dsquared/maxR2,0.0,1.0);
+			float dsquared = dot(vec, vec);
+			if (dsquared > 1.e-5) {
+				if (dsquared < maxR2) {
+					float NdotV = saturate(dot(vec * inversesqrt(dsquared), normalize(normal)));
+					occlusion += NdotV * saturate(1.0 - dsquared/maxR2);
 				}
+
 				n += 1.0;
 			}
 		}
 	}
 
 	occlusion = saturate(1.0 - occlusion/n*1.6);
-	//occlusion = mult;
 }
 
 
@@ -386,8 +381,8 @@ void main() {
 	vec3 totEpsilon = dirtEpsilon*dirtAmount + waterEpsilon;
 	vec3 scatterCoef = dirtAmount * vec3(Dirt_Scatter_R, Dirt_Scatter_G, Dirt_Scatter_B);
 
-	float z0 = texture2D(depthtex0, texcoord).x;
-	float z = texture2D(depthtex1, texcoord).x;
+	float z0 = texture(depthtex0, texcoord).x;
+	float z = texture(depthtex1, texcoord).x;
 
 	vec2 tempOffset = TAA_Offset;
 
@@ -414,7 +409,7 @@ void main() {
 		outColor3 = clamp(fp10Dither(color * 8.0/3.0, triangularize(noise)), 0.0, 65000.0);
 
 		//if (outColor3.r > 65000.) outColor3 = vec3(0.0);
-		vec4 trpData = texture2D(colortex7, texcoord);
+		vec4 trpData = texture(colortex7, texcoord);
 
 		if (trpData.a > 0.99) {
 			vec3 fragpos0 = toScreenSpace(vec3(texcoord/RENDER_SCALE-vec2(tempOffset)*texelSize*0.5,z0));
@@ -434,8 +429,8 @@ void main() {
 	else {
 		p3 += gbufferModelViewInverse[3].xyz;
 
-		vec4 trpData = texture2D(colortex7, texcoord);
-		bool iswater = texture2D(colortex7, texcoord).a > 0.99;
+		vec4 trpData = texture(colortex7, texcoord);
+		bool iswater = texture(colortex7, texcoord).a > 0.99;
 
 		vec4 color = texture(TEX_GB_COLOR, texcoord);
 		vec3 albedo = toLinear(color.rgb);
@@ -466,7 +461,7 @@ void main() {
 		vec3 filtered = vec3(1.412, 1.0, 0.0);
 
 		if (!hand) {
-			filtered = texture2D(colortex3, texcoord).rgb;
+			filtered = texture(colortex3, texcoord).rgb;
 		}
 
 		float shading = 1.0 - filtered.b;
@@ -634,7 +629,7 @@ void main() {
 		#ifdef PHOTONICS_BLOCK_LIGHT_ENABLED
 			vec3 custom_lightmap = vec3(0.0);
 		#else
-			vec3 custom_lightmap = texture2D(colortex4, (lightmap * 15.0 + 0.5 + vec2(0.0, 19.0)) * texelSize).rgb * 8.0 / 150.0 / 3.0;
+			vec3 custom_lightmap = texture(colortex4, (lightmap * 15.0 + 0.5 + vec2(0.0, 19.0)) * texelSize).rgb * 8.0 / 150.0 / 3.0;
 		#endif
 
 		float emitting = 0.0;

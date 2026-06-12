@@ -374,11 +374,7 @@ uniform float far;
 #endif
 
 float cdist(vec2 coord) {
-	return max(abs(coord.s-0.5),abs(coord.t-0.5))*2.0;
-}
-
-float ld(float depth) {
-    return (2.0 * near) / (far + near - depth * (far - near));		// (-depth * (far - near)) = (2.0 * near)/ld - far - near
+	return max(abs(coord.s - 0.5), abs(coord.t - 0.5)) * 2.0;
 }
 
 vec3 closestToCamera3x3() {
@@ -422,7 +418,8 @@ void main() {
 	vec3 col = texture2D(colortex5, texcoord).rgb;
 
 	#ifdef DOF
-		float z = ld(texture2D(depthtex0, texcoord.st*RENDER_SCALE).r)*far;
+		float z = texture2D(depthtex0, texcoord.st * RENDER_SCALE).r;
+		z = linZ(z, near, far) * far;
 
 		#ifdef AUTOFOCUS
 			float focus = rodExposureDepth.y*far;
@@ -430,7 +427,7 @@ void main() {
 			float focus = MANUAL_FOCUS;
 		#endif
 
-		float pcoc = min(abs(aperture * (focal/100.0 * (z - focus)) / (z * (focus - focal/100.0))),texelSize.x*15.0);
+		float pcoc = min(abs(aperture * (focal/100.0 * (z - focus)) / (z * (focus - focal/100.0))), texelSize.x*15.0);
 
 		#ifdef FAR_BLUR_ONLY
 			pcoc *= float(z > focus);
@@ -438,13 +435,15 @@ void main() {
 
 		float noise = blueNoise(gl_FragCoord.xy, frameCounter) * PI*2.0;
 
+		float cos_noise = cos(noise);
+		float sin_noise = sin(noise);
 		mat2 noiseM = mat2(
-			cos(noise),-sin(noise),
-			sin(noise), cos(noise));
+			cos_noise, -sin_noise,
+			sin_noise,  cos_noise);
 
 		vec3 bcolor = vec3(0.0);
-		float nb = 0.0;
 		vec2 bcoord = vec2(0.0);
+		float nb = 0.0;
 
 		#ifndef HQ_DOF
 			bcolor = col;
@@ -476,17 +475,15 @@ void main() {
 
 	float VL_abs = texture2D(colortex7,texcoord*RENDER_SCALE).r;
 	float purkinje = rodExposureDepth.x/(1.0+rodExposureDepth.x)*Purkinje_strength;
-	VL_abs = clamp((1.0-VL_abs)*BLOOMY_FOG*0.75*(1.0-purkinje*0.3)*(1.0+rainStrength),0.0,1.0)*clamp(1.0-pow(cdist(texcoord.xy),15.0),0.0,1.0);
-	col = (mix(col,bloom,VL_abs)+bloom*lightScat)*exposure.rgb;
+	VL_abs = saturate((1.0 - VL_abs) * BLOOMY_FOG * 0.75*(1.0 - purkinje*0.3) * (1.0+rainStrength)) * saturate(1.0 - pow(cdist(texcoord.xy), 15.0));
+	col = (mix(col, bloom, VL_abs) + bloom*lightScat) * exposure.rgb;
 
-	//Purkinje Effect
+	// Purkinje Effect
 	float lum = dot(col, vec3(0.15, 0.3, 0.55));
 	float lum2 = dot(col, vec3(0.85, 0.7, 0.45)) / 2.0;
 	float rodLum = lum2 * 400.0;
 	float rodCurve = mix(1.0, rodLum/(2.5+rodLum), purkinje);
-	col = mix(clamp(lum,0.0,0.05)*Purkinje_Multiplier*vec3(Purkinje_R, Purkinje_G, Purkinje_B)+1.5e-3, col, rodCurve);
-//	col =vec3(rodCurve);
-//	if (col.r > 0.85*3.0) col = vec3(100,0.0,0.0);
+	col = mix(clamp(lum, 0.0, 0.05) * Purkinje_Multiplier * vec3(Purkinje_R, Purkinje_G, Purkinje_B) + 1.5e-3, col, rodCurve);
 
 	#ifndef USE_ACES_COLORSPACE_APPROXIMATION
   		col = LinearTosRGB(TONEMAP(col));
@@ -496,7 +493,5 @@ void main() {
 		col = LinearTosRGB(saturate(col * ACESOutputMat));
 	#endif
 
-	//col = ACESFitted(texture2D(colortex4,texcoord/3.).rgb/500.);
 	outColor7 = saturate(int8Dither(col, texcoord));
-	//if (nightMode < 0.99 && texcoord.x < 0.5)	outColor7 =vec3(0.0,1.0,0.0);
 }

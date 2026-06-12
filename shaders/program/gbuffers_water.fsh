@@ -71,10 +71,6 @@ float invLinZ(float lindepth) {
 	return -((2.0*near/lindepth)-far-near)/(far-near);
 }
 
-float ld(float dist) {
-    return (2.0 * near) / (far + near - dist * (far - near));
-}
-
 vec3 nvec3(vec4 pos) {
     return pos.xyz / pos.w;
 }
@@ -96,9 +92,9 @@ vec3 rayTrace(vec3 dir,vec3 position,float dither, float fresnel) {
     vec3 maxLengths = (step(0.,direction)-clipPosition) / direction;
     float mult = min(min(maxLengths.x,maxLengths.y),maxLengths.z);
 
-    vec3 stepv = direction * mult / quality * vec3(RENDER_SCALE, 1.0);
+    vec3 stepv = direction * mult / quality * vec3(RENDER_SCALE_2, 1.0);
 
-	vec3 spos = clipPosition * vec3(RENDER_SCALE, 1.0) + stepv*dither;
+	vec3 spos = clipPosition * vec3(RENDER_SCALE_2, 1.0) + stepv*dither;
 	float minZ = clipPosition.z;
 	float maxZ = spos.z+stepv.z * 0.5;
 	spos.xy += taa_offsets[framemod8] * texelSize * 0.5 / RENDER_SCALE;
@@ -106,23 +102,25 @@ vec3 rayTrace(vec3 dir,vec3 position,float dither, float fresnel) {
     for (int i = 0; i <= int(quality); i++) {
 		#ifdef USE_QUARTER_RES_DEPTH
 			// decode depth buffer
-			float sp = sqrt(texelFetch2D(gaux1,ivec2(spos.xy/texelSize/4),0).w/65000.0);
+			float sp = sqrt(texelFetch(gaux1, ivec2(spos.xy/texelSize/4), 0).w / 65000.0);
 			sp = invLinZ(sp);
-			if (sp <= max(maxZ,minZ) && sp >= min(maxZ,minZ)) {
-				return vec3(spos.xy/RENDER_SCALE,sp);
+
+			if (sp <= max(maxZ, minZ) && sp >= min(maxZ, minZ)) {
+				return vec3(spos.xy / RENDER_SCALE, sp);
 	        }
 
         	spos += stepv;
 		#else
-			float sp = texelFetch2D(depthtex1,ivec2(spos.xy/texelSize),0).r;
-          	if (sp <= max(maxZ,minZ) && sp >= min(maxZ,minZ)) {
-				return vec3(spos.xy/RENDER_SCALE,sp);
+			float sp = texelFetch(depthtex1, ivec2(spos.xy / texelSize), 0).r;
+          	if (sp <= max(maxZ, minZ) && sp >= min(maxZ, minZ)) {
+				return vec3(spos.xy / RENDER_SCALE, sp);
 	        }
+
         	spos += stepv;
 		#endif
 
 		// small bias
-		minZ = maxZ - 0.00004 / ld(spos.z);
+		minZ = maxZ - 0.00004 / linZ(spos.z, near, far);
 		maxZ += stepv.z;
     }
 
@@ -130,7 +128,7 @@ vec3 rayTrace(vec3 dir,vec3 position,float dither, float fresnel) {
 }
 
 float cdist(vec2 coord) {
-	return max(abs(coord.s-0.5),abs(coord.t-0.5))*2.0;
+	return max(abs(coord.s - 0.5), abs(coord.t - 0.5)) * 2.0;
 }
 
 #define PW_DEPTH 1.0 //[0.5 1.0 1.5 2.0 2.5 3.0]
@@ -162,17 +160,17 @@ float GGX(vec3 n, vec3 v, vec3 l, float r, float F0) {
 	vec3 h = l + v;
 	float hn = inversesqrt(dot(h, h));
 
-	float dotLH = clamp(dot(h,l)*hn,0.,1.);
-	float dotNH = clamp(dot(h,n)*hn,0.,1.);
-	float dotNL = clamp(dot(n,l),0.,1.);
-	float dotNHsq = dotNH*dotNH;
+	float dotLH = saturate(dot(h, l) * hn);
+	float dotNH = saturate(dot(h, n) * hn);
+	float dotNL = saturate(dot(n, l));
+	float dotNHsq = dotNH * dotNH;
 
-	float denom = dotNHsq * r - dotNHsq + 1.;
-	float D = r / (3.141592653589793 * denom * denom);
-	float F = F0 + (1. - F0) * exp2((-5.55473*dotLH-6.98316)*dotLH);
-	float k2 = .25 * r;
+	float denom = dotNHsq * r - dotNHsq + 1.0;
+	float D = r / (PI * denom * denom);
+	float F = F0 + (1.0 - F0) * exp2((-5.55473*dotLH-6.98316)*dotLH);
+	float k2 = 0.25 * r;
 
-	return dotNL * D * F / (dotLH*dotLH*(1.0-k2)+k2);
+	return dotNL * D * F / (dotLH * dotLH * (1.0 - k2) + k2);
 }
 
 
@@ -181,22 +179,22 @@ layout(location = 0) out vec4 outColor2;
 layout(location = 1) out vec4 outColor7;
 
 void main() {
-	if (gl_FragCoord.x * texelSize.x < RENDER_SCALE.x && gl_FragCoord.y * texelSize.y < RENDER_SCALE.y) {
+	if (all(lessThan(gl_FragCoord.xy * texelSize.xy, RENDER_SCALE_2))) {
 		vec2 tempOffset = taa_offsets[framemod8];
 		float iswater = normalMat.w;
 
 		vec3 fragC = gl_FragCoord.xyz * vec3(texelSize, 1.0);
-		vec3 fragpos = toScreenSpace(gl_FragCoord.xyz * vec3(texelSize/RENDER_SCALE,1.0)-vec3(vec2(tempOffset)*texelSize*0.5,0.0));
+		vec3 fragpos = toScreenSpace(gl_FragCoord.xyz * vec3(texelSize / RENDER_SCALE, 1.0) - vec3(vec2(tempOffset) * texelSize * 0.5, 0.0));
 
-		float avgBlockLum = luma(texture2DLod(texture, lmtexcoord.xy, 128).rgb * color.rgb);
+		float avgBlockLum = luma(textureLod(texture, lmtexcoord.xy, 128).rgb * color.rgb);
 
-		outColor2 = texture2D(texture, lmtexcoord.xy) * color;
+		outColor2 = texture(texture, lmtexcoord.xy) * color;
 		outColor2.rgb = saturate(outColor2.rgb * pow(avgBlockLum, -0.33) * 0.85);
 		vec3 albedo = toLinear(outColor2.rgb);
 
 		if (iswater > 0.4) {
-			albedo = vec3(0.42,0.6,0.7);
-			outColor2 = vec4(0.42,0.6,0.7,0.7);
+			albedo = vec3(0.42, 0.6, 0.7);
+			outColor2 = vec4(0.42, 0.6, 0.7, 0.7);
 		}
 
 		if (iswater > 0.9) {
@@ -205,7 +203,7 @@ void main() {
 
 		vec3 normal = normalMat.xyz;
 
-		vec3 p3 = mat3(gbufferModelViewInverse) * fragpos + gbufferModelViewInverse[3].xyz;
+		vec3 p3 = mul3(gbufferModelViewInverse, fragpos);
 
 		mat3 tbnMatrix = mat3(
 			tangent.x, binormal.x, normal.x,
@@ -220,13 +218,14 @@ void main() {
 
 			vec3 posxz = p3 + cameraPosition;
 			posxz.xz -= posxz.y;
+
 			if (iswater < 0.9) posxz.xz *= 3.0;
 
 			posxz.xyz = getParallaxDisplacement(posxz, iswater, bumpmult, normalize(tbnMatrix * fragpos));
 
 			vec3 bump = normalize(getWaveHeight(posxz.xz, iswater));
 
-			bump = bump * vec3(bumpmult) + vec3(0.0f, 0.0f, 1.0f - bumpmult);
+			bump = bump * vec3(bumpmult) + vec3(0.0, 0.0, 1.0 - bumpmult);
 
 			normal = normalize(bump * tbnMatrix);
 		}
@@ -235,9 +234,10 @@ void main() {
 		float NdotU = dot(upVec, normal);
 		float diffuseSun = saturate(NdotL);
 
-		vec3 direct = texelFetch2D(gaux1, ivec2(6, 37), 0).rgb / PI;
+		vec3 direct = texelFetch(gaux1, ivec2(6, 37), 0).rgb / PI;
 
 		float shading = 1.0;
+
 		//compute shadows only if not backface
 		if (diffuseSun > 0.001) {
 			vec3 p3 = mul3(gbufferModelViewInverse, fragpos);
@@ -291,22 +291,22 @@ void main() {
 				roughness = 0.1;
 			}
 
-			vec3 wrefl = mat3(gbufferModelViewInverse)*reflectedVector;
-			vec3 sky_c = mix(skyCloudsFromTex(wrefl,gaux1).rgb,texture2D(gaux1,(lmtexcoord.zw*15.+0.5)*texelSize).rgb*0.5,isEyeInWater);
-			sky_c.rgb *= lmtexcoord.w*lmtexcoord.w*255*255/240./240./150.*8./3.;
+			vec3 wrefl = mat3(gbufferModelViewInverse) * reflectedVector;
+			vec3 sky_c = mix(skyCloudsFromTex(wrefl, gaux1).rgb, texture(gaux1, (lmtexcoord.zw * 15.0 + 0.5) * texelSize).rgb * 0.5, isEyeInWater);
+			sky_c.rgb *= lmtexcoord.w * lmtexcoord.w * 255.0*255.0/240.0/240.0/150.0*8.0/3.0;
 
 			vec4 reflection = vec4(sky_c.rgb, 0.0);
 			#ifdef SCREENSPACE_REFLECTIONS
 				vec3 rtPos = rayTrace(reflectedVector, fragpos.xyz, blueNoise(gl_FragCoord.xy, frameCounter), fresnel);
 
 				if (rtPos.z < 1.0) {
-					vec3 previousPosition = mat3(gbufferModelViewInverse) * toScreenSpace(rtPos) + gbufferModelViewInverse[3].xyz + cameraPosition-previousCameraPosition;
-					previousPosition = mat3(gbufferPreviousModelView) * previousPosition + gbufferPreviousModelView[3].xyz;
+					vec3 previousPosition = mul3(gbufferModelViewInverse, toScreenSpace(rtPos)) + cameraPosition - previousCameraPosition;
+					previousPosition = mul3(gbufferPreviousModelView, previousPosition);
 					previousPosition.xy = projMAD(gbufferPreviousProjection, previousPosition).xy / -previousPosition.z * 0.5 + 0.5;
 
 					if (previousPosition.x > 0.0 && previousPosition.y > 0.0 && previousPosition.x < 1.0 && previousPosition.x < 1.0) {
 						reflection.a = 1.0;
-						reflection.rgb = texture2D(gaux2,previousPosition.xy).rgb;
+						reflection.rgb = texture2D(gaux2, previousPosition.xy).rgb;
 					}
 				}
 			#endif
@@ -314,18 +314,18 @@ void main() {
 			reflection.rgb = mix(sky_c.rgb, reflection.rgb, reflection.a);
 
 			#ifdef SUN_MICROFACET_SPECULAR
-				vec3 sunSpec = GGX(normal,-normalize(fragpos),  lightSign*sunVec, rainStrength*0.2+roughness+0.05+clamp(-lightSign*0.15,0.0,1.0), f0) * texelFetch2D(gaux1,ivec2(6,37),0).rgb*8./3./150.0/3.1415 * (1.0-rainStrength*0.9);
+				vec3 sunSpec = GGX(normal,-normalize(fragpos), lightSign*sunVec, rainStrength*0.2+roughness+0.05+saturate(lightSign * -0.15), f0) * texelFetch(gaux1, ivec2(6, 37), 0).rgb*8.0/3.0/150.0/PI * (1.0-rainStrength*0.9);
 			#else
-				vec3 sunSpec = drawSun(dot(lightSign*sunVec,reflectedVector), 0.0,texelFetch2D(gaux1,ivec2(6,37),0).rgb,vec3(0.0))*8./3./150.0*fresnel/3.1415 * (1.0-rainStrength*0.9);
+				vec3 sunSpec = drawSun(dot(lightSign * sunVec, reflectedVector), 0.0, texelFetch(gaux1, ivec2(6, 37), 0).rgb, vec3(0.0)) * 8.0/3.0/150.0 * fresnel/PI * (1.0-rainStrength*0.9);
 			#endif
 
 			vec3 reflected = reflection.rgb * fresnel + shading * sunSpec;
 
 			float alpha0 = outColor2.a;
 
-			//correct alpha channel with fresnel
+			// correct alpha channel with fresnel
 			outColor2.a = -outColor2.a * fresnel + outColor2.a + fresnel;
-			outColor2.rgb = clamp(color/outColor2.a * alpha0*(1.0-fresnel) * 0.1+reflected/outColor2.a * 0.1, 0.0, 65100.0);
+			outColor2.rgb = clamp(color/outColor2.a * alpha0 * (1.0 - fresnel) * 0.1+reflected/outColor2.a * 0.1, 0.0, 65100.0);
 			if (outColor2.r > 65000.0) outColor2.rgba = vec4(0.0);
 		}
 		else {

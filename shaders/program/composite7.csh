@@ -7,7 +7,7 @@
 
 
 layout (local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
-const vec2 workGroupsRender = vec2(RENDER_SCALE_X, RENDER_SCALE_Y);
+const vec2 workGroupsRender = vec2(RENDER_SCALE, RENDER_SCALE);
 
 shared vec3 sharedBuffer[18*18];
 

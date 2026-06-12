@@ -1,11 +1,10 @@
-#version 120
-#extension GL_EXT_gpu_shader4 : enable
+#version 430 compatibility
 
 #include "/lib/common.glsl"
 #include "/lib/settings.glsl"
 
 
-flat varying vec3 zMults;
+flat out vec3 zMults;
 
 uniform float far;
 uniform float near;

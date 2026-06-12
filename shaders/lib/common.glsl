@@ -50,9 +50,17 @@ float facos(const in float sx) {
     return sx > 0.0 ? a : PI - a;
 }
 
-float luma(const in vec3 color) {
-    return dot(color, lumCoeff);
+float linZ(float dist, float near, float far) {
+    return (2.0 * near) / (far + near - dist * (far - near));
 }
+
+float ld_reverse(float depth, float y, float z) {
+    return 1.0 / (y - depth * z);
+}
+
+float luma(const in vec3 color) {return dot(color, lumCoeff);}
+
+float maxOf(const in vec2 vec) {return max(vec[0], vec[1]);}
 
 vec3 toLinear(const in vec3 sRGB){
     return sRGB * (sRGB * (sRGB * 0.305306011 + 0.682171111) + 0.012522878);

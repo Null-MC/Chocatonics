@@ -61,10 +61,6 @@ vec3 rodSample(vec2 Xi) {
     return normalize(vec3(cos(phi) * r, sin(phi) * r, Xi.x)).xzy;
 }
 
-float ld(float depth) {
-    return (2.0 * near) / (far + near - depth * (far - near));
-}
-
 
 void main() {
 	gl_Position = ftransform() * 0.5 + 0.5;
@@ -194,9 +190,10 @@ void main() {
 	avgExp = exp(avgExp / maxITexp);
 	avgB = exp(avgB / maxITexp);
 
-	avgBrightness = clamp(mix(avgExp, texelFetch2D(colortex4, ivec2(10, 37), 0).g, 0.95), 0.00003051757, 65000.0);
+	avgBrightness = texelFetch2D(colortex4, ivec2(10, 37), 0).g;
+	avgBrightness = clamp(mix(avgExp, avgBrightness, 0.95), 0.00003051757, 65000.0);
 
-	float L = max(avgBrightness,1e-8);
+	float L = max(avgBrightness, 1e-8);
 	float keyVal = 1.03-2.0/(log(L*4000/150.*8./3.0+1.0)/log(10.0)+2.0);
 	float targetExposure = 0.18/log2(L*2.5+1.040-nightVision*0.038)*0.7;
 
@@ -204,8 +201,11 @@ void main() {
 	float targetrodExposure = max(0.012/log2(avgL2+1.002)-0.1, 0.0) * 1.2;
 
 	exposure = targetExposure * EXPOSURE_MULTIPLIER;
-	float currCenterDepth = ld(texture2D(depthtex0, vec2(0.5) * RENDER_SCALE).r);
-	centerDepth = mix(sqrt(texelFetch2D(colortex4, ivec2(14, 37), 0).g / 65000.0), currCenterDepth, clamp(DoF_Adaptation_Speed*exp(-0.016/frameTime+1.0)/(6.0+currCenterDepth*far),0.0,1.0));
+
+	float currCenterDepth = texture(depthtex0, vec2(0.5) * RENDER_SCALE).r;
+	currCenterDepth = linZ(currCenterDepth, near, far);
+
+	centerDepth = mix(sqrt(texelFetch2D(colortex4, ivec2(14, 37), 0).g / 65000.0), currCenterDepth, saturate(DoF_Adaptation_Speed*exp(-0.016/frameTime+1.0)/(6.0+currCenterDepth*far)));
 	centerDepth = centerDepth * centerDepth * 65000.0;
 
 	rodExposure = targetrodExposure;

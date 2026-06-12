@@ -267,7 +267,7 @@ void main() {
 	vec2 tc = floor(gl_FragCoord.xy) / VL_RENDER_RESOLUTION * texelSize + 0.5 * texelSize;
 	float z = texture2D(depthtex0, tc).x;
 
-	vec3 fragpos = toScreenSpace(vec3(tc/RENDER_SCALE,z));
+	vec3 fragpos = toScreenSpace(vec3(tc/RENDER_SCALE, z));
 
 	float noise = blueNoise(gl_FragCoord.xy, frameCounter);
 	vec4 color;

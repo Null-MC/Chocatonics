@@ -1,3 +1,11 @@
+screen.TAA_OPTIONS=TAA
+
+option.TAA_ENABLED=Enabled
+
+option.TAA_RENDER_SCALE=Render Scale
+suffix.TAA_RENDER_SCALE=%
+
+
 option.PHOTONICS_BLOCK_LIGHT_ENABLED=Block Light
 
 option.PHOTONICS_HAND_LIGHT_ENABLED=Hand Light
