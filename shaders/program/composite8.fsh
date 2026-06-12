@@ -1,5 +1,4 @@
-#version 120
-#extension GL_EXT_gpu_shader4 : enable
+#version 430 compatibility
 
 // Temporal Anti-Aliasing + Dynamic exposure calculations (vertex shader)
 
@@ -7,38 +6,14 @@
 #include "/lib/settings.glsl"
 
 
-const int noiseTextureResolution = 32;
+in vec2 texcoord;
+flat in float exposureA;
+flat in float tempOffsets;
 
-/*
-const int colortex0Format = RGBA16F;				// low res clouds (deferred->composite2) + low res VL (composite5->composite15)
-const int colortex1Format = RGBA16;					//terrain gbuffer (gbuffer->composite2)
-const int colortex2Format = RGBA16F;				//forward + transparencies (gbuffer->composite4)
-const int colortex3Format = R11F_G11F_B10F;			//frame buffer + bloom (deferred6->final)
-const int colortex4Format = RGBA16F;				//light values and skyboxes (everything)
-const int colortex5Format = R11F_G11F_B10F;			//TAA buffer (everything)
-const int colortex6Format = R11F_G11F_B10F;			//additionnal buffer for bloom (composite3->final)
-const int colortex7Format = RGBA8;			//Final output, transparencies id (gbuffer->composite4)
-*/
-//no need to clear the buffers, saves a few fps
-/*
-const bool colortex0Clear = false;
-const bool colortex1Clear = false;
-const bool colortex2Clear = true;
-const bool colortex3Clear = false;
-const bool colortex4Clear = false;
-const bool colortex5Clear = false;
-const bool colortex6Clear = false;
-const bool colortex7Clear = false;
-*/
-
-varying vec2 texcoord;
-flat varying float exposureA;
-flat varying float tempOffsets;
-
+uniform sampler2D texTAA_min;
+uniform sampler2D texTAA_max;
 uniform sampler2D colortex3;
 uniform sampler2D colortex5;
-uniform sampler2D colortex0;
-uniform sampler2D colortex6;
 uniform sampler2D depthtex0;
 
 uniform vec2 texelSize;
@@ -247,8 +222,8 @@ vec3 TAA_hq() {
 		vec3 albedoCurrent0 = smoothfilter(colortex3, adjTC + taa_offsets[framemod8]*texelSize*0.5).xyz;
 
 		// Interpolating neighboorhood clampling boundaries between pixels
-		vec3 cMax = texture2D(colortex0, adjTC).rgb;
-		vec3 cMin = texture2D(colortex6, adjTC).rgb;
+		vec3 cMin = texture2D(texTAA_min, adjTC).rgb;
+		vec3 cMax = texture2D(texTAA_max, adjTC).rgb;
 	#else
 		vec3 albedoCurrent0 = texture2D(colortex3, adjTC).rgb;
 		vec3 albedoCurrent1 = texture2D(colortex3, adjTC + vec2(texelSize.x,texelSize.y)).rgb;

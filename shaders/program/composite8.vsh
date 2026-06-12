@@ -1,13 +1,12 @@
-#version 120
-#extension GL_EXT_gpu_shader4 : enable
+#version 430 compatibility
 
 #include "/lib/common.glsl"
 #include "/lib/settings.glsl"
 
 
-varying vec2 texcoord;
-flat varying float exposureA;
-flat varying float tempOffsets;
+out vec2 texcoord;
+flat out float exposureA;
+flat out float tempOffsets;
 
 uniform sampler2D colortex4;
 uniform int frameCounter;
