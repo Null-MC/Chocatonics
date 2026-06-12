@@ -18,27 +18,16 @@ vec3 toScreenSpaceVector(const in vec3 p) {
 
 vec3 toWorldSpace(const in vec3 p3) {
     return mul3(gbufferModelViewInverse, p3);
-//    p3 = mat3(gbufferModelViewInverse) * p3 + gbufferModelViewInverse[3].xyz;
-//    return p3;
 }
 
 vec3 toWorldSpaceCamera(const in vec3 p3) {
     return toWorldSpace(p3) + cameraPosition;
-//    p3 = mat3(gbufferModelViewInverse) * p3 + gbufferModelViewInverse[3].xyz;
-//    return p3 + cameraPosition;
 }
 
 vec3 toShadowSpace(const in vec3 p3) {
     return mul3(shadowModelView, toWorldSpace(p3));
-//    p3 = mat3(gbufferModelViewInverse) * p3 + gbufferModelViewInverse[3].xyz;
-//    p3 = mat3(shadowModelView) * p3 + shadowModelView[3].xyz;
-//    return p3;
 }
 
 vec3 toShadowSpaceProjected(const in vec3 p3) {
     return diagonal3(shadowProjection) * toShadowSpace(p3) + shadowProjection[3].xyz;
-//    p3 = mat3(gbufferModelViewInverse) * p3 + gbufferModelViewInverse[3].xyz;
-//    p3 = mat3(shadowModelView) * p3 + shadowModelView[3].xyz;
-//    p3 = diagonal3(shadowProjection) * p3 + shadowProjection[3].xyz;
-//    return p3;
 }

@@ -1,27 +1,26 @@
-#version 120
-#extension GL_EXT_gpu_shader4 : enable
+#version 430 compatibility
 
 #include "/lib/common.glsl"
 #include "/lib/settings.glsl"
 
-attribute vec4 mc_Entity;
-attribute vec4 mc_midTexCoord;
+in vec4 mc_Entity;
+in vec4 mc_midTexCoord;
 
 #ifdef MC_NORMAL_MAP
-	attribute vec4 at_tangent;
+	in vec4 at_tangent;
 #endif
 
-varying vec4 lmtexcoord;
-varying vec4 color;
-varying vec4 normalMat;
+out vec4 lmtexcoord;
+out vec4 color;
+out vec4 normalMat;
 
 #ifdef POM
-	varying vec4 vtexcoordam; // .st for add, .pq for mul
-	varying vec4 vtexcoord;
+	out vec4 vtexcoordam; // .st for add, .pq for mul
+	out vec4 vtexcoord;
 #endif
 
 #ifdef MC_NORMAL_MAP
-	varying vec4 tangent;
+	out vec4 tangent;
 #endif
 
 uniform float frameTimeCounter;
@@ -65,41 +64,38 @@ vec3 calcMoveLeaves(in vec3 pos, in float f0, in float f1, in float f2, in float
 
 void main() {
 	lmtexcoord.xy = (gl_MultiTexCoord0).xy;
+	lmtexcoord.zw = gl_MultiTexCoord1.xy / 255.0;
 
 	#ifdef POM
 		vec2 midcoord = (gl_TextureMatrix[0] *  mc_midTexCoord).st;
-		vec2 texcoordminusmid = lmtexcoord.xy-midcoord;
-		vtexcoordam.pq  = abs(texcoordminusmid)*2;
-		vtexcoordam.st  = min(lmtexcoord.xy,midcoord-texcoordminusmid);
-		vtexcoord.xy    = sign(texcoordminusmid)*0.5+0.5;
+		vec2 texcoordminusmid = lmtexcoord.xy - midcoord;
+		vtexcoordam.pq  = abs(texcoordminusmid) * 2.0;
+		vtexcoordam.st  = min(lmtexcoord.xy, midcoord - texcoordminusmid);
+		vtexcoord.xy    = sign(texcoordminusmid) * 0.5 + 0.5;
 	#endif
 
-	vec2 lmcoord = gl_MultiTexCoord1.xy/255.;
-	lmtexcoord.zw = lmcoord;
-
-	vec3 position = mat3(gl_ModelViewMatrix) * vec3(gl_Vertex) + gl_ModelViewMatrix[3].xyz;
-
+	vec3 position = mul3(gl_ModelViewMatrix, gl_Vertex.xyz);
 	color = gl_Color;
 
 	bool istopv = gl_MultiTexCoord0.t < mc_midTexCoord.t;
 	#ifdef MC_NORMAL_MAP
-		tangent = vec4(normalize(gl_NormalMatrix *at_tangent.rgb),at_tangent.w);
+		tangent = vec4(normalize(gl_NormalMatrix * at_tangent.rgb), at_tangent.w);
 	#endif
 
-	normalMat = vec4(normalize(gl_NormalMatrix *gl_Normal),mc_Entity.x == 10004 || mc_Entity.x == 10003 || mc_Entity.x == 10001 ? 0.5:1.0);
+	normalMat = vec4(normalize(gl_NormalMatrix * gl_Normal), mc_Entity.x == 10004 || mc_Entity.x == 10003 || mc_Entity.x == 10001 ? 0.5 : 1.0);
 	normalMat.a = mc_Entity.x == 10006 ? 0.6 : normalMat.a;
 
 	#ifdef WAVY_PLANTS
 		if ((mc_Entity.x == 10001 && istopv) && abs(position.z) < 64.0) {
     		vec3 worldpos = mat3(gbufferModelViewInverse) * position + gbufferModelViewInverse[3].xyz + cameraPosition;
-			worldpos.xyz += calcMovePlants(worldpos.xyz)*lmtexcoord.w - cameraPosition;
-    		position = mat3(gbufferModelView) * worldpos + gbufferModelView[3].xyz;
+			worldpos.xyz += calcMovePlants(worldpos.xyz) * lmtexcoord.w - cameraPosition;
+    		position = mul3(gbufferModelView, worldpos);
 		}
 
 		if (mc_Entity.x == 10003 && abs(position.z) < 64.0) {
     		vec3 worldpos = mat3(gbufferModelViewInverse) * position + gbufferModelViewInverse[3].xyz + cameraPosition;
 			worldpos.xyz += calcMoveLeaves(worldpos.xyz, 0.0040, 0.0064, 0.0043, 0.0035, 0.0037, 0.0041, vec3(1.0,0.2,1.0), vec3(0.5,0.1,0.5))*lmtexcoord.w  - cameraPosition;
-    		position = mat3(gbufferModelView) * worldpos + gbufferModelView[3].xyz;
+    		position = mul3(gbufferModelView, worldpos);
 		}
 	#endif
 

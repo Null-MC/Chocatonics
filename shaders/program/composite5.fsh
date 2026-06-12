@@ -47,6 +47,7 @@ uniform mat4 shadowProjection;
 uniform vec3 cameraPosition;
 
 //#include "/lib/ign.glsl"
+#include "/lib/bicubic.glsl"
 #include "/lib/blueNoise.glsl"
 #include "/lib/waterOptions.glsl"
 #include "/lib/Shadow_Params.glsl"

@@ -27,24 +27,17 @@ uniform mat4 gbufferProjectionInverse;
 uniform mat4 gbufferModelViewInverse;
 uniform vec3 cameraPosition;
 
+uniform mat4 gbufferProjection;
+uniform mat4 shadowModelView;
+uniform mat4 shadowProjection;
 
-vec3 toScreenSpace(vec3 p) {
-	vec4 iProjDiag = vec4(gbufferProjectionInverse[0].x, gbufferProjectionInverse[1].y, gbufferProjectionInverse[2].zw);
-    vec3 p3 = p * 2. - 1.;
-    vec4 fragposition = iProjDiag * p3.xyzz + gbufferProjectionInverse[3];
-    return fragposition.xyz / fragposition.w;
-}
 
 #include "/lib/util.glsl"
+#include "/lib/bicubic.glsl"
 #include "/lib/blueNoise.glsl"
+#include "/lib/projections.glsl"
 #include "/lib/sky_gradient.glsl"
 #include "/lib/volumetricClouds.glsl"
-
-
-float R2_dither() {
-	vec2 alpha = vec2(0.75487765, 0.56984026);
-	return fract(alpha.x * gl_FragCoord.x + alpha.y * gl_FragCoord.y + 1.0/1.6180339887 * frameCounter);
-}
 
 
 /* RENDERTARGETS: 0 */

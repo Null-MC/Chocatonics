@@ -55,9 +55,11 @@ uniform int frameCounter;
 uniform int framemod8;
 
 #include "/lib/ign.glsl"
+#include "/lib/bicubic.glsl"
 #include "/lib/blueNoise.glsl"
 #include "/lib/projections.glsl"
 #include "/lib/Shadow_Params.glsl"
+#include "/lib/shadowSampling.glsl"
 #include "/lib/color_transforms.glsl"
 #include "/lib/sky_gradient.glsl"
 #include "/lib/waterBump.glsl"
@@ -119,17 +121,12 @@ vec3 rayTrace(vec3 dir,vec3 position,float dither, float fresnel) {
         	spos += stepv;
 		#endif
 
-		//small bias
+		// small bias
 		minZ = maxZ - 0.00004 / ld(spos.z);
 		maxZ += stepv.z;
     }
 
     return vec3(1.1);
-}
-
-float bayer2(vec2 a) {
-	a = floor(a);
-    return fract(dot(a, vec2(0.5, a.y * 0.75)));
 }
 
 float cdist(vec2 coord) {
@@ -138,13 +135,6 @@ float cdist(vec2 coord) {
 
 #define PW_DEPTH 1.0 //[0.5 1.0 1.5 2.0 2.5 3.0]
 #define PW_POINTS 1 //[2 4 6 8 16 32]
-
-#define bayer4(a)   (bayer2( .5*(a))*.25+bayer2(a))
-#define bayer8(a)   (bayer4( .5*(a))*.25+bayer2(a))
-#define bayer16(a)  (bayer8( .5*(a))*.25+bayer2(a))
-#define bayer32(a)  (bayer16(.5*(a))*.25+bayer2(a))
-#define bayer64(a)  (bayer32(.5*(a))*.25+bayer2(a))
-#define bayer128(a) fract(bayer64(.5*(a))*.25+bayer2(a))
 
 vec3 getParallaxDisplacement(vec3 posxz, float iswater, float bumpmult, vec3 viewVec) {
 	float waveZ = mix(20.0,0.25,iswater);
@@ -158,30 +148,6 @@ vec3 getParallaxDisplacement(vec3 posxz, float iswater, float bumpmult, vec3 vie
 	return parallaxPos;
 }
 
-vec2 tapLocation(int sampleNumber, int nb, float nbRot, float jitter, float distort) {
-    float alpha = (sampleNumber+jitter)/nb;
-    float angle = jitter*6.28 + alpha * nbRot * 6.28;
-
-    float sin_v, cos_v;
-
-	sin_v = sin(angle);
-	cos_v = cos(angle);
-
-    return vec2(cos_v, sin_v) * sqrt(alpha);
-}
-
-//Low discrepancy 2D sequence, integration error is as low as sobol but easier to compute : http://extremelearning.com.au/unreasonable-effectiveness-of-quasirandom-sequences/
-vec2 R2_samples(int n){
-	vec2 alpha = vec2(0.75487765, 0.56984026);
-	return fract(alpha * n);
-}
-
-vec4 hash44(vec4 p4) {
-	p4 = fract(p4 * vec4(0.1031, 0.1030, 0.0973, 0.1099));
-    p4 += dot(p4, p4.wzxy + 33.33);
-    return fract((p4.xxyz + p4.yzzw) * p4.zywx);
-}
-
 vec3 TangentToWorld(vec3 N, vec3 H) {
     vec3 UpVector = abs(N.z) < 0.999 ? vec3(0.0, 0.0, 1.0) : vec3(1.0, 0.0, 0.0);
     vec3 T = normalize(cross(UpVector, N));
@@ -190,7 +156,7 @@ vec3 TangentToWorld(vec3 N, vec3 H) {
     return vec3((T * H.x) + (B * H.y) + (N * H.z));
 }
 
-float GGX (vec3 n, vec3 v, vec3 l, float r, float F0) {
+float GGX(vec3 n, vec3 v, vec3 l, float r, float F0) {
 	r*=r; r*=r;
 
 	vec3 h = l + v;
@@ -269,13 +235,13 @@ void main() {
 		float NdotU = dot(upVec, normal);
 		float diffuseSun = saturate(NdotL);
 
-		vec3 direct = texelFetch2D(gaux1, ivec2(6, 37), 0).rgb / 3.1415;
+		vec3 direct = texelFetch2D(gaux1, ivec2(6, 37), 0).rgb / PI;
 
 		float shading = 1.0;
 		//compute shadows only if not backface
 		if (diffuseSun > 0.001) {
-			vec3 p3 = mat3(gbufferModelViewInverse) * fragpos + gbufferModelViewInverse[3].xyz;
-			vec3 projectedShadowPosition = mat3(shadowModelView) * p3 + shadowModelView[3].xyz;
+			vec3 p3 = mul3(gbufferModelViewInverse, fragpos);
+			vec3 projectedShadowPosition = mul3(shadowModelView, p3);
 			projectedShadowPosition = diagonal3(shadowProjection) * projectedShadowPosition + shadowProjection[3].xyz;
 
 			//apply distortion
@@ -283,19 +249,19 @@ void main() {
 			projectedShadowPosition.xy *= distortFactor;
 
 			//do shadows only if on shadow map
-			if (abs(projectedShadowPosition.x) < 1.0-1.5/shadowMapResolution && abs(projectedShadowPosition.y) < 1.0-1.5/shadowMapResolution){
-				const float threshMul = max(2048.0/shadowMapResolution*shadowDistance/128.0,0.95);
-				float distortThresh = (sqrt(1.0-diffuseSun*diffuseSun)/diffuseSun+0.7)/distortFactor;
-				float diffthresh = distortThresh/6000.0*threshMul;
+			if (abs(projectedShadowPosition.x) < 1.0-1.5/shadowMapResolution && abs(projectedShadowPosition.y) < 1.0-1.5/shadowMapResolution) {
+				const float threshMul = max(2048.0/shadowMapResolution * shadowDistance/128.0, 0.95);
+				float distortThresh = (sqrt(1.0 - diffuseSun * diffuseSun) / diffuseSun + 0.7) / distortFactor;
+				float diffthresh = distortThresh/6000.0 * threshMul;
 
-				projectedShadowPosition = projectedShadowPosition * vec3(0.5,0.5,0.5/6.0) + vec3(0.5,0.5,0.5);
+				projectedShadowPosition = projectedShadowPosition * vec3(0.5, 0.5, 0.5/6.0) + vec3(0.5, 0.5, 0.5);
 
 				shading = 0.0;
 				float noise = blueNoise(gl_FragCoord.xy, frameCounter);
 				float rdMul = 4.0 / shadowMapResolution;
 
 				for (int i = 0; i < 9; i++) {
-					vec2 offsetS = tapLocation(i, 9, 2.0, noise, 0.0);
+					vec2 offsetS = tapLocation_Shadow(i, 9, 2.0, noise);
 					float weight = 1.0 + (i + noise) * rdMul/9.0 * shadowMapResolution;
 					shading += texture(shadowtex0HW, vec3(projectedShadowPosition + vec3(rdMul*offsetS, -diffthresh*weight))) / 9.0;
 				}

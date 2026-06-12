@@ -4,51 +4,51 @@
 #define ffstep(x,y) clamp((y - x) * 1e35,0.0,1.0)
 
 
-vec3 drawSun(float cosY, float sunInt,vec3 nsunlight,vec3 inColor){
+vec3 drawSun(float cosY, float sunInt, vec3 nsunlight, vec3 inColor){
 	return inColor+nsunlight/0.0008821203*pow(smoothstep(cos(0.0093084168595*3.2),cos(0.0093084168595*1.8),cosY),3.)*0.62;
 }
 
 vec2 sphereToCarte(vec3 dir) {
     float lonlat = atan(-dir.x, -dir.z);
-    return vec2(lonlat * (0.5/pi) +0.5,0.5*dir.y+0.5);
+    return vec2(lonlat * (0.5/PI) + 0.5, dir.y * 0.5 + 0.5);
 }
 
-vec3 skyFromTex(vec3 pos,sampler2D sampler){
+vec3 skyFromTex(vec3 pos, sampler2D sampler) {
 	vec2 p = sphereToCarte(pos);
 	return texture2D(sampler,p*texelSize*256.+vec2(18.5,1.5)*texelSize).rgb;
 }
 
-float w0(float a) {
-    return (1.0/6.0)*(a*(a*(-a + 3.0) - 3.0) + 1.0);
-}
-
-float w1(float a) {
-    return (1.0/6.0)*(a*a*(3.0*a - 6.0) + 4.0);
-}
-
-float w2(float a) {
-    return (1.0/6.0)*(a*(a*(-3.0*a + 3.0) + 3.0) + 1.0);
-}
-
-float w3(float a) {
-    return (1.0/6.0)*(a*a*a);
-}
-
-float g0(float a) {
-    return w0(a) + w1(a);
-}
-
-float g1(float a) {
-    return w2(a) + w3(a);
-}
-
-float h0(float a) {
-    return -1.0 + w1(a) / (w0(a) + w1(a));
-}
-
-float h1(float a) {
-    return 1.0 + w3(a) / (w2(a) + w3(a));
-}
+//float w0(float a) {
+//    return (1.0/6.0)*(a*(a*(-a + 3.0) - 3.0) + 1.0);
+//}
+//
+//float w1(float a) {
+//    return (1.0/6.0)*(a*a*(3.0*a - 6.0) + 4.0);
+//}
+//
+//float w2(float a) {
+//    return (1.0/6.0)*(a*(a*(-3.0*a + 3.0) + 3.0) + 1.0);
+//}
+//
+//float w3(float a) {
+//    return (1.0/6.0)*(a*a*a);
+//}
+//
+//float g0(float a) {
+//    return w0(a) + w1(a);
+//}
+//
+//float g1(float a) {
+//    return w2(a) + w3(a);
+//}
+//
+//float h0(float a) {
+//    return -1.0 + w1(a) / (w0(a) + w1(a));
+//}
+//
+//float h1(float a) {
+//    return 1.0 + w3(a) / (w2(a) + w3(a));
+//}
 
 vec4 texture2D_bicubic(sampler2D tex, vec2 uv) {
 	vec4 texelSize = vec4(texelSize, 1.0 / texelSize);

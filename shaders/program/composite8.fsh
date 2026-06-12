@@ -54,70 +54,60 @@ uniform mat4 gbufferProjection;
 uniform mat4 gbufferProjectionInverse;
 uniform mat4 gbufferPreviousProjection;
 uniform mat4 gbufferModelViewInverse;
-//uniform mat4 gbufferModelView;
 uniform mat4 shadowModelView;
 uniform mat4 shadowProjection;
 uniform vec3 cameraPosition;
 
+#include "/lib/r2.glsl"
 #include "/lib/ign.glsl"
+#include "/lib/dither.glsl"
 #include "/lib/projections.glsl"
 
 
-float triangularize(float dither) {
-    float center = dither * 2.0 - 1.0;
-    dither = center * inversesqrt(abs(center));
-    return saturate(dither - fsign(center));
-}
-
-vec3 fp10Dither(vec3 color, float dither) {
-	const vec3 mantissaBits = vec3(6.0, 6.0, 5.0);
-	vec3 exponent = floor(log2(color));
-	return color + dither * exp2(-mantissaBits) * exp2(exponent);
-}
-
-
-//returns the projected coordinates of the closest point to the camera in the 3x3 neighborhood
+// returns the projected coordinates of the closest point to the camera in the 3x3 neighborhood
 vec3 closestToCamera5taps(vec2 texcoord) {
-	vec2 du = vec2(texelSize.x*2., 0.0);
-	vec2 dv = vec2(0.0, texelSize.y*2.);
+	vec2 du = vec2(texelSize.x*2.0, 0.0);
+	vec2 dv = vec2(0.0, texelSize.y*2.0);
 
-	vec3 dtl = vec3(texcoord,0.) + vec3(-texelSize, texture2D(depthtex0, texcoord - dv - du).x);
-	vec3 dtr = vec3(texcoord,0.) +  vec3( texelSize.x, -texelSize.y, texture2D(depthtex0, texcoord - dv + du).x);
-	vec3 dmc = vec3(texcoord,0.) + vec3( 0.0, 0.0, texture2D(depthtex0, texcoord).x);
-	vec3 dbl = vec3(texcoord,0.) + vec3(-texelSize.x, texelSize.y, texture2D(depthtex0, texcoord + dv - du).x);
-	vec3 dbr = vec3(texcoord,0.) + vec3( texelSize.x, texelSize.y, texture2D(depthtex0, texcoord + dv + du).x);
+	vec3 dtl = vec3(texcoord, 0.0) + vec3(-texelSize, texture2D(depthtex0, texcoord - dv - du).x);
+	vec3 dtr = vec3(texcoord, 0.0) + vec3( texelSize.x, -texelSize.y, texture2D(depthtex0, texcoord - dv + du).x);
+	vec3 dmc = vec3(texcoord, 0.0) + vec3( 0.0, 0.0, texture2D(depthtex0, texcoord).x);
+	vec3 dbl = vec3(texcoord, 0.0) + vec3(-texelSize.x, texelSize.y, texture2D(depthtex0, texcoord + dv - du).x);
+	vec3 dbr = vec3(texcoord, 0.0) + vec3( texelSize.x, texelSize.y, texture2D(depthtex0, texcoord + dv + du).x);
 
 	vec3 dmin = dmc;
-	dmin = dmin.z > dtr.z? dtr : dmin;
-	dmin = dmin.z > dtl.z? dtl : dmin;
-	dmin = dmin.z > dbl.z? dbl : dmin;
-	dmin = dmin.z > dbr.z? dbr : dmin;
+	dmin = dmin.z > dtr.z ? dtr : dmin;
+	dmin = dmin.z > dtl.z ? dtl : dmin;
+	dmin = dmin.z > dbl.z ? dbl : dmin;
+	dmin = dmin.z > dbr.z ? dbr : dmin;
 
 	#ifdef TAA_UPSCALING
-		dmin.xy = dmin.xy/RENDER_SCALE;
+		dmin.xy = dmin.xy / RENDER_SCALE;
 	#endif
 
 	return dmin;
 }
 
-//Modified texture interpolation from inigo quilez
+// Modified texture interpolation from inigo quilez
 vec4 smoothfilter(in sampler2D tex, in vec2 uv) {
-	vec2 textureResolution = vec2(viewWidth,viewHeight);
+	vec2 textureResolution = vec2(viewWidth, viewHeight);
 	uv = uv*textureResolution + 0.5;
-	vec2 iuv = floor( uv );
-	vec2 fuv = fract( uv );
-	uv = iuv + fuv*fuv*fuv*(fuv*(fuv*6.0-15.0)+10.0);
-	uv = (uv - 0.5)/textureResolution;
-	return texture2D( tex, uv);
+
+	vec2 iuv = floor(uv);
+	vec2 fuv = fract(uv);
+
+	uv = iuv + fuv*fuv*fuv * (fuv * (fuv*6.0 - 15.0) + 10.0);
+	uv = (uv - 0.5) / textureResolution;
+	return texture(tex, uv);
 }
 
-//Due to low sample count we "tonemap" the inputs to preserve colors and smoother edges
+// Due to low sample count we "tonemap" the inputs to preserve colors and smoother edges
 vec3 weightedSample(sampler2D colorTex, vec2 texcoord) {
 	vec3 wsample = texture2D(colorTex, texcoord).rgb * exposureA;
 	return wsample / (1.0 + luma(wsample));
 }
 
-//from : https://gist.github.com/TheRealMJP/c83b8c0f46b63f3a88a5986f4fa982b1
+// https://gist.github.com/TheRealMJP/c83b8c0f46b63f3a88a5986f4fa982b1
 vec4 SampleTextureCatmullRom(sampler2D tex, vec2 uv, vec2 texSize) {
     // We're going to sample a a 4x4 grid of texels surrounding the target UV coordinate. We'll do this by rounding
     // down the sample location to get the exact center of our "starting" texel. The starting texel will be at
@@ -167,12 +157,7 @@ vec4 SampleTextureCatmullRom(sampler2D tex, vec2 uv, vec2 texSize) {
     return result;
 }
 
-float R2_dither() {
-	vec2 alpha = vec2(0.75487765, 0.56984026);
-	return fract(alpha.x * gl_FragCoord.x + alpha.y * gl_FragCoord.y + 1.0/1.6180339887 * frameCounter);
-}
-
-//approximation from SMAA presentation from siggraph 2016
+// approximation from SMAA presentation from siggraph 2016
 vec3 FastCatmulRom(sampler2D colorTex, vec2 texcoord, vec4 rtMetrics, float sharpenAmount) {
     vec2 position = rtMetrics.zw * texcoord;
     vec2 centerPosition = floor(position - 0.5) + 0.5;
@@ -192,16 +177,17 @@ vec3 FastCatmulRom(sampler2D colorTex, vec2 texcoord, vec4 rtMetrics, float shar
 
     vec2 tc0 = rtMetrics.xy * (centerPosition - 1.0);
     vec2 tc3 = rtMetrics.xy * (centerPosition + 2.0);
-    vec4 color = vec4(texture2D(colorTex, vec2(tc12.x, tc0.y )).rgb, 1.0) * (w12.x * w0.y ) +
-                   vec4(texture2D(colorTex, vec2(tc0.x,  tc12.y)).rgb, 1.0) * (w0.x  * w12.y) +
-                   vec4(centerColor,                                      1.0) * (w12.x * w12.y) +
-                   vec4(texture2D(colorTex, vec2(tc3.x,  tc12.y)).rgb, 1.0) * (w3.x  * w12.y) +
-                   vec4(texture2D(colorTex, vec2(tc12.x, tc3.y )).rgb, 1.0) * (w12.x * w3.y );
 
-	return color.rgb/color.a;
+    vec4 color = vec4(texture2D(colorTex, vec2(tc12.x, tc0.y )).rgb, 1.0) * (w12.x * w0.y ) +
+                 vec4(texture2D(colorTex, vec2(tc0.x,  tc12.y)).rgb, 1.0) * (w0.x  * w12.y) +
+                 vec4(centerColor,                                   1.0) * (w12.x * w12.y) +
+                 vec4(texture2D(colorTex, vec2(tc3.x,  tc12.y)).rgb, 1.0) * (w3.x  * w12.y) +
+                 vec4(texture2D(colorTex, vec2(tc12.x, tc3.y )).rgb, 1.0) * (w12.x * w3.y );
+
+	return color.rgb / color.a;
 }
 
-vec3 clip_aabb(vec3 q,vec3 aabb_min, vec3 aabb_max) {
+vec3 clip_aabb(vec3 q, vec3 aabb_min, vec3 aabb_max) {
 	vec3 p_clip = 0.5 * (aabb_max + aabb_min);
 	vec3 e_clip = 0.5 * (aabb_max - aabb_min) + 0.00000001;
 
@@ -220,7 +206,7 @@ vec3 toClipSpace3Prev(vec3 viewSpacePosition) {
     return projMAD(gbufferPreviousProjection, viewSpacePosition) / -viewSpacePosition.z * 0.5 + 0.5;
 }
 
-vec3 tonemap(vec3 col){
+vec3 tonemap(vec3 col) {
 	return col / (1 + luma(col));
 }
 
@@ -231,12 +217,12 @@ vec3 invTonemap(vec3 col){
 
 vec3 TAA_hq() {
 	#ifdef TAA_UPSCALING
-		vec2 adjTC = clamp(texcoord*RENDER_SCALE, vec2(0.0),RENDER_SCALE-texelSize*2.);
+		vec2 adjTC = clamp(texcoord * RENDER_SCALE, vec2(0.0), RENDER_SCALE - texelSize*2.0);
 	#else
 		vec2 adjTC = texcoord;
 	#endif
 
-	//use velocity from the nearest texel from camera in a 3x3 box in order to improve edge quality in motion
+	// use velocity from the nearest texel from camera in a 3x3 box in order to improve edge quality in motion
 	#ifdef CLOSEST_VELOCITY
 		vec3 closestToCamera = closestToCamera5taps(adjTC);
 	#endif
@@ -245,7 +231,7 @@ vec3 TAA_hq() {
 		vec3 closestToCamera = vec3(texcoord,texture2D(depthtex0,adjTC).x);
 	#endif
 
-	//reproject previous frame
+	// reproject previous frame
 	vec3 fragposition = toScreenSpace(closestToCamera);
 	fragposition = mat3(gbufferModelViewInverse) * fragposition + gbufferModelViewInverse[3].xyz + (cameraPosition - previousCameraPosition);
 	vec3 previousPosition = mat3(gbufferPreviousModelView) * fragposition + gbufferPreviousModelView[3].xyz;
@@ -253,12 +239,13 @@ vec3 TAA_hq() {
 	vec2 velocity = previousPosition.xy - closestToCamera.xy;
 	previousPosition.xy = texcoord + velocity;
 
-	//reject history if off-screen and early exit
+	// reject history if off-screen and early exit
 	if (previousPosition.x < 0.0 || previousPosition.y < 0.0 || previousPosition.x > 1.0 || previousPosition.y > 1.0)
 		return smoothfilter(colortex3, adjTC + taa_offsets[framemod8]*texelSize*0.5).xyz;
 
 	#ifdef TAA_UPSCALING
 		vec3 albedoCurrent0 = smoothfilter(colortex3, adjTC + taa_offsets[framemod8]*texelSize*0.5).xyz;
+
 		// Interpolating neighboorhood clampling boundaries between pixels
 		vec3 cMax = texture2D(colortex0, adjTC).rgb;
 		vec3 cMin = texture2D(colortex6, adjTC).rgb;
@@ -272,20 +259,22 @@ vec3 TAA_hq() {
 		vec3 albedoCurrent6 = texture2D(colortex3, adjTC + vec2(0.0,-texelSize.y)).rgb;
 		vec3 albedoCurrent7 = texture2D(colortex3, adjTC + vec2(-texelSize.x,0.0)).rgb;
 		vec3 albedoCurrent8 = texture2D(colortex3, adjTC + vec2(texelSize.x,0.0)).rgb;
-		//Assuming the history color is a blend of the 3x3 neighborhood, we clamp the history to the min and max of each channel in the 3x3 neighborhood
+
+		// Assuming the history color is a blend of the 3x3 neighborhood, we clamp the history to the min and max of each channel in the 3x3 neighborhood
 		vec3 cMax = max(max(max(albedoCurrent0,albedoCurrent1),albedoCurrent2),max(albedoCurrent3,max(albedoCurrent4,max(albedoCurrent5,max(albedoCurrent6,max(albedoCurrent7,albedoCurrent8))))));
 		vec3 cMin = min(min(min(albedoCurrent0,albedoCurrent1),albedoCurrent2),min(albedoCurrent3,min(albedoCurrent4,min(albedoCurrent5,min(albedoCurrent6,min(albedoCurrent7,albedoCurrent8))))));
 		albedoCurrent0 = smoothfilter(colortex3, adjTC + taa_offsets[framemod8]*texelSize*0.5).rgb;
 	#endif
 
 	#ifndef NO_CLIP
-		vec3 albedoPrev = max(FastCatmulRom(colortex5, previousPosition.xy,vec4(texelSize, 1.0/texelSize), 0.75).xyz, 0.0);
-		vec3 finalcAcc = clamp(albedoPrev,cMin,cMax);
+		vec3 albedoPrev = max(FastCatmulRom(colortex5, previousPosition.xy, vec4(texelSize, 1.0/texelSize), 0.75).xyz, 0.0);
+		vec3 finalcAcc = clamp(albedoPrev, cMin, cMax);
 
-		//Increases blending factor when far from AABB and in motion, reduces ghosting
-		float isclamped = distance(albedoPrev,finalcAcc)/luma(albedoPrev) * 0.5;
-		float movementRejection = (0.12+isclamped)*clamp(length(velocity/texelSize),0.0,1.0);
-		//Blend current pixel with clamped history, apply fast tonemap beforehand to reduce flickering
+		// Increases blending factor when far from AABB and in motion, reduces ghosting
+		float isclamped = distance(albedoPrev, finalcAcc) / luma(albedoPrev) * 0.5;
+		float movementRejection = (0.12 + isclamped) * saturate(length(velocity / texelSize));
+
+		// Blend current pixel with clamped history, apply fast tonemap beforehand to reduce flickering
 		vec3 supersampled = invTonemap(mix(tonemap(finalcAcc),tonemap(albedoCurrent0),clamp(BLEND_FACTOR + movementRejection,0.,1.)));
 	#endif
 
@@ -294,22 +283,22 @@ vec3 TAA_hq() {
 		vec3 supersampled =  mix(albedoPrev,albedoCurrent0,clamp(0.05,0.,1.));
 	#endif
 
-	//De-tonemap
+	// De-tonemap
 	return supersampled;
 }
 
 
 /* RENDERTARGETS: 5 */
-layout(location = 0) out vec4 outColor5;
+layout(location = 0) out vec3 outColor5;
 
 void main() {
-	outColor5.a = 1.0;
-
 	#ifdef TAA
-		vec3 color = fp10Dither(TAA_hq(), triangularize(R2_dither()));
-		outColor5.rgb = clamp(color, 6.11*1e-5, 65000.0);
+		float dither = R2_dither(gl_FragCoord.xy, frameCounter);
+		vec3 color = fp10Dither(TAA_hq(), triangularize(dither));
+		outColor5 = clamp(color, 6.11*1e-5, 65000.0);
 	#else
-		vec3 color = fp10Dither(texture2D(colortex3, texcoord).rgb, triangularize(IGN(tempOffsets)));
-		outColor5.rgb = clamp(color, 0.0, 65000.0);
+		float dither = IGN(tempOffsets);
+		vec3 color = fp10Dither(texture2D(colortex3, texcoord).rgb, triangularize(dither));
+		outColor5 = clamp(color, 0.0, 65000.0);
 	#endif
 }

@@ -56,6 +56,7 @@ uniform ivec2 eyeBrightnessSmooth;
 vec4 lightCol = vec4(lightSourceColor, float(sunElevation > 1.e-5) * 2.0 - 1.0);
 
 #include "/lib/util.glsl"
+#include "/lib/bicubic.glsl"
 #include "/lib/blueNoise.glsl"
 #include "/lib/projections.glsl"
 #include "/lib/Shadow_Params.glsl"
@@ -64,11 +65,6 @@ vec4 lightCol = vec4(lightSourceColor, float(sunElevation > 1.e-5) * 2.0 - 1.0);
 #include "/lib/volumetricClouds.glsl"
 #include "/lib/volumetricFog.glsl"
 
-
-float R2_dither() {
-	vec2 alpha = vec2(0.75487765, 0.56984026);
-	return fract(alpha.x * gl_FragCoord.x + alpha.y * gl_FragCoord.y + 1.0/1.6180339887 * frameCounter);
-}
 
 const float[17] Slightmap = float[17](14.0,17.,19.0,22.0,24.0,28.0,31.0,40.0,60.0,79.0,93.0,110.0,132.0,160.0,197.0,249.0,249.0);
 
@@ -81,7 +77,7 @@ void main() {
 
     float minLight = MIN_LIGHT_AMOUNT * 0.007 / (exposure + rodExposure / (rodExposure) * exposure);
 
-    //Lightmap for forward shading (contains average integrated sky color across all faces + torch + min ambient)
+    // Lightmap for forward shading (contains average integrated sky color across all faces + torch + min ambient)
     vec3 avgAmbient = (ambientUp + ambientLeft + ambientRight + ambientB + ambientF + ambientDown) / 6.0;
 
     if (gl_FragCoord.x < 17.0 && gl_FragCoord.y < 17.0) {
@@ -97,7 +93,7 @@ void main() {
         outColor4 = vec4(ambient * Ambient_Mult, 1.0);
     }
 
-    //Lightmap for deferred shading (contains only torch + min ambient)
+    // Lightmap for deferred shading (contains only torch + min ambient)
     if (gl_FragCoord.x < 17.0 && gl_FragCoord.y > 19.0 && gl_FragCoord.y < 19.0 + 17.0){
         float torchLut = clamp(16.0 - gl_FragCoord.x, 0.5, 15.5);
         torchLut = torchLut + 0.712;
@@ -112,35 +108,47 @@ void main() {
     }
 
     //Save light values
-    if (gl_FragCoord.x < 1. && gl_FragCoord.y > 19.+18. && gl_FragCoord.y < 19.+18.+1 )
+    if (gl_FragCoord.x < 1. && gl_FragCoord.y > 19.0+18.0 && gl_FragCoord.y < 19.0+18.0+1.0)
         outColor4 = vec4(ambientUp, 1.0);
+
     if (gl_FragCoord.x > 1. && gl_FragCoord.x < 2.  && gl_FragCoord.y > 19.+18. && gl_FragCoord.y < 19.+18.+1 )
-        outColor4 = vec4(ambientDown,1.0);
+        outColor4 = vec4(ambientDown, 1.0);
+
     if (gl_FragCoord.x > 2. && gl_FragCoord.x < 3.  && gl_FragCoord.y > 19.+18. && gl_FragCoord.y < 19.+18.+1 )
-        outColor4 = vec4(ambientLeft,1.0);
+        outColor4 = vec4(ambientLeft, 1.0);
+
     if (gl_FragCoord.x > 3. && gl_FragCoord.x < 4.  && gl_FragCoord.y > 19.+18. && gl_FragCoord.y < 19.+18.+1 )
-        outColor4 = vec4(ambientRight,1.0);
+        outColor4 = vec4(ambientRight, 1.0);
+
     if (gl_FragCoord.x > 4. && gl_FragCoord.x < 5.  && gl_FragCoord.y > 19.+18. && gl_FragCoord.y < 19.+18.+1 )
-        outColor4 = vec4(ambientB,1.0);
+        outColor4 = vec4(ambientB, 1.0);
+
     if (gl_FragCoord.x > 5. && gl_FragCoord.x < 6.  && gl_FragCoord.y > 19.+18. && gl_FragCoord.y < 19.+18.+1 )
-        outColor4 = vec4(ambientF,1.0);
+        outColor4 = vec4(ambientF, 1.0);
+
     if (gl_FragCoord.x > 6. && gl_FragCoord.x < 7.  && gl_FragCoord.y > 19.+18. && gl_FragCoord.y < 19.+18.+1 )
-        outColor4 = vec4(lightSourceColor,1.0);
+        outColor4 = vec4(lightSourceColor, 1.0);
+
     if (gl_FragCoord.x > 7. && gl_FragCoord.x < 8.  && gl_FragCoord.y > 19.+18. && gl_FragCoord.y < 19.+18.+1 )
-        outColor4 = vec4(avgAmbient,1.0);
+        outColor4 = vec4(avgAmbient, 1.0);
+
     if (gl_FragCoord.x > 8. && gl_FragCoord.x < 9.  && gl_FragCoord.y > 19.+18. && gl_FragCoord.y < 19.+18.+1 )
-        outColor4 = vec4(sunColor,1.0);
+        outColor4 = vec4(sunColor, 1.0);
+
     if (gl_FragCoord.x > 9. && gl_FragCoord.x < 10.  && gl_FragCoord.y > 19.+18. && gl_FragCoord.y < 19.+18.+1 )
-        outColor4 = vec4(moonColor,1.0);
+        outColor4 = vec4(moonColor, 1.0);
+
     if (gl_FragCoord.x > 11. && gl_FragCoord.x < 12.  && gl_FragCoord.y > 19.+18. && gl_FragCoord.y < 19.+18.+1 )
-        outColor4 = vec4(avgSky,1.0);
+        outColor4 = vec4(avgSky, 1.0);
+
     if (gl_FragCoord.x > 12. && gl_FragCoord.x < 13.  && gl_FragCoord.y > 19.+18. && gl_FragCoord.y < 19.+18.+1 )
-        outColor4 = vec4(sunColorCloud,1.0);
+        outColor4 = vec4(sunColorCloud, 1.0);
+
     if (gl_FragCoord.x > 13. && gl_FragCoord.x < 14.  && gl_FragCoord.y > 19.+18. && gl_FragCoord.y < 19.+18.+1 )
-        outColor4 = vec4(moonColorCloud,1.0);
+        outColor4 = vec4(moonColorCloud, 1.0);
 
     // Sky gradient (no clouds)
-    if (gl_FragCoord.x > 18. && gl_FragCoord.y > 1. && gl_FragCoord.x < 18+257){
+    if (gl_FragCoord.x > 18. && gl_FragCoord.y > 1.0 && gl_FragCoord.x < 18+257){
         vec2 p = saturate(floor(gl_FragCoord.xy - vec2(18.0, 1.0)) / 256.0 + tempOffsets / 256.0);
         vec3 viewVector = cartToSphere(p);
 

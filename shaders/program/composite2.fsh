@@ -1,5 +1,4 @@
-#version 120
-#extension GL_EXT_gpu_shader4 : enable
+#version 430 compatibility
 
 //Render sky, volumetric clouds, direct lighting
 
@@ -72,12 +71,16 @@ vec3 toScreenSpacePrev(vec3 p) {
     return fragposition.xyz / fragposition.w;
 }
 
+#include "/lib/r2.glsl"
 #include "/lib/ign.glsl"
+#include "/lib/dither.glsl"
 #include "/lib/decode.glsl"
+#include "/lib/bicubic.glsl"
 #include "/lib/blueNoise.glsl"
 #include "/lib/projections.glsl"
 #include "/lib/waterOptions.glsl"
 #include "/lib/Shadow_Params.glsl"
+#include "/lib/shadowSampling.glsl"
 #include "/lib/color_transforms.glsl"
 #include "/lib/sky_gradient.glsl"
 #include "/lib/stars.glsl"
@@ -93,18 +96,6 @@ vec3 normVec(vec3 vec) {
 
 float lengthVec(vec3 vec) {
 	return sqrt(dot(vec, vec));
-}
-
-float triangularize(float dither) {
-    float center = dither*2.0-1.0;
-    dither = center*inversesqrt(abs(center));
-    return clamp(dither-fsign(center),0.0,1.0);
-}
-
-vec3 fp10Dither(vec3 color, float dither) {
-	const vec3 mantissaBits = vec3(6.,6.,5.);
-	vec3 exponent = floor(log2(color));
-	return color + dither*exp2(-mantissaBits)*exp2(exponent);
 }
 
 float linZ(float depth) {
@@ -152,25 +143,16 @@ float ld(float dist) {
     return (2.0 * near) / (far + near - dist * (far - near));
 }
 
-vec2 tapLocation(int sampleNumber, int nb, float nbRot, float jitter, float distort) {
-	float alpha0 = sampleNumber / nb;
-    float alpha = (sampleNumber + jitter) / nb;
-    float angle = jitter*6.28 + alpha * 84.0 * 6.28;
+vec2 tapLocation_AO(int sampleNumber, float spinAngle, int nb, float nbRot, float r0) {
+	float alpha = (float(sampleNumber * 1.0f + r0) * (1.0 / nb));
+	float angle = alpha * nbRot * 6.28 + spinAngle*6.28;
 
-	float sin_v = sin(angle);
-	float cos_v = cos(angle);
-
-    return vec2(cos_v, sin_v) * sqrt(alpha);
+	return vec2(cos(angle), sin(angle)) * alpha;
 }
 
 vec3 BilateralFiltering(sampler2D tex, sampler2D depth,vec2 coord,float frDepth,float maxZ){
 	vec4 sampled = vec4(texelFetch2D(tex, ivec2(coord), 0).rgb, 1.0);
 	return vec3(sampled.x, sampled.yz / sampled.w);
-}
-
-float R2_dither() {
-	vec2 alpha = vec2(0.75487765, 0.56984026);
-	return fract(alpha.x * gl_FragCoord.x + alpha.y * gl_FragCoord.y + 1.0/1.6180339887 * frameCounter);
 }
 
 float waterCaustics(vec3 wPos, vec3 lightSource) {
@@ -288,11 +270,6 @@ vec3 RT(vec3 dir, vec3 position, float noise, vec3 N) {
 	return vec3(1.1);
 }
 
-vec2 R2_samples(int n) {
-	vec2 alpha = vec2(0.75487765, 0.56984026);
-	return fract(alpha * n);
-}
-
 vec3 cosineHemisphereSample(vec2 Xi) {
     float r = sqrt(Xi.x);
     float theta = 2.0 * 3.14159265359 * Xi.y;
@@ -347,13 +324,6 @@ vec3 rtGI(vec3 normal, vec4 noise, vec3 fragpos, vec3 ambient, float translucent
 	return intRadiance / RAY_COUNT + (1.0 - occlusion / RAY_COUNT) * torch;
 }
 
-vec2 tapLocation(int sampleNumber, float spinAngle, int nb, float nbRot, float r0) {
-    float alpha = (float(sampleNumber * 1.0f + r0) * (1.0 / nb));
-    float angle = alpha * (nbRot * 6.28) + spinAngle*6.28;
-
-    return vec2(cos(angle), sin(angle)) * alpha;
-}
-
 void ssao(inout float occlusion, vec3 fragpos, float mulfov, float dither, vec3 normal) {
 	ivec2 pos = ivec2(gl_FragCoord.xy);
 	const float tan70 = tan(70.0 * PI / 180.0);
@@ -364,17 +334,19 @@ void ssao(inout float occlusion, vec3 fragpos, float mulfov, float dither, vec3 
 	float maxR2 = fragpos.z * fragpos.z * mulfov2 * 2.0 * 1.412 / 50.0;
 
 	float rd = mulfov2 * 0.04;
-	//pre-rotate direction
+
+	// pre-rotate direction
 	float n = 0.0;
 
 	occlusion = 0.0;
 
-	vec2 acc = -vec2(TAA_Offset)*texelSize*0.5;
+	vec2 acc = -vec2(TAA_Offset) * texelSize * 0.5;
 	float mult = (dot(normal,normalize(fragpos))+1.0)*0.5+0.5;
 
-	vec2 v = fract(vec2(dither,R2_dither()) + (frameCounter%10000) * vec2(0.75487765, 0.56984026));
+	vec2 v = fract(vec2(dither, R2_dither(gl_FragCoord.xy, frameCounter)) + (frameCounter % 10000) * vec2(0.75487765, 0.56984026));
+
 	for (int j = 0; j < 7; j++) {
-		vec2 sp = tapLocation(j, v.x, 7, 88.0, v.y);
+		vec2 sp = tapLocation_AO(j, v.x, 7, 88.0, v.y);
 		vec2 sampleOffset = sp*rd;
 		ivec2 offset = ivec2(gl_FragCoord.xy + sampleOffset * vec2(viewWidth, viewHeight * aspectRatio) * RENDER_SCALE);
 		if (offset.x >= 0 && offset.y >= 0 && offset.x < viewWidth*RENDER_SCALE.x && offset.y < viewHeight*RENDER_SCALE.y ) {
@@ -420,7 +392,7 @@ void main() {
 	vec3 p3 = mat3(gbufferModelViewInverse) * fragpos;
 	vec3 np3 = normVec(p3);
 
-	//sky
+	// sky
 	if (z >= 1.0) {
 		vec3 color = vec3(0.0);
 		vec4 cloud = texture2D_bicubic(colortex0, texcoord * CLOUDS_QUALITY);
@@ -452,7 +424,7 @@ void main() {
 				waterVolumetrics(outColor3, fragpos0, fragpos, estimatedDepth, estimatedSunDepth, Vdiff, noise, totEpsilon, scatterCoef, ambientColVol, lightColVol, dot(np3, WsunVec));
 		}
 	}
-	//land
+	// land
 	else {
 		p3 += gbufferModelViewInverse[3].xyz;
 
@@ -463,7 +435,7 @@ void main() {
 		vec4 dataUnpacked0 = vec4(decodeVec2(data.x), decodeVec2(data.y));
 		vec4 dataUnpacked1 = vec4(decodeVec2(data.z), decodeVec2(data.w));
 
-		vec3 albedo = toLinear(vec3(dataUnpacked0.xz,dataUnpacked1.x));
+		vec3 albedo = toLinear(vec3(dataUnpacked0.xz, dataUnpacked1.x));
 		//if (luma(albedo) < 0.15) albedo = vec3(1.0,0.,0.);
 		vec3 normal = mat3(gbufferModelViewInverse) * decode(dataUnpacked0.yw);
 
@@ -476,7 +448,7 @@ void main() {
 		float NdotL = NdotLGeom;
 
 		if ((iswater && isEyeInWater == 0) || (!iswater && isEyeInWater == 1))
-			NdotL = dot(normal,refractedSunVec);
+			NdotL = dot(normal, refractedSunVec);
 
 		float diffuseSun = saturate(NdotL);
 		vec3 filtered = vec3(1.412, 1.0, 0.0);
@@ -539,7 +511,7 @@ void main() {
 				shading = 0.0;
 
 				for (int i = 0; i < SHADOW_FILTER_SAMPLE_COUNT; i++) {
-					vec2 offsetS = tapLocation(i, SHADOW_FILTER_SAMPLE_COUNT, 0.0, noise, 0.0);
+					vec2 offsetS = tapLocation_Shadow(i, SHADOW_FILTER_SAMPLE_COUNT, 84.0, noise);
 
 					float bias = 1.0 + (i+noise) * rdMul/SHADOW_FILTER_SAMPLE_COUNT * shadowMapResolution;
 					vec3 samplePos = vec3(projectedShadowPosition + vec3(rdMul * offsetS, -diffthresh * bias));
@@ -576,7 +548,7 @@ void main() {
 				vec3 extinction = 1.0 - albedo*0.85;
 				// Should be somewhat energy conserving
 				SSS = exp(-filtered.y*11.0*extinction) + 3.0*exp(-filtered.y*11./3.*extinction);
-				float scattering = clamp((0.7+0.3*pi*phaseg(dot(np3, WsunVec),0.85))*1.5/4.0*sssAmount,0.0,1.0);
+				float scattering = clamp((0.7+0.3*PI*phaseg(dot(np3, WsunVec),0.85))*1.5/4.0*sssAmount,0.0,1.0);
 				SSS *= scattering;
 				shading *= 1.0 - sssAmount;
 				SSS *= sqrt(lightmap.y);
@@ -587,7 +559,7 @@ void main() {
 				vec3 extinction = 1.0 - albedo*0.85;
 				// Should be somewhat energy conserving
 				SSS = exp(-filtered.y*11.0*extinction) + 3.0*exp(-filtered.y*11./3.*extinction);
-				float scattering = clamp((0.7+0.3*pi*phaseg(dot(np3, WsunVec),0.85))*1.26/4.0*sssAmount,0.0,1.0);
+				float scattering = clamp((0.7+0.3*PI*phaseg(dot(np3, WsunVec),0.85))*1.26/4.0*sssAmount,0.0,1.0);
 				SSS *= scattering;
 				shading *= 1.0 - sssAmount;
 				SSS *= sqrt(lightmap.y);
@@ -725,7 +697,7 @@ void main() {
 		#endif
 		skyLightFinal += SSS;
 
-		outColor3 = (skyLightFinal/pi * 8.0/150.0/3.0 * skyDirectLight + ambientLight + directLighting + emitting) * albedo;
+		outColor3 = (skyLightFinal/PI * 8.0/150.0/3.0 * skyDirectLight + ambientLight + directLighting + emitting) * albedo;
 
 		if (iswater != (isEyeInWater == 1)) {
 			// Bruteforce integration is probably overkill

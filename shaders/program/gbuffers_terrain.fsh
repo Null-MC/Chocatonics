@@ -1,24 +1,22 @@
-#version 120
-#extension GL_EXT_gpu_shader4 : enable
-#extension GL_ARB_shader_texture_lod : enable
+#version 430 compatibility
 
 #include "/lib/common.glsl"
 #include "/lib/settings.glsl"
 
 #ifdef POM
-	varying vec4 vtexcoordam; // .st for add, .pq for mul
-	varying vec4 vtexcoord;
+	in vec4 vtexcoordam; // .st for add, .pq for mul
+	in vec4 vtexcoord;
 #endif
 
-varying vec4 lmtexcoord;
-varying vec4 color;
-varying vec4 normalMat;
+in vec4 lmtexcoord;
+in vec4 color;
+in vec4 normalMat;
 
 #ifdef MC_NORMAL_MAP
-	varying vec4 tangent;
+	in vec4 tangent;
 #endif
 
-uniform sampler2D texture;
+uniform sampler2D gtexture;
 
 #ifdef MC_NORMAL_MAP
 	uniform sampler2D normals;
@@ -88,11 +86,11 @@ mat3 inverse(mat3 m) {
 
 #ifdef POM
 	vec4 readNormal(in vec2 coord) {
-		return texture2DGradARB(normals, fract(coord) * vtexcoordam.pq + vtexcoordam.st, dcdx, dcdy);
+		return textureGrad(normals, fract(coord) * vtexcoordam.pq + vtexcoordam.st, dcdx, dcdy);
 	}
 
 	vec4 readTexture(in vec2 coord) {
-		return texture2DGradARB(texture, fract(coord) * vtexcoordam.pq + vtexcoordam.st, dcdx, dcdy);
+		return textureGrad(gtexture, fract(coord) * vtexcoordam.pq + vtexcoordam.st, dcdx, dcdy);
 	}
 #endif
 
@@ -158,7 +156,7 @@ void main() {
 					vec3 coord = vec3(vtexcoord.st, 1.0);
 					coord += noise*interval;
 					float sumVec = noise;
-					float lum0 = luma(texture2DLod(texture, lmtexcoord.xy, 100).rgb);
+					float lum0 = luma(textureLod(gtexture, lmtexcoord.xy, 100).rgb);
 
 					for (int loopCount = 0; (loopCount < MAX_OCCLUSION_POINTS) && (1.0 - POM_DEPTH + POM_DEPTH*luma(readTexture(coord.st).rgb)/lum0*0.5 < coord.p) && coord.p >= 0.0; ++loopCount) {
 						 coord = coord+interval;
@@ -174,7 +172,7 @@ void main() {
 
 					adjustedTexCoord = mix(fract(coord.st) * vtexcoordam.pq + vtexcoordam.st, adjustedTexCoord, max(dist - MIX_OCCLUSION_DISTANCE, 0.0) / (MAX_OCCLUSION_DISTANCE - MIX_OCCLUSION_DISTANCE));
 
-					vec3 truePos = fragpos + sumVec * inverse(tbnMatrix) * (interval);
+					vec3 truePos = fragpos + sumVec * inverse(tbnMatrix) * interval;
 
 					#ifdef Depth_Write_POM
 						gl_FragDepth = toClipSpace3(truePos).z;
@@ -183,38 +181,38 @@ void main() {
 			#endif
 		}
 
-		vec4 data0 = texture2DGradARB(texture, adjustedTexCoord.xy,dcdx,dcdy);
+		vec4 data0 = textureGrad(gtexture, adjustedTexCoord.xy, dcdx, dcdy);
 		#ifdef DISABLE_ALPHA_MIPMAPS
-			data0.a = texture2DGradARB(texture, adjustedTexCoord.xy,vec2(0.),vec2(0.0)).a;
+			data0.a = textureGrad(gtexture, adjustedTexCoord.xy, vec2(0.0), vec2(0.0)).a;
 		#endif
 
 //		if (data0.a > alphaTestRef) data0.a = normalMat.a;
 //		else data0.a = 0.0;
 
-		normal = applyBump(tbnMatrix, texture2DGradARB(normals, adjustedTexCoord.xy, dcdx, dcdy).xyz * 2.0 - 1.0);
+		normal = applyBump(tbnMatrix, textureGrad(normals, adjustedTexCoord.xy, dcdx, dcdy).xyz * 2.0 - 1.0);
 
 		data0.rgb *= color.rgb;
 
 		vec4 data1 = saturate(noise * exp2(-8.0) + encode(normal));
 	#else
-		vec4 data0 = texture2D(texture, lmtexcoord.xy, Texture_MipMap_Bias);
-
+		vec4 data0 = texture(gtexture, lmtexcoord.xy, Texture_MipMap_Bias);
 		data0.rgb *= color.rgb;
-		float avgBlockLum = luma(texture2DLod(texture, lmtexcoord.xy,128).rgb * color.rgb);
-		data0.rgb = clamp(data0.rgb*pow(avgBlockLum,-0.33) * 0.85, 0.0, 1.0);
+
+		float avgBlockLum = luma(textureLod(gtexture, lmtexcoord.xy, 128).rgb * color.rgb);
+		data0.rgb = saturate(data0.rgb * pow(avgBlockLum, -0.33) * 0.85);
 		//data0.rgb = vec3(avgBlockLum);
 		//data0.rgb = clamp(data0.rgb*pow((0.55+avgBlockLum),-(1.0/2.233)),0.0,1.0);
 		//if (toLinear(data0.rgb).g > 0.25) data0.rgb=vec3(1.,0.,0.);
 
 		#ifdef DISABLE_ALPHA_MIPMAPS
-			data0.a = texture2DLod(texture,lmtexcoord.xy, 0).a;
+			data0.a = textureLod(gtexture, lmtexcoord.xy, 0).a;
 		#endif
 
 //		if (data0.a > alphaTestRef) data0.a = normalMat.a;
 //		else data0.a = 0.0;
 
 		#ifdef MC_NORMAL_MAP
-			normal = applyBump(tbnMatrix, texture2D(normals, lmtexcoord.xy).rgb * 2.0 - 1.0);
+			normal = applyBump(tbnMatrix, texture(normals, lmtexcoord.xy).rgb * 2.0 - 1.0);
 		#endif
 
 		vec4 data1 = saturate(noise / 256.0 + encode(normal));

@@ -39,12 +39,6 @@ uniform float near;
 #include "/lib/shadowSampling.glsl"
 
 
-float R2_dither() {
-	vec2 alpha = vec2(0.75487765, 0.56984026);
-	return fract(alpha.x * gl_FragCoord.x + alpha.y * gl_FragCoord.y);
-}
-
-
 /* RENDERTARGETS: 3 */
 layout(location = 0) out vec4 outColor3;
 
@@ -98,7 +92,7 @@ void main() {
 						float avgDepth = 0.0;
 
 						for (int i = 0; i < VPS_Search_Samples; i++) {
-							vec2 offsetS = tapLocation(i, noise, VPS_Search_Samples, 84.0);
+							vec2 offsetS = tapLocation_Shadow(i, VPS_Search_Samples, 84.0, noise);
 							float weight = 3.0 + (i+noise) *rdMul/SHADOW_FILTER_SAMPLE_COUNT*shadowMapResolution*distortFactor/2.7;
 							float d = texelFetch(shadowtex0, ivec2((projectedShadowPosition.xy + offsetS * rdMul) * shadowMapResolution), 0).x;
 							float b = smoothstep(weight * diffthresh / 2.0, weight * diffthresh, projectedShadowPosition.z - d);

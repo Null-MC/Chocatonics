@@ -1,5 +1,5 @@
 const float PI = acos(-1.0);
-const float pi = 3.141592653589793238462643383279502884197169;
+//const float pi = 3.141592653589793238462643383279502884197169;
 
 const float EPSILON = 1.e-6;
 
@@ -9,6 +9,8 @@ const float EPSILON = 1.e-6;
 #define saturate(x) clamp(x, 0.0, 1.0)
 
 #define diagonal3(m) vec3((m)[0].x, (m)[1].y, m[2].z)
+
+#define mul3(m,v) (mat3(m) * v + m[3].xyz)
 
 #define projMAD(m, v) (diagonal3(m) * (v) + (m)[3].xyz)
 
@@ -24,10 +26,6 @@ float facos(const in float sx) {
     float x = saturate(abs(sx));
     float a = sqrt(1.0 - x) * (-0.16882 * x + 1.56734);
     return sx > 0.0 ? a : PI - a;
-}
-
-vec3 mul3(const in mat4 matrix, const in vec3 vector) {
-    return mat3(matrix) * vector + matrix[3].xyz;
 }
 
 float luma(const in vec3 color) {

@@ -45,7 +45,9 @@ uniform float eyeAltitude;
 uniform int frameCounter;
 uniform int worldTime;
 
+#include "/lib/r2.glsl"
 #include "/lib/util.glsl"
+#include "/lib/bicubic.glsl"
 #include "/lib/sky_gradient.glsl"
 #include "/lib/ROBOBO_sky.glsl"
 
@@ -57,12 +59,6 @@ vec3 rodSample(vec2 Xi) {
     float phi = 2.0 * PI * Xi.y;
 
     return normalize(vec3(cos(phi) * r, sin(phi) * r, Xi.x)).xzy;
-}
-
-//Low discrepancy 2D sequence, integration error is as low as sobol but easier to compute : http://extremelearning.com.au/unreasonable-effectiveness-of-quasirandom-sequences/
-vec2 R2_samples(int n) {
-	vec2 alpha = vec2(0.75487765, 0.56984026);
-	return fract(alpha * n);
 }
 
 float ld(float depth) {
