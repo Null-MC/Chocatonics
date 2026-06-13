@@ -14,7 +14,6 @@ void sample_indirect(inout vec3 indirect_color, vec3 sample_rt_pos, vec3 geo_nor
     out vec3 first_hit, out vec3 first_normal) {
 
     vec3 trace_localDir = ph_rand_direction(rnd_state, tex_normal);
-//    lightEmittance = vec3(0.0); // TODO: dont think this is set anymore
 
     RayIterator ray;
     ray.iterations = PH_MAX_GI_ITERATIONS;
@@ -43,54 +42,70 @@ void sample_indirect(inout vec3 indirect_color, vec3 sample_rt_pos, vec3 geo_nor
         first_hit = vec3(-1.0);
     }
     else {
-        VoxelData voxel_data = ray_result_voxel_data(hit);
-        vec3 hit_albedo = voxel_data_albedo(voxel_data).rgb;
-        hit_albedo = toLinear(hit_albedo);
+        vec3 radiance = vec3(0.0);
+        vec3 transmittance = vec3(1.0);
 
-        vec3 hit_position = ray_result_position(hit);
-        vec3 hit_localPos = hit_position - rt_camera_position;
-        vec3 hit_localNormal = ray_result_normal(hit);
+        for (int bounce = 0; bounce < PH_MAX_GI_BOUNCES; bounce++) {
+            VoxelData voxel_data = ray_result_voxel_data(hit);
+            vec3 hit_albedo = voxel_data_albedo(voxel_data).rgb;
+            hit_albedo = toLinear(hit_albedo);
 
-        first_hit = hit_position;
-        first_normal = hit_localNormal;
+            vec3 hit_position = ray_result_position(hit);
+            vec3 hit_localPos = hit_position - rt_camera_position;
+            vec3 hit_localNormal = ray_result_normal(hit);
 
-        // TODO
-        vec3 hit_emission = vec3(0.0); //8.0 * lightEmittance;
-        vec3 sample_color = vec3(0.0);
+            first_hit = hit_position;
+            first_normal = hit_localNormal;
 
-        #ifdef PHOTONICS_GI_ENABLED
-            vec3 localSkyLightDir = normalize(mat3(gbufferModelViewInverse) * shadowLightPosition);
+            vec3 sample_color = vec3(0.0);
 
-            float hit_skyLightF = ray_result_skylight(hit) / 15.0;
-            hit_skyLightF = saturate(hit_skyLightF);
+            #ifdef PHOTONICS_GI_ENABLED
+                vec3 localSkyLightDir = normalize(mat3(gbufferModelViewInverse) * shadowLightPosition);
 
-            // trace sun
-            ray_iter_set_direction(ray, localSkyLightDir);
-            ray_iter_offset_position(ray, 0.1 * hit_localNormal);
+                // trace sun
+                RayIterator ray_sun;
+                ray_sun.iterations = PH_MAX_GI_ITERATIONS;
+                ray_iter_set_position(ray_sun, hit_position);
+                ray_iter_set_direction(ray_sun, localSkyLightDir);
+                ray_iter_offset_position(ray_sun, 0.1 * hit_localNormal);
 
-            RayResult hit2;
-            vec3 tint2 = vec3(1.0);
+                RayResult hit2;
+                vec3 tint2 = vec3(1.0);
 
-            #ifdef SHADOW_COLORED
-                bool is_hit2 = trace_ray(ray, hit2, tint2);
-            #else
-                bool is_hit2 = trace_ray(ray, hit2);
+                #ifdef SHADOW_COLORED
+                    bool is_hit2 = trace_ray(ray_sun, hit2, tint2);
+                #else
+                    bool is_hit2 = trace_ray(ray_sun, hit2);
+                #endif
+
+                if (!is_hit2) {
+                    vec3 skyLightColor = get_sun_color(hit_localPos, localSkyLightDir);
+                    sample_color += skyLightColor * tint2 * max(dot(hit_localNormal, localSkyLightDir), 0.0);
+
+                    // #ifdef CLOUDS_SHADOWS
+                    //     float cloudShadow = SampleCloudShadow(hit_localPos, localSkyLightDir);
+                    //     sample_color *= cloudShadow * 0.5 + 0.5;
+                    // #endif
+                }
             #endif
 
-            if (!is_hit2) {
-                vec3 skyLightColor = get_sun_color(hit_localPos, localSkyLightDir);
-                sample_color += skyLightColor * tint2 * max(dot(hit_localNormal, localSkyLightDir), 0.0);
-
-                // #ifdef CLOUDS_SHADOWS
-                //     float cloudShadow = SampleCloudShadow(hit_localPos, localSkyLightDir);
-                //     sample_color *= cloudShadow * 0.5 + 0.5;
-                // #endif
+            Light hit_light = ray_result_light_data(hit);
+            if (light_is_valid(hit_light) && hit_light.type == LIGHT_TYPE_NOT_TRACED) {
+                vec3 origin = floor(ray_result_position(hit)) + 0.5;
+                vec3 light_color = light_sample_at(hit_light, sample_rt_pos, origin, geo_normal, geo_normal);
+                sample_color += light_color;// * gi_light_multiplier;
             }
-        #endif
 
-        sample_color += hit_emission;
+            transmittance *= hit_albedo;
+            radiance += transmittance * sample_color;
 
-        final_color = hit_albedo * sample_color;
+            vec3 hit_randomDir = ph_rand_direction(rnd_state, hit_localNormal);
+
+            ray_iter_set_direction(ray, hit_randomDir);
+            ray_iter_offset_position(ray, 0.1 * hit_localNormal);
+        }
+
+        final_color = radiance;
     }
 
     indirect_color += PI * final_color * tint;

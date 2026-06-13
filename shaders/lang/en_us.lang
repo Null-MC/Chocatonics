@@ -11,7 +11,13 @@ screen.PHOTONICS=Photonics
 
     option.PHOTONICS_HAND_LIGHT_ENABLED=Hand Light
 
-    option.PHOTONICS_GI_ENABLED=Global Illumination
+    screen.PHOTONICS_GI=Global Illumination
+
+        option.PHOTONICS_GI_ENABLED=Enabled
+
+        option.PHOTONICS_GI_BOUNCES=Bounces
+
+        option.PHOTONICS_GI_BLOCK=Block Light
 
 
 screen.MATERIALS=PBR Materials
