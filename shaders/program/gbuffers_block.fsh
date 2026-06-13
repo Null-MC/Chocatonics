@@ -21,7 +21,6 @@ uniform mat4 gbufferProjectionInverse;
 uniform float alphaTestRef;
 
 #include "/lib/ign.glsl"
-#include "/lib/encoding.glsl"
 #include "/lib/material.glsl"
 #include "/lib/octohedral.glsl"
 

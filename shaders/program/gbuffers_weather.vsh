@@ -1,11 +1,13 @@
-#version 120
+#version 430 compatibility
 
 #include "/lib/common.glsl"
 #include "/lib/settings.glsl"
 
 
-varying vec4 lmtexcoord;
-varying vec4 color;
+out VertexData {
+	vec4 lmtexcoord;
+	vec4 color;
+} vOut;
 
 uniform vec2 texelSize;
 uniform int framemod8;
@@ -20,10 +22,10 @@ vec4 toClipSpace3(vec3 viewSpacePosition) {
 
 
 void main() {
-	lmtexcoord.xy = (gl_MultiTexCoord0).xy;
+	vOut.lmtexcoord.xy = (gl_MultiTexCoord0).xy;
 
 	vec2 lmcoord = gl_MultiTexCoord1.xy / 255.0;
-	lmtexcoord.zw = lmcoord * lmcoord;
+	vOut.lmtexcoord.zw = lmcoord * lmcoord;
 
 	vec3 position = mat3(gl_ModelViewMatrix) * vec3(gl_Vertex) + gl_ModelViewMatrix[3].xyz;
 	vec3 worldpos = mat3(gbufferModelViewInverse) * position + gbufferModelViewInverse[3].xyz + cameraPosition;
@@ -33,7 +35,7 @@ void main() {
 	position.xz -= (vec2(3.0, 1.0) + sin(ft) * sin(ft) * sin(ft) * vec2(2.1, 0.6)) * 0.5;
 	gl_Position = toClipSpace3(position);
 
-	color = gl_Color;
+	vOut.color = gl_Color;
 
 	#ifdef TAA_UPSCALING
 		gl_Position.xy = gl_Position.xy * RENDER_SCALE + RENDER_SCALE * gl_Position.w - gl_Position.w;

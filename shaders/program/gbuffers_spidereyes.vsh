@@ -1,20 +1,23 @@
-#version 120
+#version 430 compatibility
 
 #include "/lib/common.glsl"
 #include "/lib/settings.glsl"
 
 
-varying vec4 color;
-varying vec2 texcoord;
+out VertexData {
+	vec4 color;
+	vec2 texcoord;
+} vOut;
 
 uniform vec2 texelSize;
 uniform int framemod8;
 
 
 void main() {
+	vOut.texcoord = (gl_MultiTexCoord0).xy;
+	vOut.color = gl_Color;
+
 	gl_Position = ftransform();
-	texcoord = (gl_MultiTexCoord0).xy;
-	color = gl_Color;
 
 	#ifdef TAA_UPSCALING
 		gl_Position.xy = gl_Position.xy * RENDER_SCALE + RENDER_SCALE * gl_Position.w - gl_Position.w;

@@ -35,7 +35,6 @@ uniform float far;
 uniform float near;
 
 #include "/lib/ign.glsl"
-#include "/lib/decode.glsl"
 #include "/lib/blueNoise.glsl"
 #include "/lib/octohedral.glsl"
 #include "/lib/projections.glsl"

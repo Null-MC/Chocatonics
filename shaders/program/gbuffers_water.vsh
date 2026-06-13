@@ -1,5 +1,4 @@
-#version 120
-#extension GL_EXT_gpu_shader4 : enable
+#version 430 compatibility
 
 #include "/lib/common.glsl"
 #include "/lib/settings.glsl"
@@ -8,13 +7,15 @@
 attribute vec4 at_tangent;
 attribute vec4 mc_Entity;
 
-varying vec4 lmtexcoord;
-varying vec4 color;
-varying vec4 normalMat;
-varying vec3 binormal;
-varying vec3 tangent;
-varying float dist;
-varying vec3 viewVector;
+out VertexData {
+	vec4 lmtexcoord;
+	vec4 color;
+	vec4 normalMat;
+	vec3 binormal;
+	vec3 tangent;
+	vec3 viewVector;
+//	float dist;
+} vOut;
 
 uniform vec2 texelSize;
 uniform int framemod8;
@@ -26,37 +27,36 @@ vec4 toClipSpace3(vec3 viewSpacePosition) {
 
 
 void main() {
-	lmtexcoord.xy = (gl_MultiTexCoord0).xy;
-	vec2 lmcoord = gl_MultiTexCoord1.xy / 255.0;
-	lmtexcoord.zw = lmcoord;
+	vOut.lmtexcoord.xy = (gl_MultiTexCoord0).xy;
+	vOut.lmtexcoord.zw = gl_MultiTexCoord1.xy / 255.0;
 
-	vec3 position = mat3(gl_ModelViewMatrix) * vec3(gl_Vertex) + gl_ModelViewMatrix[3].xyz;
-	gl_Position = toClipSpace3(position);
-	color = gl_Color;
+	vec3 viewPos = mul3(gl_ModelViewMatrix, gl_Vertex.xyz);
+	gl_Position = toClipSpace3(viewPos);
+	vOut.color = gl_Color;
 
 	float mat = 0.0;
 	if (mc_Entity.x == 8.0 || mc_Entity.x == 9.0) {
 		mat = 1.0;
-		gl_Position.z -= 1e-4;
+		gl_Position.z -= 1.e-4;
 	}
 
 	if (mc_Entity.x == 79.0) mat = 0.5;
 	if (mc_Entity.x == 10002) mat = 0.01;
 
-	normalMat = vec4(normalize(gl_NormalMatrix * gl_Normal), mat);
+	vOut.normalMat.xyz = normalize(gl_NormalMatrix * gl_Normal);
+	vOut.normalMat.w = mat;
 
-	tangent = normalize(gl_NormalMatrix * at_tangent.rgb);
-	binormal = normalize(cross(tangent.rgb, normalMat.xyz) * at_tangent.w);
+	vOut.tangent = normalize(gl_NormalMatrix * at_tangent.xyz);
+	vOut.binormal = normalize(cross(vOut.tangent, vOut.normalMat.xyz) * at_tangent.w);
 
 	mat3 tbnMatrix = mat3(
-		tangent.x, binormal.x, normalMat.x,
-		tangent.y, binormal.y, normalMat.y,
-		tangent.z, binormal.z, normalMat.z);
+		vOut.tangent.x, vOut.binormal.x, vOut.normalMat.x,
+		vOut.tangent.y, vOut.binormal.y, vOut.normalMat.y,
+		vOut.tangent.z, vOut.binormal.z, vOut.normalMat.z);
 
-	dist = length(gl_ModelViewMatrix * gl_Vertex);
+//	vOut.dist = length(viewPos);
 
-	viewVector = (gl_ModelViewMatrix * gl_Vertex).xyz;
-	viewVector = normalize(tbnMatrix * viewVector);
+	vOut.viewVector = normalize(tbnMatrix * viewPos.xyz);
 
 	#ifdef TAA_UPSCALING
 		gl_Position.xy = gl_Position.xy * RENDER_SCALE + RENDER_SCALE * gl_Position.w - gl_Position.w;

@@ -31,7 +31,6 @@ uniform float alphaTestRef;
 uniform vec4 entityColor;
 
 #include "/lib/ign.glsl"
-#include "/lib/encoding.glsl"
 #include "/lib/material.glsl"
 #include "/lib/octohedral.glsl"
 #include "/lib/projections.glsl"

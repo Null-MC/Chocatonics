@@ -78,7 +78,6 @@ vec3 toScreenSpacePrev(vec3 p) {
 #include "/lib/r2.glsl"
 #include "/lib/ign.glsl"
 #include "/lib/dither.glsl"
-#include "/lib/decode.glsl"
 #include "/lib/bicubic.glsl"
 #include "/lib/blueNoise.glsl"
 #include "/lib/octohedral.glsl"

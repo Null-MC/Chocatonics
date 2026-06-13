@@ -1,23 +1,21 @@
-#version 120
+#version 430 compatibility
 
 #include "/lib/common.glsl"
 #include "/lib/settings.glsl"
 
 
-varying vec4 color;
-varying vec2 texcoord;
+in VertexData {
+	vec4 color;
+	vec2 texcoord;
+} vIn;
 
-uniform sampler2D texture;
+uniform sampler2D gtexture;
 
 
 /* RENDERTARGETS: 2 */
 layout(location = 0) out vec4 outColor2;
 
 void main() {
-	vec4 albedo = texture2D(texture, texcoord);
-	albedo *= color;
-
-	albedo.rgb = toLinear(albedo.rgb) * 0.33;
-
-	outColor2 = albedo;
+	vec4 outColor2 = texture(gtexture, vIn.texcoord) * vIn.color;
+	outColor2.rgb = toLinear(outColor2.rgb) * 0.33;
 }

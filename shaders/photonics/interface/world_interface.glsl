@@ -33,7 +33,6 @@ uniform mat4 gbufferProjectionInverse;
 uniform mat4 shadowModelView;
 uniform mat4 shadowProjection;
 
-#include "/lib/decode.glsl"
 #include "/lib/octohedral.glsl"
 #include "/lib/projections.glsl"
 

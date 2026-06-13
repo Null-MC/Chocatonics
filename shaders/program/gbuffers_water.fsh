@@ -1,19 +1,20 @@
-#version 120
-#extension GL_EXT_gpu_shader4 : enable
+#version 430 compatibility
 
 #include "/lib/common.glsl"
 #include "/lib/settings.glsl"
 
 
-varying vec4 lmtexcoord;
-varying vec4 color;
-varying vec4 normalMat;
-varying vec3 binormal;
-varying vec3 tangent;
-varying vec3 viewVector;
-varying float dist;
+in VertexData {
+	vec4 lmtexcoord;
+	vec4 color;
+	vec4 normalMat;
+	vec3 binormal;
+	vec3 tangent;
+	vec3 viewVector;
+//	float dist;
+} vIn;
 
-uniform sampler2D texture;
+uniform sampler2D gtexture;
 uniform sampler2D noisetex;
 uniform sampler2D texBlueNoise;
 uniform sampler2DShadow shadowtex0HW;
@@ -139,7 +140,7 @@ vec3 getParallaxDisplacement(vec3 posxz, float iswater, float bumpmult, vec3 vie
 	float waveM = mix(0.0,4.0,iswater);
 
 	vec3 parallaxPos = posxz;
-	vec2 vec = viewVector.xy * (1.0 / float(PW_POINTS)) * PW_DEPTH;
+	vec2 vec = vIn.viewVector.xy * (1.0 / float(PW_POINTS)) * PW_DEPTH;
 	float waterHeight = getWaterHeightmap(posxz.xz, iswater) * 2.0;
 	parallaxPos.xz += waterHeight * vec;
 
@@ -181,14 +182,14 @@ layout(location = 1) out vec4 outColor7;
 void main() {
 	if (all(lessThan(gl_FragCoord.xy * texelSize.xy, RENDER_SCALE_2))) {
 		vec2 tempOffset = taa_offsets[framemod8];
-		float iswater = normalMat.w;
+		float iswater = vIn.normalMat.w;
 
 		vec3 fragC = gl_FragCoord.xyz * vec3(texelSize, 1.0);
 		vec3 fragpos = toScreenSpace(gl_FragCoord.xyz * vec3(texelSize / RENDER_SCALE, 1.0) - vec3(vec2(tempOffset) * texelSize * 0.5, 0.0));
 
-		float avgBlockLum = luma(textureLod(texture, lmtexcoord.xy, 128).rgb * color.rgb);
+		float avgBlockLum = luma(textureLod(gtexture, vIn.lmtexcoord.xy, 128).rgb * vIn.color.rgb);
 
-		outColor2 = texture(texture, lmtexcoord.xy) * color;
+		outColor2 = texture(gtexture, vIn.lmtexcoord.xy) * vIn.color;
 		outColor2.rgb = saturate(outColor2.rgb * pow(avgBlockLum, -0.33) * 0.85);
 		vec3 albedo = toLinear(outColor2.rgb);
 
@@ -201,14 +202,14 @@ void main() {
 			outColor2 = vec4(0.0);
 		}
 
-		vec3 normal = normalMat.xyz;
+		vec3 normal = vIn.normalMat.xyz;
 
 		vec3 p3 = mul3(gbufferModelViewInverse, fragpos);
 
 		mat3 tbnMatrix = mat3(
-			tangent.x, binormal.x, normal.x,
-			tangent.y, binormal.y, normal.y,
-			tangent.z, binormal.z, normal.z);
+			vIn.tangent.x, vIn.binormal.x, normal.x,
+			vIn.tangent.y, vIn.binormal.y, normal.y,
+			vIn.tangent.z, vIn.binormal.z, normal.z);
 
 		if (iswater > 0.4) {
 			float bumpmult = 1.0;
@@ -270,9 +271,9 @@ void main() {
 			}
 		}
 
-		direct *= (iswater > 0.9 ? 0.2 : 1.0) * diffuseSun * lmtexcoord.w;
+		direct *= (iswater > 0.9 ? 0.2 : 1.0) * diffuseSun * vIn.lmtexcoord.w;
 
-		vec3 diffuseLight = direct + texture2D(gaux1, (lmtexcoord.zw * 15.0 + 0.5) * texelSize).rgb;
+		vec3 diffuseLight = direct + texture2D(gaux1, (vIn.lmtexcoord.zw * 15.0 + 0.5) * texelSize).rgb;
 		vec3 color = diffuseLight * albedo * 8.0 / 150.0 / 3.0;
 
 		if (iswater > 0.0) {
@@ -292,8 +293,8 @@ void main() {
 			}
 
 			vec3 wrefl = mat3(gbufferModelViewInverse) * reflectedVector;
-			vec3 sky_c = mix(skyCloudsFromTex(wrefl, gaux1).rgb, texture(gaux1, (lmtexcoord.zw * 15.0 + 0.5) * texelSize).rgb * 0.5, isEyeInWater);
-			sky_c.rgb *= lmtexcoord.w * lmtexcoord.w * 255.0*255.0/240.0/240.0/150.0*8.0/3.0;
+			vec3 sky_c = mix(skyCloudsFromTex(wrefl, gaux1).rgb, texture(gaux1, (vIn.lmtexcoord.zw * 15.0 + 0.5) * texelSize).rgb * 0.5, isEyeInWater);
+			sky_c.rgb *= vIn.lmtexcoord.w * vIn.lmtexcoord.w * 255.0*255.0/240.0/240.0/150.0*8.0/3.0;
 
 			vec4 reflection = vec4(sky_c.rgb, 0.0);
 			#ifdef SCREENSPACE_REFLECTIONS
