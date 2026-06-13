@@ -1,29 +1,41 @@
-#version 120
-#extension GL_ARB_shader_texture_lod : enable
-#extension GL_EXT_gpu_shader4 : enable
+#version 430 compatibility
 
 #include "/lib/common.glsl"
 #include "/lib/settings.glsl"
 
 
-varying vec2 texcoord;
+in VertexData {
+	vec2 texcoord;
+} vIn;
 
-uniform sampler2D tex;
-uniform sampler2D noisetex;
-uniform sampler2D texBlueNoise;
+uniform sampler2D gtexture;
 
-#include "/lib/blueNoise.glsl"
+#ifdef Stochastic_Transparent_Shadows
+	uniform sampler2D noisetex;
+	uniform sampler2D texBlueNoise;
+#endif
 
+uniform float alphaTestRef;
+
+#ifdef Stochastic_Transparent_Shadows
+	#include "/lib/blueNoise.glsl"
+#endif
+
+
+/* RENDERTARGETS: 0 */
+layout(location = 0) out vec4 outColor;
 
 void main() {
-	gl_FragData[0] = texture2D(tex, texcoord.xy);
+	outColor = texture(gtexture, vIn.texcoord);
 
 	#ifdef SHADOW_DISABLE_ALPHA_MIPMAPS
-		gl_FragData[0].a = texture2DLod(tex, texcoord.xy, 0).a;
+		outColor.a = textureLod(gtexture, vIn.texcoord, 0).a;
 	#endif
 
 	#ifdef Stochastic_Transparent_Shadows
 		float noise = blueNoise(gl_FragCoord.xy).a;
-		gl_FragData[0].a = float(gl_FragData[0].a >= noise);
+		outColor.a = float(outColor.a >= noise);
 	#endif
+
+	if (outColor.a < alphaTestRef) discard;
 }

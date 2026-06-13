@@ -1,18 +1,18 @@
-#version 120
-#extension GL_EXT_gpu_shader4 : enable
+#version 430 compatibility
 
 #include "/lib/common.glsl"
 #include "/lib/settings.glsl"
 
 
-flat varying vec3 WsunVec;
-flat varying vec2 TAA_Offset;
+in VertexData {
+	flat vec3 sunVecW;
+	flat vec2 taa_offset;
+} vIn;
 
 uniform sampler2D TEX_GB_NORMAL;
 uniform sampler2D TEX_GB_SPECULAR;
 uniform sampler2D TEX_GB_WORLD;
 uniform sampler2D depthtex1;
-//uniform sampler2D colortex1;
 uniform sampler2D shadowtex0;
 uniform sampler2D noisetex;
 //uniform sampler2D texBlueNoise;
@@ -51,8 +51,7 @@ void main() {
 
 	outColor3 = vec4(Min_Shadow_Filter_Radius, 0.1, 0.0, 0.0);
 
-	float z = texture2D(depthtex1, texcoord).x;
-	vec2 tempOffset = TAA_Offset;
+	float z = texture(depthtex1, texcoord).x;
 
 	if (z < 1.0) {
 		vec4 normalData = texture(TEX_GB_NORMAL, texcoord);
@@ -68,10 +67,10 @@ void main() {
 		bool hand = false;
 
 		if (!hand) {
-			float NdotL = saturate(dot(normal, WsunVec));
+			float NdotL = saturate(dot(normal, vIn.sunVecW));
 			float bn = blueNoise(gl_FragCoord.xy).a;
 			float noise = fract(bn + frameCounter/1.6180339887);
-			vec3 fragpos = toScreenSpace(vec3(texcoord/RENDER_SCALE - vec2(tempOffset)*texelSize*0.5, z));
+			vec3 fragpos = toScreenSpace(vec3(texcoord/RENDER_SCALE - vIn.taa_offset*texelSize*0.5, z));
 
 			#ifdef Variable_Penumbra_Shadows
 				if (NdotL > 0.001 || sss > 0.001) {

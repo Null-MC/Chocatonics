@@ -44,11 +44,11 @@ vec3 closestToCamera5taps(vec2 texcoord) {
 	vec2 du = vec2(texelSize.x*2.0, 0.0);
 	vec2 dv = vec2(0.0, texelSize.y*2.0);
 
-	vec3 dtl = vec3(texcoord, 0.0) + vec3(-texelSize, texture2D(depthtex0, texcoord - dv - du).x);
-	vec3 dtr = vec3(texcoord, 0.0) + vec3( texelSize.x, -texelSize.y, texture2D(depthtex0, texcoord - dv + du).x);
-	vec3 dmc = vec3(texcoord, 0.0) + vec3( 0.0, 0.0, texture2D(depthtex0, texcoord).x);
-	vec3 dbl = vec3(texcoord, 0.0) + vec3(-texelSize.x, texelSize.y, texture2D(depthtex0, texcoord + dv - du).x);
-	vec3 dbr = vec3(texcoord, 0.0) + vec3( texelSize.x, texelSize.y, texture2D(depthtex0, texcoord + dv + du).x);
+	vec3 dtl = vec3(texcoord, 0.0) + vec3(-texelSize, texture(depthtex0, texcoord - dv - du).x);
+	vec3 dtr = vec3(texcoord, 0.0) + vec3( texelSize.x, -texelSize.y, texture(depthtex0, texcoord - dv + du).x);
+	vec3 dmc = vec3(texcoord, 0.0) + vec3( 0.0, 0.0, texture(depthtex0, texcoord).x);
+	vec3 dbl = vec3(texcoord, 0.0) + vec3(-texelSize.x, texelSize.y, texture(depthtex0, texcoord + dv - du).x);
+	vec3 dbr = vec3(texcoord, 0.0) + vec3( texelSize.x, texelSize.y, texture(depthtex0, texcoord + dv + du).x);
 
 	vec3 dmin = dmc;
 	dmin = dmin.z > dtr.z ? dtr : dmin;
@@ -78,7 +78,7 @@ vec4 smoothfilter(in sampler2D tex, in vec2 uv) {
 
 // Due to low sample count we "tonemap" the inputs to preserve colors and smoother edges
 vec3 weightedSample(sampler2D colorTex, vec2 texcoord) {
-	vec3 wsample = texture2D(colorTex, texcoord).rgb * exposureA;
+	vec3 wsample = texture(colorTex, texcoord).rgb * exposureA;
 	return wsample / (1.0 + luma(wsample));
 }
 
@@ -117,17 +117,17 @@ vec4 SampleTextureCatmullRom(sampler2D tex, vec2 uv, vec2 texSize) {
     texPos12 *= texelSize;
 
     vec4 result = vec4(0.0);
-    result += texture2D(tex, vec2(texPos0.x,  texPos0.y)) * w0.x * w0.y;
-    result += texture2D(tex, vec2(texPos12.x, texPos0.y)) * w12.x * w0.y;
-    result += texture2D(tex, vec2(texPos3.x,  texPos0.y)) * w3.x * w0.y;
+    result += texture(tex, vec2(texPos0.x,  texPos0.y)) * w0.x * w0.y;
+    result += texture(tex, vec2(texPos12.x, texPos0.y)) * w12.x * w0.y;
+    result += texture(tex, vec2(texPos3.x,  texPos0.y)) * w3.x * w0.y;
 
-    result += texture2D(tex, vec2(texPos0.x,  texPos12.y)) * w0.x * w12.y;
-    result += texture2D(tex, vec2(texPos12.x, texPos12.y)) * w12.x * w12.y;
-    result += texture2D(tex, vec2(texPos3.x,  texPos12.y)) * w3.x * w12.y;
+    result += texture(tex, vec2(texPos0.x,  texPos12.y)) * w0.x * w12.y;
+    result += texture(tex, vec2(texPos12.x, texPos12.y)) * w12.x * w12.y;
+    result += texture(tex, vec2(texPos3.x,  texPos12.y)) * w3.x * w12.y;
 
-    result += texture2D(tex, vec2(texPos0.x,  texPos3.y)) * w0.x * w3.y;
-    result += texture2D(tex, vec2(texPos12.x, texPos3.y)) * w12.x * w3.y;
-    result += texture2D(tex, vec2(texPos3.x,  texPos3.y)) * w3.x * w3.y;
+    result += texture(tex, vec2(texPos0.x,  texPos3.y)) * w0.x * w3.y;
+    result += texture(tex, vec2(texPos12.x, texPos3.y)) * w12.x * w3.y;
+    result += texture(tex, vec2(texPos3.x,  texPos3.y)) * w3.x * w3.y;
 
     return result;
 }
@@ -148,16 +148,16 @@ vec3 FastCatmulRom(sampler2D colorTex, vec2 texcoord, vec4 rtMetrics, float shar
 
     vec2 w12 = w1 + w2;
     vec2 tc12 = rtMetrics.xy * (centerPosition + w2 / w12);
-    vec3 centerColor = texture2D(colorTex, vec2(tc12.x, tc12.y)).rgb;
+    vec3 centerColor = texture(colorTex, vec2(tc12.x, tc12.y)).rgb;
 
     vec2 tc0 = rtMetrics.xy * (centerPosition - 1.0);
     vec2 tc3 = rtMetrics.xy * (centerPosition + 2.0);
 
-    vec4 color = vec4(texture2D(colorTex, vec2(tc12.x, tc0.y )).rgb, 1.0) * (w12.x * w0.y ) +
-                 vec4(texture2D(colorTex, vec2(tc0.x,  tc12.y)).rgb, 1.0) * (w0.x  * w12.y) +
+    vec4 color = vec4(texture(colorTex, vec2(tc12.x, tc0.y )).rgb, 1.0) * (w12.x * w0.y ) +
+                 vec4(texture(colorTex, vec2(tc0.x,  tc12.y)).rgb, 1.0) * (w0.x  * w12.y) +
                  vec4(centerColor,                                   1.0) * (w12.x * w12.y) +
-                 vec4(texture2D(colorTex, vec2(tc3.x,  tc12.y)).rgb, 1.0) * (w3.x  * w12.y) +
-                 vec4(texture2D(colorTex, vec2(tc12.x, tc3.y )).rgb, 1.0) * (w12.x * w3.y );
+                 vec4(texture(colorTex, vec2(tc3.x,  tc12.y)).rgb, 1.0) * (w3.x  * w12.y) +
+                 vec4(texture(colorTex, vec2(tc12.x, tc3.y )).rgb, 1.0) * (w12.x * w3.y );
 
 	return color.rgb / color.a;
 }
@@ -198,50 +198,50 @@ vec3 TAA_hq() {
 	#endif
 
 	// use velocity from the nearest texel from camera in a 3x3 box in order to improve edge quality in motion
-	#ifdef CLOSEST_VELOCITY
+	#ifdef TAA_CLOSEST_VELOCITY
 		vec3 closestToCamera = closestToCamera5taps(adjTC);
-	#endif
-
-	#ifndef CLOSEST_VELOCITY
-		vec3 closestToCamera = vec3(texcoord,texture2D(depthtex0,adjTC).x);
+	#else
+		vec3 closestToCamera = vec3(texcoord, texture(depthtex0, adjTC).x);
 	#endif
 
 	// reproject previous frame
 	vec3 fragposition = toScreenSpace(closestToCamera);
-	fragposition = mat3(gbufferModelViewInverse) * fragposition + gbufferModelViewInverse[3].xyz + (cameraPosition - previousCameraPosition);
-	vec3 previousPosition = mat3(gbufferPreviousModelView) * fragposition + gbufferPreviousModelView[3].xyz;
+	fragposition = mul3(gbufferModelViewInverse, fragposition) + (cameraPosition - previousCameraPosition);
+
+	vec3 previousPosition = mul3(gbufferPreviousModelView, fragposition);
 	previousPosition = toClipSpace3Prev(previousPosition);
+
 	vec2 velocity = previousPosition.xy - closestToCamera.xy;
 	previousPosition.xy = texcoord + velocity;
 
 	// reject history if off-screen and early exit
-	if (previousPosition.x < 0.0 || previousPosition.y < 0.0 || previousPosition.x > 1.0 || previousPosition.y > 1.0)
+	if (!all(equal(saturate(previousPosition.xy), previousPosition.xy)))
 		return smoothfilter(colortex3, adjTC + taa_offsets[framemod8]*texelSize*0.5).xyz;
 
 	#ifdef TAA_UPSCALING
 		vec3 albedoCurrent0 = smoothfilter(colortex3, adjTC + taa_offsets[framemod8]*texelSize*0.5).xyz;
 
 		// Interpolating neighboorhood clampling boundaries between pixels
-		vec3 cMin = texture2D(texTAA_min, adjTC).rgb;
-		vec3 cMax = texture2D(texTAA_max, adjTC).rgb;
+		vec3 cMin = texture(texTAA_min, adjTC).rgb;
+		vec3 cMax = texture(texTAA_max, adjTC).rgb;
 	#else
-		vec3 albedoCurrent0 = texture2D(colortex3, adjTC).rgb;
-		vec3 albedoCurrent1 = texture2D(colortex3, adjTC + vec2(texelSize.x,texelSize.y)).rgb;
-		vec3 albedoCurrent2 = texture2D(colortex3, adjTC + vec2(texelSize.x,-texelSize.y)).rgb;
-		vec3 albedoCurrent3 = texture2D(colortex3, adjTC + vec2(-texelSize.x,-texelSize.y)).rgb;
-		vec3 albedoCurrent4 = texture2D(colortex3, adjTC + vec2(-texelSize.x,texelSize.y)).rgb;
-		vec3 albedoCurrent5 = texture2D(colortex3, adjTC + vec2(0.0,texelSize.y)).rgb;
-		vec3 albedoCurrent6 = texture2D(colortex3, adjTC + vec2(0.0,-texelSize.y)).rgb;
-		vec3 albedoCurrent7 = texture2D(colortex3, adjTC + vec2(-texelSize.x,0.0)).rgb;
-		vec3 albedoCurrent8 = texture2D(colortex3, adjTC + vec2(texelSize.x,0.0)).rgb;
+		vec3 albedoCurrent0 = texture(colortex3, adjTC).rgb;
+		vec3 albedoCurrent1 = texture(colortex3, adjTC + vec2(texelSize.x,texelSize.y)).rgb;
+		vec3 albedoCurrent2 = texture(colortex3, adjTC + vec2(texelSize.x,-texelSize.y)).rgb;
+		vec3 albedoCurrent3 = texture(colortex3, adjTC + vec2(-texelSize.x,-texelSize.y)).rgb;
+		vec3 albedoCurrent4 = texture(colortex3, adjTC + vec2(-texelSize.x,texelSize.y)).rgb;
+		vec3 albedoCurrent5 = texture(colortex3, adjTC + vec2(0.0,texelSize.y)).rgb;
+		vec3 albedoCurrent6 = texture(colortex3, adjTC + vec2(0.0,-texelSize.y)).rgb;
+		vec3 albedoCurrent7 = texture(colortex3, adjTC + vec2(-texelSize.x,0.0)).rgb;
+		vec3 albedoCurrent8 = texture(colortex3, adjTC + vec2(texelSize.x,0.0)).rgb;
 
 		// Assuming the history color is a blend of the 3x3 neighborhood, we clamp the history to the min and max of each channel in the 3x3 neighborhood
-		vec3 cMax = max(max(max(albedoCurrent0,albedoCurrent1),albedoCurrent2),max(albedoCurrent3,max(albedoCurrent4,max(albedoCurrent5,max(albedoCurrent6,max(albedoCurrent7,albedoCurrent8))))));
-		vec3 cMin = min(min(min(albedoCurrent0,albedoCurrent1),albedoCurrent2),min(albedoCurrent3,min(albedoCurrent4,min(albedoCurrent5,min(albedoCurrent6,min(albedoCurrent7,albedoCurrent8))))));
+		vec3 cMax = max(max(max(albedoCurrent0, albedoCurrent1), albedoCurrent2), max(albedoCurrent3, max(albedoCurrent4, max(albedoCurrent5, max(albedoCurrent6, max(albedoCurrent7, albedoCurrent8))))));
+		vec3 cMin = min(min(min(albedoCurrent0, albedoCurrent1), albedoCurrent2), min(albedoCurrent3, min(albedoCurrent4, min(albedoCurrent5, min(albedoCurrent6, min(albedoCurrent7, albedoCurrent8))))));
 		albedoCurrent0 = smoothfilter(colortex3, adjTC + taa_offsets[framemod8]*texelSize*0.5).rgb;
 	#endif
 
-	#ifndef NO_CLIP
+	#ifndef TAA_NO_CLIP
 		vec3 albedoPrev = max(FastCatmulRom(colortex5, previousPosition.xy, vec4(texelSize, 1.0/texelSize), 0.75).xyz, 0.0);
 		vec3 finalcAcc = clamp(albedoPrev, cMin, cMax);
 
@@ -250,12 +250,10 @@ vec3 TAA_hq() {
 		float movementRejection = (0.12 + isclamped) * saturate(length(velocity / texelSize));
 
 		// Blend current pixel with clamped history, apply fast tonemap beforehand to reduce flickering
-		vec3 supersampled = invTonemap(mix(tonemap(finalcAcc),tonemap(albedoCurrent0),clamp(BLEND_FACTOR + movementRejection,0.,1.)));
-	#endif
-
-	#ifdef NO_CLIP
-		vec3 albedoPrev = texture2D(colortex5, previousPosition.xy).xyz;
-		vec3 supersampled =  mix(albedoPrev,albedoCurrent0,clamp(0.05,0.,1.));
+		vec3 supersampled = invTonemap(mix(tonemap(finalcAcc), tonemap(albedoCurrent0), saturate(TAA_BLEND_FACTOR + movementRejection)));
+	#else
+		vec3 albedoPrev = texture(colortex5, previousPosition.xy).xyz;
+		vec3 supersampled =  mix(albedoPrev, albedoCurrent0, 0.05);
 	#endif
 
 	// De-tonemap
@@ -273,7 +271,7 @@ void main() {
 		outColor5 = clamp(color, 6.11*1e-5, 65000.0);
 	#else
 		float dither = IGN(tempOffsets);
-		vec3 color = fp10Dither(texture2D(colortex3, texcoord).rgb, triangularize(dither));
+		vec3 color = fp10Dither(texture(colortex3, texcoord).rgb, triangularize(dither));
 		outColor5 = clamp(color, 0.0, 65000.0);
 	#endif
 }

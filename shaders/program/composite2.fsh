@@ -506,13 +506,11 @@ void main() {
 					float diffthresh = sss > 0.0 ? 0.0001 : distortThresh/6000.0 * threshMul;
 				#endif
 
-				#ifdef POM
-					#ifdef Depth_Write_POM
-						diffthresh += POM_DEPTH / 128.0/4.0/6.0;
-					#endif
+				#if defined(MAT_PARALLAX_ENABLED) && defined(MAT_PARALLAX_DEPTH_WRITE)
+					diffthresh += Parallax_Depth / 128.0/4.0/6.0;
 				#endif
 
-				projectedShadowPosition = projectedShadowPosition * vec3(0.5,0.5,0.5/6.0) + vec3(0.5,0.5,0.5);
+				projectedShadowPosition = projectedShadowPosition * vec3(0.5, 0.5, 0.5/6.0) + vec3(0.5, 0.5, 0.5);
 
 				shading = 0.0;
 
@@ -635,7 +633,7 @@ void main() {
 		float emitting = 0.0;
 
 //		emitting = luma(albedo) * 3.0 * Emissive_Strength;
-		emitting = emissive*emissive * 5.0 * Emissive_Strength;
+		emitting = pow(emissive, Emission_Curve) * 3.0 * MAT_EMISSION_SCALE;
 
 		if (hand && heldBlockLightValue > 0.1) {
 			custom_lightmap.y = 0.0;
@@ -704,6 +702,10 @@ void main() {
 			skyLightFinal *= shadowColor;
 		#endif
 		skyLightFinal += SSS;
+
+		#ifdef DEBUG_WHITEWORLD
+			albedo = vec3(1.0);
+		#endif
 
 		outColor3 = (skyLightFinal/PI * 8.0/150.0/3.0 * skyDirectLight + ambientLight + directLighting + emitting) * albedo;
 

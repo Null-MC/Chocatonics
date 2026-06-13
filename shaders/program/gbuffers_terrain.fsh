@@ -9,7 +9,7 @@ in VertexData {
 	vec4 color;
 	vec4 normalMat;
 
-	#ifdef POM
+	#ifdef MAT_PARALLAX_ENABLED
 		vec4 vtexcoordam; // .st for add, .pq for mul
 		vec4 vtexcoord;
 	#endif
@@ -39,7 +39,7 @@ uniform mat4 shadowModelView;
 uniform mat4 shadowProjection;
 uniform vec3 cameraPosition;
 
-#ifdef POM
+#ifdef MAT_PARALLAX_ENABLED
 	uniform int framemod8;
 #endif
 
@@ -57,11 +57,9 @@ uniform vec3 cameraPosition;
 const float mincoord = 1.0/4096.0;
 const float maxcoord = 1.0-mincoord;
 
-const float MAX_OCCLUSION_DISTANCE = MAX_DIST;
-const float MIX_OCCLUSION_DISTANCE = MAX_DIST*0.9;
-const int   MAX_OCCLUSION_POINTS   = MAX_ITERATIONS;
+const float MIX_OCCLUSION_DISTANCE = MAT_PARALLAX_MAX_DIST * 0.9;
 
-#ifdef POM
+#ifdef MAT_PARALLAX_ENABLED
 	vec2 dcdx = dFdx(vIn.vtexcoord.st * vIn.vtexcoordam.pq) * exp2(Texture_MipMap_Bias);
 	vec2 dcdy = dFdy(vIn.vtexcoord.st * vIn.vtexcoordam.pq) * exp2(Texture_MipMap_Bias);
 #endif
@@ -93,7 +91,7 @@ mat3 inverse(mat3 m) {
 	}
 #endif
 
-#ifdef POM
+#ifdef MAT_PARALLAX_ENABLED
 	vec4 readNormal(in vec2 coord) {
 		return textureGrad(normals, fract(coord) * vIn.vtexcoordam.pq + vIn.vtexcoordam.st, dcdx, dcdy);
 	}
@@ -123,27 +121,27 @@ void main() {
 			vIn.tangent.z, tangent2.z, normal.z);
 	#endif
 
-	#ifdef POM
+	#ifdef MAT_PARALLAX_ENABLED
 		vec2 tempOffset = taa_offsets[framemod8];
 		vec2 adjustedTexCoord = fract(vIn.vtexcoord.st) * vIn.vtexcoordam.pq + vIn.vtexcoordam.st;
 		vec3 fragpos = toScreenSpace(gl_FragCoord.xyz * vec3(texelSize/RENDER_SCALE, 1.0) - vec3(vec2(tempOffset)*texelSize*0.5, 0.0));
 		vec3 viewVector = normalize(tbnMatrix * fragpos);
 		float dist = length(fragpos);
 
-		#ifdef Depth_Write_POM
+		#ifdef MAT_PARALLAX_DEPTH_WRITE
 			gl_FragDepth = gl_FragCoord.z;
 		#endif
 
-		if (dist < MAX_OCCLUSION_DISTANCE) {
-  			#ifndef AutoGeneratePOMTextures
+		if (dist < MAT_PARALLAX_MAX_DIST) {
+  			#ifndef MAT_PARALLAX_GENERATED
 				if (viewVector.z < 0.0 && readNormal(vIn.vtexcoord.st).a < 0.9999 && readNormal(vIn.vtexcoord.st).a > 0.00001) {
-					vec3 interval = viewVector.xyz / -viewVector.z / MAX_OCCLUSION_POINTS * POM_DEPTH;
+					vec3 interval = viewVector.xyz / -viewVector.z / MAT_PARALLAX_ITERATIONS * Parallax_Depth;
 					vec3 coord = vec3(vIn.vtexcoord.st, 1.0);
 
 					coord += noise*interval;
 					float sumVec = noise;
 
-					for (int loopCount = 0; (loopCount < MAX_OCCLUSION_POINTS) && (1.0 - POM_DEPTH + POM_DEPTH*readNormal(coord.st).a < coord.p) &&coord.p >= 0.0; ++loopCount) {
+					for (int loopCount = 0; (loopCount < MAT_PARALLAX_ITERATIONS) && (1.0 - Parallax_Depth + Parallax_Depth*readNormal(coord.st).a < coord.p) &&coord.p >= 0.0; ++loopCount) {
 						coord = coord+interval;
 						sumVec += 1.0;
 					}
@@ -155,23 +153,23 @@ void main() {
 						}
 					}
 
-					adjustedTexCoord = mix(fract(coord.st) * vIn.vtexcoordam.pq + vIn.vtexcoordam.st, adjustedTexCoord, max(dist - MIX_OCCLUSION_DISTANCE, 0.0) / (MAX_OCCLUSION_DISTANCE-MIX_OCCLUSION_DISTANCE));
+					adjustedTexCoord = mix(fract(coord.st) * vIn.vtexcoordam.pq + vIn.vtexcoordam.st, adjustedTexCoord, max(dist - MIX_OCCLUSION_DISTANCE, 0.0) / (MAT_PARALLAX_MAX_DIST-MIX_OCCLUSION_DISTANCE));
 
 					vec3 truePos = fragpos + sumVec * inverse(tbnMatrix) * interval;
 
-					#ifdef Depth_Write_POM
+					#ifdef MAT_PARALLAX_DEPTH_WRITE
 						gl_FragDepth = toClipSpace3(truePos).z;
 					#endif
 				}
   			#else
 				if (viewVector.z < 0.0) {
-					vec3 interval = viewVector.xyz / -viewVector.z / MAX_OCCLUSION_POINTS * POM_DEPTH;
+					vec3 interval = viewVector.xyz / -viewVector.z / MAT_PARALLAX_ITERATIONS * Parallax_Depth;
 					vec3 coord = vec3(vIn.vtexcoord.st, 1.0);
 					coord += noise*interval;
 					float sumVec = noise;
 					float lum0 = luma(textureLod(gtexture, vIn.lmtexcoord.xy, 100).rgb);
 
-					for (int loopCount = 0; (loopCount < MAX_OCCLUSION_POINTS) && (1.0 - POM_DEPTH + POM_DEPTH*luma(readTexture(coord.st).rgb)/lum0*0.5 < coord.p) && coord.p >= 0.0; ++loopCount) {
+					for (int loopCount = 0; (loopCount < MAT_PARALLAX_ITERATIONS) && (1.0 - Parallax_Depth + Parallax_Depth*luma(readTexture(coord.st).rgb)/lum0*0.5 < coord.p) && coord.p >= 0.0; ++loopCount) {
 						 coord = coord+interval;
 						 sumVec += 1.0;
 					}
@@ -183,11 +181,11 @@ void main() {
 						}
 					}
 
-					adjustedTexCoord = mix(fract(coord.st) * vIn.vtexcoordam.pq + vIn.vtexcoordam.st, adjustedTexCoord, max(dist - MIX_OCCLUSION_DISTANCE, 0.0) / (MAX_OCCLUSION_DISTANCE - MIX_OCCLUSION_DISTANCE));
+					adjustedTexCoord = mix(fract(coord.st) * vIn.vtexcoordam.pq + vIn.vtexcoordam.st, adjustedTexCoord, max(dist - MIX_OCCLUSION_DISTANCE, 0.0) / (MAT_PARALLAX_MAX_DIST - MIX_OCCLUSION_DISTANCE));
 
 					vec3 truePos = fragpos + sumVec * inverse(tbnMatrix) * interval;
 
-					#ifdef Depth_Write_POM
+					#ifdef MAT_PARALLAX_DEPTH_WRITE
 						gl_FragDepth = toClipSpace3(truePos).z;
 					#endif
 				}

@@ -1,13 +1,68 @@
+screen.CHOCAPIC=Chocatonics
+screen.CHOCAPIC.comment=An edit of Chocapic13' V9 Shaders for Photonics
+
+    option.DEBUG_WHITEWORLD=White-World
+    option.DEBUG_WHITEWORLD.comment=Makes all textures white for debugging lighting alone.
+
+
+screen.PHOTONICS=Photonics
+
+    option.PHOTONICS_BLOCK_LIGHT_ENABLED=Block Light
+
+    option.PHOTONICS_HAND_LIGHT_ENABLED=Hand Light
+
+    option.PHOTONICS_GI_ENABLED=Global Illumination
+
+
+screen.MATERIALS=PBR Materials
+
+    option.MAT_FORMAT=Format
+    value.MAT_FORMAT.0=Automatic
+    value.MAT_FORMAT.1=OldPbr
+    value.MAT_FORMAT.2=LabPbr
+
+    screen.MAT_PARALLAX=Parallax
+
+        option.MAT_PARALLAX_ENABLED=Enabled
+
+        option.MAT_PARALLAX_DEPTH_WRITE=Depth-Write
+        option.MAT_PARALLAX_DEPTH_WRITE.comment=POM adjusts the actual position, so screen space shadows can cast shadows on POM
+
+        option.MAT_PARALLAX_DEPTH=Depth
+        option.MAT_PARALLAX_DEPTH.comment=Increase to increase POM strength
+        suffix.MAT_PARALLAX_DEPTH=%
+
+        option.MAT_PARALLAX_ITERATIONS=Iterations
+        option.MAT_PARALLAX_ITERATIONS.comment=Improves quality at grazing angles (reduces performance)
+
+        option.MAT_PARALLAX_MAX_DIST=Max Distance
+        option.MAT_PARALLAX_MAX_DIST.comment=Increases distance at which POM is calculated
+
+        option.MAT_PARALLAX_GENERATED=Auto-Generate
+        option.MAT_PARALLAX_GENERATED.comment=Can generate POM on any texturepack (may look weird in some cases)
+
+    screen.MAT_EMISSION=Emission
+
+        option.MAT_EMISSION_SCALE=Scale
+        suffix.MAT_EMISSION_SCALE=x
+
+        option.MAT_EMISSION_CURVE=Curve
+        suffix.MAT_EMISSION_CURVE=%
+
+
 screen.TAA_OPTIONS=TAA
 
-option.TAA_ENABLED=Enabled
+    option.TAA_ENABLED=Enabled
 
-option.TAA_RENDER_SCALE=Render Scale
-suffix.TAA_RENDER_SCALE=%
+    option.TAA_RENDER_SCALE=Render Scale
+    option.TAA_RENDER_SCALE.comment=Lowers render resolution and uses TAA to combine several lower resolution images (greatly improves performance).
+    suffix.TAA_RENDER_SCALE=%
 
+    option.TAA_BLEND_FACTOR=Blend Factor
+    option.TAA_BLEND_FACTOR.comment=higher values = more flickering but sharper image, lower values = less flickering but the image will be blurrier
 
-option.PHOTONICS_BLOCK_LIGHT_ENABLED=Block Light
+    option.TAA_CLOSEST_VELOCITY=Closest Velocity
+    option.TAA_CLOSEST_VELOCITY.comment=improves edge quality in motion at the cost of performance
 
-option.PHOTONICS_HAND_LIGHT_ENABLED=Hand Light
-
-option.PHOTONICS_GI_ENABLED=Global Illumination
+    option.TAA_NO_CLIP=No-Clip
+    option.TAA_NO_CLIP.comment=Removes all anti-ghosting techniques used and creates a sharp image (good for still screenshots)
