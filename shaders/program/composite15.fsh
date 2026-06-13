@@ -1,5 +1,4 @@
-#version 120
-#extension GL_EXT_gpu_shader4 : enable
+#version 430 compatibility
 
 // Vignetting, applies bloom, applies exposure and tonemaps the final image
 
@@ -7,9 +6,11 @@
 #include "/lib/settings.glsl"
 
 
-flat varying vec4 exposure;
-flat varying vec2 rodExposureDepth;
-varying vec2 texcoord;
+in VertexData {
+	vec2 texcoord;
+	flat vec4 exposure;
+	flat vec2 rodExposureDepth;
+} vIn;
 
 uniform sampler2D colortex4;
 uniform sampler2D colortex5;
@@ -377,52 +378,52 @@ float cdist(vec2 coord) {
 	return max(abs(coord.s - 0.5), abs(coord.t - 0.5)) * 2.0;
 }
 
-vec3 closestToCamera3x3() {
-	vec2 du = vec2(texelSize.x, 0.0);
-	vec2 dv = vec2(0.0, texelSize.y);
-
-	vec3 dtl = vec3(texcoord,0.) + vec3(-texelSize, texture2D(depthtex0, texcoord - dv - du).x);
-	vec3 dtc = vec3(texcoord,0.) + vec3( 0.0, -texelSize.y, texture2D(depthtex0, texcoord - dv).x);
-	vec3 dtr = vec3(texcoord,0.) + vec3( texelSize.x, -texelSize.y, texture2D(depthtex0, texcoord - dv + du).x);
-
-	vec3 dml = vec3(texcoord,0.) + vec3(-texelSize.x, 0.0, texture2D(depthtex0, texcoord - du).x);
-	vec3 dmc = vec3(texcoord,0.) + vec3( 0.0, 0.0, texture2D(depthtex0, texcoord).x);
-	vec3 dmr = vec3(texcoord,0.) + vec3( texelSize.x, 0.0, texture2D(depthtex0, texcoord + du).x);
-
-	vec3 dbl = vec3(texcoord,0.) + vec3(-texelSize.x, texelSize.y, texture2D(depthtex0, texcoord + dv - du).x);
-	vec3 dbc = vec3(texcoord,0.) + vec3( 0.0, texelSize.y, texture2D(depthtex0, texcoord + dv).x);
-	vec3 dbr = vec3(texcoord,0.) + vec3( texelSize.x, texelSize.y, texture2D(depthtex0, texcoord + dv + du).x);
-
-	vec3 dmin = dmc;
-
-	dmin = dmin.z > dtc.z? dtc : dmin;
-	dmin = dmin.z > dtr.z? dtr : dmin;
-
-	dmin = dmin.z > dml.z? dml : dmin;
-	dmin = dmin.z > dtl.z? dtl : dmin;
-	dmin = dmin.z > dmr.z? dmr : dmin;
-
-	dmin = dmin.z > dbl.z? dbl : dmin;
-	dmin = dmin.z > dbc.z? dbc : dmin;
-	dmin = dmin.z > dbr.z? dbr : dmin;
-
-	return dmin;
-}
+//vec3 closestToCamera3x3(const in vec2 texcoord) {
+//	vec2 du = vec2(texelSize.x, 0.0);
+//	vec2 dv = vec2(0.0, texelSize.y);
+//
+//	vec3 dtl = vec3(texcoord, 0.0) + vec3(-texelSize, texture(depthtex0, texcoord - dv - du).x);
+//	vec3 dtc = vec3(texcoord, 0.0) + vec3( 0.0, -texelSize.y, texture(depthtex0, texcoord - dv).x);
+//	vec3 dtr = vec3(texcoord, 0.0) + vec3( texelSize.x, -texelSize.y, texture(depthtex0, texcoord - dv + du).x);
+//
+//	vec3 dml = vec3(texcoord, 0.0) + vec3(-texelSize.x, 0.0, texture(depthtex0, texcoord - du).x);
+//	vec3 dmc = vec3(texcoord, 0.0) + vec3( 0.0, 0.0, texture(depthtex0, texcoord).x);
+//	vec3 dmr = vec3(texcoord, 0.0) + vec3( texelSize.x, 0.0, texture(depthtex0, texcoord + du).x);
+//
+//	vec3 dbl = vec3(texcoord, 0.0) + vec3(-texelSize.x, texelSize.y, texture(depthtex0, texcoord + dv - du).x);
+//	vec3 dbc = vec3(texcoord, 0.0) + vec3( 0.0, texelSize.y, texture(depthtex0, texcoord + dv).x);
+//	vec3 dbr = vec3(texcoord, 0.0) + vec3( texelSize.x, texelSize.y, texture(depthtex0, texcoord + dv + du).x);
+//
+//	vec3 dmin = dmc;
+//
+//	dmin = dmin.z > dtc.z? dtc : dmin;
+//	dmin = dmin.z > dtr.z? dtr : dmin;
+//
+//	dmin = dmin.z > dml.z? dml : dmin;
+//	dmin = dmin.z > dtl.z? dtl : dmin;
+//	dmin = dmin.z > dmr.z? dmr : dmin;
+//
+//	dmin = dmin.z > dbl.z? dbl : dmin;
+//	dmin = dmin.z > dbc.z? dbc : dmin;
+//	dmin = dmin.z > dbr.z? dbr : dmin;
+//
+//	return dmin;
+//}
 
 
 /* RENDERTARGETS: 7 */
 layout(location = 0) out vec3 outColor7;
 
 void main() {
-	float vignette = (1.5 - dot(texcoord - 0.5, texcoord - 0.5) * 2.0);
-	vec3 col = texture2D(colortex5, texcoord).rgb;
+	float vignette = (1.5 - dot(vIn.texcoord - 0.5, vIn.texcoord - 0.5) * 2.0);
+	vec3 col = texture(colortex5, vIn.texcoord).rgb;
 
 	#ifdef DOF
-		float z = texture2D(depthtex0, texcoord.st * RENDER_SCALE).r;
+		float z = texture(depthtex0, vIn.texcoord * RENDER_SCALE).r;
 		z = linZ(z, near, far) * far;
 
 		#ifdef AUTOFOCUS
-			float focus = rodExposureDepth.y*far;
+			float focus = vIn.rodExposureDepth.y * far;
 		#else
 			float focus = MANUAL_FOCUS;
 		#endif
@@ -450,18 +451,18 @@ void main() {
 
 			#ifdef HEXAGONAL_BOKEH
 				for ( int i = 0; i < 60; i++) {
-					bcolor += texture2D(colortex5, texcoord.xy + hex_offsets[i]*pcoc*vec2(1.0,aspectRatio)).rgb;
+					bcolor += texture(colortex5, vIn.texcoord + hex_offsets[i] * pcoc * vec2(1.0, aspectRatio)).rgb;
 				}
 				col = bcolor/61.0;
 			#else
 				for ( int i = 0; i < 60; i++) {
-					bcolor += texture2D(colortex5, texcoord.xy + offsets[i]*pcoc*vec2(1.0,aspectRatio)).rgb;
+					bcolor += texture(colortex5, vIn.texcoord + offsets[i] * pcoc * vec2(1.0, aspectRatio)).rgb;
 				}
 				col = bcolor/61.0;
 			#endif
 		#else
 			for ( int i = 0; i < 209; i++) {
-				bcolor += texture2D(colortex5, texcoord.xy + noiseM*shadow_offsets[i]*pcoc*vec2(1.0,aspectRatio)).rgb;
+				bcolor += texture(colortex5, vIn.texcoord + noiseM * shadow_offsets[i] * pcoc * vec2(1.0, aspectRatio)).rgb;
 			}
 			col = bcolor/209.0;
 		#endif
@@ -469,14 +470,14 @@ void main() {
 
 	vec2 clampedRes = max(vec2(viewWidth, viewHeight), vec2(1920.0, 1080.0));
 
-	vec3 bloom = texture2D(colortex3, texcoord / clampedRes * vec2(1920.0, 1080.0) * 0.5 * BLOOM_QUALITY).rgb / 2.0 / 7.0;
+	vec3 bloom = texture(colortex3, vIn.texcoord / clampedRes * vec2(1920.0, 1080.0) * 0.5 * BLOOM_QUALITY).rgb / 2.0 / 7.0;
 
-	float lightScat = saturate(BLOOM_STRENGTH * 0.05 * pow(exposure.a, 0.2)) * vignette;
+	float lightScat = saturate(BLOOM_STRENGTH * 0.05 * pow(vIn.exposure.a, 0.2)) * vignette;
 
-	float VL_abs = texture2D(colortex7,texcoord*RENDER_SCALE).r;
-	float purkinje = rodExposureDepth.x/(1.0+rodExposureDepth.x)*Purkinje_strength;
-	VL_abs = saturate((1.0 - VL_abs) * BLOOMY_FOG * 0.75*(1.0 - purkinje*0.3) * (1.0+rainStrength)) * saturate(1.0 - pow(cdist(texcoord.xy), 15.0));
-	col = (mix(col, bloom, VL_abs) + bloom*lightScat) * exposure.rgb;
+	float VL_abs = texture(colortex7, vIn.texcoord * RENDER_SCALE).r;
+	float purkinje = vIn.rodExposureDepth.x / (1.0 + vIn.rodExposureDepth.x) * Purkinje_strength;
+	VL_abs = saturate((1.0 - VL_abs) * BLOOMY_FOG * 0.75*(1.0 - purkinje*0.3) * (1.0+rainStrength)) * saturate(1.0 - pow(cdist(vIn.texcoord), 15.0));
+	col = (mix(col, bloom, VL_abs) + bloom*lightScat) * vIn.exposure.rgb;
 
 	// Purkinje Effect
 	float lum = dot(col, vec3(0.15, 0.3, 0.55));
@@ -493,5 +494,5 @@ void main() {
 		col = LinearTosRGB(saturate(col * ACESOutputMat));
 	#endif
 
-	outColor7 = saturate(int8Dither(col, texcoord));
+	outColor7 = saturate(int8Dither(col, vIn.texcoord));
 }

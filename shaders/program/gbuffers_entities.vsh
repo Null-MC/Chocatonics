@@ -22,6 +22,8 @@ uniform int blockEntityId;
 uniform vec2 texelSize;
 uniform int framemod8;
 
+#include "/lib/blocks.glsl"
+
 
 void main() {
 	vOut.lmtexcoord.xy = (gl_MultiTexCoord0).xy;
@@ -30,7 +32,7 @@ void main() {
 	vOut.color = gl_Color;
 
 	vOut.normalMat.xyz = normalize(gl_NormalMatrix * gl_Normal);
-	vOut.normalMat.w = blockEntityId == 10006 ? 1.0 : 1.0; // TODO: ???
+	vOut.normalMat.w = blockEntityId == BLOCK_IDK ? 1.0 : 1.0; // TODO: ???
 
 	#ifdef MC_NORMAL_MAP
 		vOut.tangent = vec4(normalize(gl_NormalMatrix * at_tangent.rgb), at_tangent.w);

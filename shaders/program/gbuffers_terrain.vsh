@@ -33,6 +33,7 @@ uniform vec3 cameraPosition;
 uniform vec2 texelSize;
 uniform int framemod8;
 
+#include "/lib/blocks.glsl"
 #include "/lib/windWaving.glsl"
 
 
@@ -62,25 +63,25 @@ void main() {
 	#endif
 
 	vOut.normalMat.xyz = normalize(gl_NormalMatrix * gl_Normal);
-	vOut.normalMat.w = mc_Entity.x == 10004 || mc_Entity.x == 10003 || mc_Entity.x == 10001 ? 0.5 : 1.0;
+	vOut.normalMat.w = (mc_Entity.x == BLOCK_SSS || mc_Entity.x == BLOCK_PLANT_WAVING_FULL || mc_Entity.x == BLOCK_PLANT_WAVING_TOP) ? 0.5 : 1.0;
 
-	if (mc_Entity.x == 10006) vOut.normalMat.a = 0.6;
+	if (mc_Entity.x == BLOCK_IDK) vOut.normalMat.a = 0.6;
 
 	#ifdef WAVY_PLANTS
-		if ((mc_Entity.x == 10001 && istopv) && abs(position.z) < 64.0) {
+		if ((mc_Entity.x == BLOCK_PLANT_WAVING_TOP && istopv) && abs(position.z) < 64.0) {
     		vec3 worldpos = mat3(gbufferModelViewInverse) * position + gbufferModelViewInverse[3].xyz + cameraPosition;
 			worldpos.xyz += calcMovePlants(worldpos.xyz) * vOut.lmtexcoord.w - cameraPosition;
     		position = mul3(gbufferModelView, worldpos);
 		}
 
-		if (mc_Entity.x == 10003 && abs(position.z) < 64.0) {
+		if (mc_Entity.x == BLOCK_PLANT_WAVING_FULL && abs(position.z) < 64.0) {
     		vec3 worldpos = mat3(gbufferModelViewInverse) * position + gbufferModelViewInverse[3].xyz + cameraPosition;
 			worldpos.xyz += calcMoveLeaves(worldpos.xyz, 0.0040, 0.0064, 0.0043, 0.0035, 0.0037, 0.0041, vec3(1.0, 0.2, 1.0), vec3(0.5, 0.1, 0.5)) * vOut.lmtexcoord.w - cameraPosition;
     		position = mul3(gbufferModelView, worldpos);
 		}
 	#endif
 
-	if (mc_Entity.x == 10005) {
+	if (mc_Entity.x == BLOCK_EMISSIVE) {
 		vOut.color.rgb = normalize(vOut.color.rgb) * sqrt(3.0);
 		vOut.normalMat.a = 0.9;
 	}

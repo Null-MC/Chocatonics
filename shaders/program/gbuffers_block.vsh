@@ -14,6 +14,8 @@ uniform int blockEntityId;
 uniform vec2 texelSize;
 uniform int framemod8;
 
+#include "/lib/blocks.glsl"
+
 
 vec4 toClipSpace3(vec3 viewSpacePosition) {
     return vec4(projMAD(gl_ProjectionMatrix, viewSpacePosition), -viewSpacePosition.z);
@@ -26,7 +28,7 @@ void main() {
 	vOut.color = gl_Color;
 
 	vOut.normalMat.xyz = normalize(gl_NormalMatrix * gl_Normal);
-	vOut.normalMat.w = blockEntityId == 10010 ? 0.6 : 1.0;
+	vOut.normalMat.w = blockEntityId == BLOCK_BANNER ? 0.6 : 1.0;
 
 	vec3 position = mul3(gl_ModelViewMatrix, gl_Vertex.xyz);
 	gl_Position = toClipSpace3(position);

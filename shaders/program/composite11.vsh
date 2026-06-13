@@ -1,12 +1,13 @@
-#version 120
+#version 430 compatibility
 
 #include "/lib/common.glsl"
 #include "/lib/settings.glsl"
 
 
+out vec2 texcoord;
+
 uniform float viewWidth;
 uniform float viewHeight;
-varying vec2 texcoord;
 
 
 void main() {

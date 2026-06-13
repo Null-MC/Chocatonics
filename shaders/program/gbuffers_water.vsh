@@ -4,8 +4,8 @@
 #include "/lib/settings.glsl"
 
 
-attribute vec4 at_tangent;
-attribute vec4 mc_Entity;
+in vec4 at_tangent;
+in vec4 mc_Entity;
 
 out VertexData {
 	vec4 lmtexcoord;
@@ -21,6 +21,9 @@ uniform vec2 texelSize;
 uniform int framemod8;
 uniform mat4 gbufferModelViewInverse;
 
+#include "/lib/blocks.glsl"
+
+
 vec4 toClipSpace3(vec3 viewSpacePosition) {
     return vec4(projMAD(gl_ProjectionMatrix, viewSpacePosition), -viewSpacePosition.z);
 }
@@ -35,13 +38,14 @@ void main() {
 	vOut.color = gl_Color;
 
 	float mat = 0.0;
-	if (mc_Entity.x == 8.0 || mc_Entity.x == 9.0) {
+	//if (mc_Entity.x == BLOCK_WATER || mc_Entity.x == 9.0) {
+	if (mc_Entity.x == BLOCK_WATER) {
 		mat = 1.0;
 		gl_Position.z -= 1.e-4;
 	}
 
-	if (mc_Entity.x == 79.0) mat = 0.5;
-	if (mc_Entity.x == 10002) mat = 0.01;
+	if (mc_Entity.x == BLOCK_ICE) mat = 0.5;
+	if (mc_Entity.x == BLOCK_REFLECTIVE) mat = 0.01;
 
 	vOut.normalMat.xyz = normalize(gl_NormalMatrix * gl_Normal);
 	vOut.normalMat.w = mat;

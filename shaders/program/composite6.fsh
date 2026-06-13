@@ -8,11 +8,11 @@
 
 flat in vec3 zMults;
 
-uniform sampler2D depthtex0;
-uniform sampler2D colortex7;
-uniform sampler2D colortex3;
-uniform sampler2D colortex2;
 uniform sampler2D colortex0;
+uniform sampler2D colortex2;
+uniform sampler2D colortex3;
+uniform sampler2D colortex7;
+uniform sampler2D depthtex0;
 uniform sampler2D noisetex;
 
 uniform float frameTimeCounter;
@@ -36,7 +36,6 @@ vec3 toScreenSpace(vec3 p) {
 }
 
 vec4 BilateralUpscale(sampler2D tex, sampler2D depth, vec2 coord, float frDepth) {
-//    coord = coord;
     vec4 vl = vec4(0.0);
     float sum = 0.0;
     mat3x3 weights;

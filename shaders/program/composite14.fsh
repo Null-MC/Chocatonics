@@ -1,4 +1,4 @@
-#version 120
+#version 430 compatibility
 
 // Merge and upsample the blurs into a 1/4 res bloom buffer
 

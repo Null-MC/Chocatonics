@@ -1,16 +1,18 @@
-#version 120
+#version 430 compatibility
 
 #include "/lib/common.glsl"
 #include "/lib/settings.glsl"
 
 
+out vec2 texcoord;
+
 uniform float viewWidth;
 uniform float viewHeight;
-varying vec2 texcoord;
 
 
 void main() {
 	vec2 clampedRes = max(vec2(viewWidth, viewHeight), vec2(1920.0, 1080.0)) / BLOOM_QUALITY;
+	texcoord = gl_MultiTexCoord0.xy / clampedRes * vec2(1920.0, 1080.0);
 
 	gl_Position = ftransform();
 
@@ -19,6 +21,4 @@ void main() {
 
 	// 0-0.5
 	gl_Position.x = (gl_Position.x * 0.5 + 0.5) * 0.5 / clampedRes.x * 1920.0 * 2.0 - 1.0;
-
-	texcoord = gl_MultiTexCoord0.xy / clampedRes * vec2(1920.0, 1080.0);
 }

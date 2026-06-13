@@ -1,13 +1,14 @@
-#version 120
-#extension GL_EXT_gpu_shader4 : enable
+#version 430 compatibility
 
-//Vignetting, applies bloom, applies exposure and tonemaps the final image
+// Vignetting, applies bloom, applies exposure and tonemaps the final image
 
 #include "/lib/common.glsl"
 #include "/lib/settings.glsl"
 
 
-varying vec2 texcoord;
+in VertexData {
+    vec2 texcoord;
+} vIn;
 
 uniform sampler2D colortex7;
 
@@ -56,17 +57,17 @@ vec4 SampleTextureCatmullRom(sampler2D tex, vec2 uv, vec2 texSize) {
     texPos12 *= texelSize;
 
     vec4 result = vec4(0.0);
-    result += texture2D(tex, vec2(texPos0.x,  texPos0.y)) * w0.x * w0.y;
-    result += texture2D(tex, vec2(texPos12.x, texPos0.y)) * w12.x * w0.y;
-    result += texture2D(tex, vec2(texPos3.x,  texPos0.y)) * w3.x * w0.y;
+    result += texture(tex, vec2(texPos0.x,  texPos0.y)) * w0.x * w0.y;
+    result += texture(tex, vec2(texPos12.x, texPos0.y)) * w12.x * w0.y;
+    result += texture(tex, vec2(texPos3.x,  texPos0.y)) * w3.x * w0.y;
 
-    result += texture2D(tex, vec2(texPos0.x,  texPos12.y)) * w0.x * w12.y;
-    result += texture2D(tex, vec2(texPos12.x, texPos12.y)) * w12.x * w12.y;
-    result += texture2D(tex, vec2(texPos3.x,  texPos12.y)) * w3.x * w12.y;
+    result += texture(tex, vec2(texPos0.x,  texPos12.y)) * w0.x * w12.y;
+    result += texture(tex, vec2(texPos12.x, texPos12.y)) * w12.x * w12.y;
+    result += texture(tex, vec2(texPos3.x,  texPos12.y)) * w3.x * w12.y;
 
-    result += texture2D(tex, vec2(texPos0.x,  texPos3.y)) * w0.x * w3.y;
-    result += texture2D(tex, vec2(texPos12.x, texPos3.y)) * w12.x * w3.y;
-    result += texture2D(tex, vec2(texPos3.x,  texPos3.y)) * w3.x * w3.y;
+    result += texture(tex, vec2(texPos0.x,  texPos3.y)) * w0.x * w3.y;
+    result += texture(tex, vec2(texPos12.x, texPos3.y)) * w12.x * w3.y;
+    result += texture(tex, vec2(texPos3.x,  texPos3.y)) * w3.x * w3.y;
 
     return result;
 }
@@ -74,22 +75,25 @@ vec4 SampleTextureCatmullRom(sampler2D tex, vec2 uv, vec2 texSize) {
 
 void main() {
     #ifdef BICUBIC_UPSCALING
-        vec3 col = SampleTextureCatmullRom(colortex7,texcoord,1.0/texelSize).rgb;
+        vec3 col = SampleTextureCatmullRom(colortex7, vIn.texcoord, 1.0/texelSize).rgb;
     #else
-        vec3 col = texture2D(colortex7,texcoord).rgb;
+        vec3 col = texture(colortex7, vIn.texcoord).rgb;
     #endif
 
     #ifdef CONTRAST_ADAPTATIVE_SHARPENING
-        //Weights : 1 in the center, 0.5 middle, 0.25 corners
-        vec3 albedoCurrent1 = texture2D(colortex7, texcoord + vec2(texelSize.x,texelSize.y)/MC_RENDER_QUALITY*0.5).rgb;
-        vec3 albedoCurrent2 = texture2D(colortex7, texcoord + vec2(texelSize.x,-texelSize.y)/MC_RENDER_QUALITY*0.5).rgb;
-        vec3 albedoCurrent3 = texture2D(colortex7, texcoord + vec2(-texelSize.x,-texelSize.y)/MC_RENDER_QUALITY*0.5).rgb;
-        vec3 albedoCurrent4 = texture2D(colortex7, texcoord + vec2(-texelSize.x,texelSize.y)/MC_RENDER_QUALITY*0.5).rgb;
+        // Weights : 1 in the center, 0.5 middle, 0.25 corners
+        vec3 albedoCurrent1 = texture(colortex7, vIn.texcoord + vec2( texelSize.x, texelSize.y) / MC_RENDER_QUALITY*0.5).rgb;
+        vec3 albedoCurrent2 = texture(colortex7, vIn.texcoord + vec2( texelSize.x,-texelSize.y) / MC_RENDER_QUALITY*0.5).rgb;
+        vec3 albedoCurrent3 = texture(colortex7, vIn.texcoord + vec2(-texelSize.x,-texelSize.y) / MC_RENDER_QUALITY*0.5).rgb;
+        vec3 albedoCurrent4 = texture(colortex7, vIn.texcoord + vec2(-texelSize.x, texelSize.y) / MC_RENDER_QUALITY*0.5).rgb;
 
         vec3 m1 = -0.5/3.5*col + albedoCurrent1/3.5 + albedoCurrent2/3.5 + albedoCurrent3/3.5 + albedoCurrent4/3.5;
+
         vec3 std = abs(col - m1) + abs(albedoCurrent1 - m1) + abs(albedoCurrent2 - m1) +
             abs(albedoCurrent3 - m1) + abs(albedoCurrent3 - m1) + abs(albedoCurrent4 - m1);
+
         float contrast = 1.0 - luma(std)/5.0;
+
         col = col*(1.0+(SHARPENING+UPSCALING_SHARPNENING)*contrast)
             - (SHARPENING+UPSCALING_SHARPNENING)/(1.0-0.5/3.5)*contrast*(m1 - 0.5/3.5*col);
     #endif
@@ -97,7 +101,6 @@ void main() {
     float lum = luma(col);
     vec3 diff = col - lum;
     col = col + diff * (-lum * CROSSTALK + SATURATION);
-    //col = -vec3(-lum*CROSSFADING + SATURATION);
 
-    gl_FragColor.rgb = saturate(int8Dither(col, texcoord));
+    gl_FragColor.rgb = saturate(int8Dither(col, vIn.texcoord));
 }

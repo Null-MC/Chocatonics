@@ -1,7 +1,8 @@
-#version 120
+#version 430 compatibility
 
 #include "/lib/common.glsl"
 #include "/lib/settings.glsl"
+
 
 uniform float viewWidth;
 uniform float viewHeight;

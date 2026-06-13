@@ -1,16 +1,17 @@
-#version 120
-#extension GL_EXT_gpu_shader4 : enable
+#version 430 compatibility
 
-//Computes volumetric clouds at variable resolution (default 1/4 res)
+// Computes volumetric clouds at variable resolution (default 1/4 res)
 
 #include "/lib/common.glsl"
 #include "/lib/settings.glsl"
 
 
-flat varying vec3 sunColor;
-flat varying vec3 moonColor;
-flat varying vec3 avgAmbient;
-flat varying float tempOffsets;
+in VertexData {
+	flat vec3 sunColor;
+	flat vec3 moonColor;
+	flat vec3 avgAmbient;
+//	flat float tempOffsets;
+} vIn;
 
 uniform sampler2D depthtex0;
 uniform sampler2D noisetex;
@@ -49,7 +50,7 @@ void main() {
 
 		float noise = blueNoise(gl_FragCoord.xy, frameCounter);
 		vec3 fragpos = toScreenSpace(vec3(halfResTC * texelSize, 1.0));
-		outColor0 = renderClouds(fragpos, vec3(0.0), noise, sunColor/150.0, moonColor/150.0, avgAmbient/150.0);
+		outColor0 = renderClouds(fragpos, vec3(0.0), noise, vIn.sunColor/150.0, vIn.moonColor/150.0, vIn.avgAmbient/150.0);
 	#else
 		outColor0 = vec4(0.0, 0.0, 0.0, 1.0);
 	#endif

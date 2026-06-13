@@ -1,16 +1,19 @@
-#version 120
+#version 430 compatibility
 
 // 6 Horizontal gaussian blurs and horizontal downsampling
 
 #include "/lib/common.glsl"
 #include "/lib/settings.glsl"
 
+
+in vec2 texcoord;
+
 uniform sampler2D colortex6;
 
 uniform vec2 texelSize;
-varying vec2 texcoord;
 uniform float viewWidth;
 uniform float viewHeight;
+
 
 vec2 resScale = vec2(1920.0,1080.0) / max(vec2(viewWidth, viewHeight), vec2(1920.0, 1080.0)) * BLOOM_QUALITY;
 
