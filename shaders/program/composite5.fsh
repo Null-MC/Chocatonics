@@ -278,7 +278,7 @@ layout(location = 0) out vec4 outColor0;
 
 void main() {
 	vec2 tc = floor(gl_FragCoord.xy) / VL_RENDER_RESOLUTION * texelSize + 0.5 * texelSize;
-	float z = texture2D(depthtex0, tc).x;
+	float z = texture(depthtex0, tc).x;
 
 	vec3 fragpos = toScreenSpace(vec3(tc/RENDER_SCALE, z));
 

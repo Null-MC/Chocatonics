@@ -61,9 +61,10 @@ void main() {
 
 		vec4 worldData = texture(TEX_GB_WORLD, texcoord);
 		vec2 lightmap = worldData.xy;
+		float mat = worldData.w;
 
-//		bool hand = abs(dataUnpacked1.w-0.75) < 0.01;
-		bool hand = false;
+		bool hand = abs(mat-0.75) < 0.01;
+//		bool hand = false;
 
 		if (!hand) {
 			float NdotL = saturate(dot(normal, vIn.sunVecW));

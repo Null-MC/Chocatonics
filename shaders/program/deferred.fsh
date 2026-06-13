@@ -174,14 +174,14 @@ void main() {
         mat2x3 vL = getVolumetricRays(fract(frameCounter / 1.6180339887), viewVector * 1024.0, lightCol);
         float absorbance = dot(vL[1], vec3(0.22, 0.71, 0.07));
 
-        vec3 skytex = texelFetch2D(colortex4, ivec2(gl_FragCoord.xy) - ivec2(257, 0), 0).rgb / 150.0;
+        vec3 skytex = texelFetch(colortex4, ivec2(gl_FragCoord.xy) - ivec2(257, 0), 0).rgb / 150.0;
         skytex = skytex * clouds.a + clouds.rgb;
 
         outColor4 = vec4(skytex * absorbance + vL[0].rgb, 1.0);
     }
 
     // Temporally accumulate sky and light values
-    vec3 temp = texelFetch2D(colortex4, ivec2(gl_FragCoord.xy), 0).rgb;
+    vec3 temp = texelFetch(colortex4, ivec2(gl_FragCoord.xy), 0).rgb;
     vec3 curr = outColor4.rgb * 150.0;
 
     outColor4.rgb = clamp(mix(temp, curr, 0.06), 0.0, 65000.0);

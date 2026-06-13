@@ -57,7 +57,7 @@ void main() {
 	float NdotL = -lightSign * dot(normal, sunVec);
 	float NdotU = dot(upVec, normal);
 	float diffuseSun = 0.712;
-	vec3 direct = texelFetch2D(gaux1, ivec2(6, 37), 0).rgb / PI;
+	vec3 direct = texelFetch(gaux1, ivec2(6, 37), 0).rgb / PI;
 
 	// compute shadows only if not backface
 	if (diffuseSun > 0.001) {

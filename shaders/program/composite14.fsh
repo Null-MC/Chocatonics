@@ -35,10 +35,10 @@ vec4 texture2D_bicubic(sampler2D tex, vec2 uv) {
 	vec2 p2 = (vec2(iuv.x + h0x, iuv.y + h1y) - 0.5) * texelSize.xy;
 	vec2 p3 = (vec2(iuv.x + h1x, iuv.y + h1y) - 0.5) * texelSize.xy;
 
-    return g0(fuv.y) * (g0x * texture2D(tex, p0)  +
-                        g1x * texture2D(tex, p1)) +
-           g1(fuv.y) * (g0x * texture2D(tex, p2)  +
-                        g1x * texture2D(tex, p3));
+    return g0(fuv.y) * (g0x * texture(tex, p0)  +
+                        g1x * texture(tex, p1)) +
+           g1(fuv.y) * (g0x * texture(tex, p2)  +
+                        g1x * texture(tex, p3));
 }
 
 

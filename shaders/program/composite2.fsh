@@ -79,7 +79,9 @@ vec3 toScreenSpacePrev(vec3 p) {
 
 #include "/lib/r2.glsl"
 #include "/lib/ign.glsl"
+#include "/lib/ggx.glsl"
 #include "/lib/dither.glsl"
+#include "/lib/fresnel.glsl"
 #include "/lib/bicubic.glsl"
 #include "/lib/blueNoise.glsl"
 #include "/lib/octohedral.glsl"
@@ -147,7 +149,7 @@ vec2 tapLocation_AO(int sampleNumber, float spinAngle, int nb, float nbRot, floa
 }
 
 vec3 BilateralFiltering(sampler2D tex, sampler2D depth,vec2 coord,float frDepth,float maxZ){
-	vec4 sampled = vec4(texelFetch2D(tex, ivec2(coord), 0).rgb, 1.0);
+	vec4 sampled = vec4(texelFetch(tex, ivec2(coord), 0).rgb, 1.0);
 	return vec3(sampled.x, sampled.yz / sampled.w);
 }
 
@@ -444,6 +446,7 @@ void main() {
 		vec4 normalData = texture(TEX_GB_NORMAL, texcoord);
 		vec3 geo_normal = mat3(gbufferModelViewInverse) * OctDecode(normalData.xy);
 		vec3 tex_normal = mat3(gbufferModelViewInverse) * OctDecode(normalData.zw);
+
 		vec3 normal = tex_normal;
 
 		vec4 specularData = texture(TEX_GB_SPECULAR, texcoord);
@@ -451,21 +454,31 @@ void main() {
 
 		vec4 worldData = texture(TEX_GB_WORLD, texcoord);
 		vec2 lightmap = worldData.xy;
+		float mat = worldData.w;
 
-		bool hand = false;
-
-//		bool hand = abs(dataUnpacked1.w-0.75) < 0.01;
-//		bool emissive = abs(dataUnpacked1.w-0.9) < 0.01;
+		bool hand = abs(mat-0.75) < 0.01;
+//		bool hand = false;
 
 		float NdotLGeom = dot(normal, vIn.WsunVec);
 		float NdotL = NdotLGeom;
 
-		if ((iswater && isEyeInWater == 0) || (!iswater && isEyeInWater == 1))
+//		if ((iswater && isEyeInWater == 0) || (!iswater && isEyeInWater == 1))
+		if (iswater != (isEyeInWater == 1))
 			NdotL = dot(normal, vIn.refractedSunVec);
 
 		float diffuseSun = saturate(NdotL);
-		vec3 filtered = vec3(1.412, 1.0, 0.0);
+		float specularSun = 0.0;
 
+		#ifdef MC_TEXTURE_FORMAT_LAB_PBR
+			float roughness = specularData.r*specularData.r;
+			float f0 = specularData.g;
+			if (f0 < EPSILON) f0 = 0.04;
+
+			specularSun = GGX(tex_normal, -np3, vIn.WsunVec, roughness, f0);
+			specularSun *= 1.0 - 0.9*rainStrength;
+		#endif
+
+		vec3 filtered = vec3(1.412, 1.0, 0.0);
 		if (!hand) {
 			filtered = texture(colortex3, texcoord).rgb;
 		}
@@ -628,8 +641,6 @@ void main() {
 			ambientLight += vIn.ambientF * mix(saturate(-ambientCoefs.z), 1.0/6.0, sssAmount);
 		#endif
 
-		vec3 skyDirectLight = vIn.lightCol.rgb;
-
 		#if defined(PHOTONICS_BLOCK_LIGHT_ENABLED) && defined(PHOTONICS_GI_ENABLED)
 			vec3 custom_lightmap = vec3(0.0);
 		#else
@@ -644,18 +655,11 @@ void main() {
 			vec3 custom_lightmap = texture(colortex4, (lightmap * 15.0 + 0.5 + vec2(0.0, 19.0)) * texelSize).rgb * 8.0 / 150.0 / 3.0;
 		#endif
 
-		#ifdef PHOTONICS_BLOCK_LIGHT_ENABLED
-		#else
-		#endif
-
-		float emitting = 0.0;
-
-//		emitting = luma(albedo) * 3.0 * Emissive_Strength;
-		emitting = pow(emissive, Emission_Curve) * 3.0 * MAT_EMISSION_SCALE;
-
 		if (hand && heldBlockLightValue > 0.1) {
 			custom_lightmap.y = 0.0;
 		}
+
+		vec3 skyDirectLight = vIn.lightCol.rgb;
 
 		vec3 fragpos0;
 		float Vdiff;
@@ -665,7 +669,7 @@ void main() {
 			fragpos0 = toScreenSpace(vec3(texcoord / RENDER_SCALE - vec2(tempOffset) * texelSize * 0.5, z0));
 			Vdiff = distance(fragpos, fragpos0);
 			float VdotU = np3.y;
-			estimatedDepth = Vdiff * abs(VdotU);	//assuming water plane
+			estimatedDepth = Vdiff * abs(VdotU); // assuming water plane
 
 			if (isEyeInWater == 1) {
 				Vdiff = length(fragpos);
@@ -714,18 +718,40 @@ void main() {
 			#endif
 		}
 
-		// combine all light sources
-		vec3 skyLightFinal = vec3(shading * diffuseSun);
-		#ifdef SHADOW_COLORED
-			skyLightFinal *= shadowColor;
+		#ifdef MC_TEXTURE_FORMAT_LAB_PBR
+			float emitting = pow(emissive, Emission_Curve) * 3.0 * MAT_EMISSION_SCALE;
+		#else
+			bool is_emissive = abs(mat - 0.9) < 0.01;
+
+			float emitting = 0.0;
+			if (is_emissive || (hand && heldBlockLightValue > 0.1))
+			emitting = pow(luma(albedo), Emission_Curve) * 3.0 * MAT_EMISSION_SCALE;
 		#endif
-		skyLightFinal += SSS;
+
+		// combine all light sources
+		vec3 skyDiffuse = vec3(shading * diffuseSun);
+		vec3 skySpecular = vec3(shading * specularSun);
+		#ifdef SHADOW_COLORED
+			skyDiffuse *= shadowColor;
+			skySpecular *= shadowColor;
+		#endif
+		skyDiffuse += SSS;
 
 		#ifdef DEBUG_WHITEWORLD
 			albedo = vec3(1.0);
 		#endif
 
-		outColor3 = (skyLightFinal/PI * 8.0/150.0/3.0 * skyDirectLight + ambientLight + directLighting + emitting) * albedo;
+		vec3 diffuseFinal = (skyDiffuse/PI * skyDirectLight * 8.0/150.0/3.0 + ambientLight + directLighting + emitting) * albedo;
+		vec3 specularFinal = skySpecular * skyDirectLight * 8.0/150.0/3.0;
+
+		#ifndef MC_TEXTURE_FORMAT_LAB_PBR
+			float f0 = 0.04;
+		#endif
+
+//		float NoV = max(dot(tex_normal, -np3), 0.0);
+//		float F = schlick(NoV, f0, 1.0, roughness);
+//		outColor3 = mix(diffuseFinal, specularFinal, F);
+		outColor3 = diffuseFinal * (1.0 - f0) + specularFinal;
 
 		if (iswater != (isEyeInWater == 1)) {
 			// Bruteforce integration is probably overkill

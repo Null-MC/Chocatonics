@@ -19,6 +19,7 @@
 
 uniform sampler2D TEX_DEPTH;
 uniform sampler2D TEX_GB_NORMAL;
+uniform sampler2D TEX_GB_WORLD;
 
 uniform float near;
 uniform float far;
@@ -67,7 +68,10 @@ bool is_in_world() {
 }
 
 bool is_hand_at() {
-    return false;
+//    return false;
+    ivec2 uv = ivec2(gl_FragCoord.xy);
+    float mat = texelFetch(TEX_GB_WORLD, uv, 0).w;
+    return abs(mat - 0.75) < 0.01;
 }
 
 vec2 get_taa_jitter() {

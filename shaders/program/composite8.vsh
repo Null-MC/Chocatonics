@@ -19,5 +19,5 @@ void main() {
 	texcoord = gl_MultiTexCoord0.xy;
 
 	tempOffsets = HaltonSeq2(frameCounter % 10000);
-	exposureA = texelFetch2D(colortex4, ivec2(10, 37), 0).r;
+	exposureA = texelFetch(colortex4, ivec2(10, 37), 0).r;
 }

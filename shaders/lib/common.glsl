@@ -43,6 +43,7 @@ const float EPSILON = 1.e-6;
 #define projMAD(m, v) (diagonal3(m) * (v) + (m)[3].xyz)
 
 #define fsign(x) (saturate(x * 1e35) * 2.0 - 1.0)
+
 #define fstep(x,y) saturate((y - x) * 1e35)
 
 
@@ -70,6 +71,11 @@ float maxOf(const in vec2 vec) {return max(vec[0], vec[1]);}
 
 vec3 toLinear(const in vec3 sRGB){
     return sRGB * (sRGB * (sRGB * 0.305306011 + 0.682171111) + 0.012522878);
+}
+
+float pow5(const in float value) {
+    float value2 = value * value;
+    return value2 * value2 * value;
 }
 
 

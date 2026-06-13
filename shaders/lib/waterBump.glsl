@@ -53,8 +53,8 @@ vec3 getWaveHeight(vec2 posxz, float iswater){
 	vec2 displ = texture(noisetex, pos/32.0 + movement).bb * 2.0 - 1.0;
 
 	for (int i = 0; i < 4; i++) {
-		vec2 displ = texture2D(noisetex, pos/32.0/1.74/1.74 + movement).bb * 2.0 - 1.0;
-    	vec3 wave = texture2D(texWave, (pos * vec2(3.0, 1.0) / 128.0 + movement + displ / 128.0) * exp(float(i))).rgb;
+		vec2 displ = texture(noisetex, pos/32.0/1.74/1.74 + movement).bb * 2.0 - 1.0;
+    	vec3 wave = texture(texWave, (pos * vec2(3.0, 1.0) / 128.0 + movement + displ / 128.0) * exp(float(i))).rgb;
 
 		// Hardcoded normalization
 		// The python script will output these values

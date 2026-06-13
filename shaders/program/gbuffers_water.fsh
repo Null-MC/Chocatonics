@@ -56,6 +56,7 @@ uniform int frameCounter;
 uniform int framemod8;
 
 #include "/lib/ign.glsl"
+#include "/lib/ggx.glsl"
 #include "/lib/bicubic.glsl"
 #include "/lib/blueNoise.glsl"
 #include "/lib/projections.glsl"
@@ -153,25 +154,6 @@ vec3 TangentToWorld(vec3 N, vec3 H) {
     vec3 B = cross(N, T);
 
     return vec3((T * H.x) + (B * H.y) + (N * H.z));
-}
-
-float GGX(vec3 n, vec3 v, vec3 l, float r, float F0) {
-	r*=r; r*=r;
-
-	vec3 h = l + v;
-	float hn = inversesqrt(dot(h, h));
-
-	float dotLH = saturate(dot(h, l) * hn);
-	float dotNH = saturate(dot(h, n) * hn);
-	float dotNL = saturate(dot(n, l));
-	float dotNHsq = dotNH * dotNH;
-
-	float denom = dotNHsq * r - dotNHsq + 1.0;
-	float D = r / (PI * denom * denom);
-	float F = F0 + (1.0 - F0) * exp2((-5.55473*dotLH-6.98316)*dotLH);
-	float k2 = 0.25 * r;
-
-	return dotNL * D * F / (dotLH * dotLH * (1.0 - k2) + k2);
 }
 
 
@@ -273,7 +255,7 @@ void main() {
 
 		direct *= (iswater > 0.9 ? 0.2 : 1.0) * diffuseSun * vIn.lmtexcoord.w;
 
-		vec3 diffuseLight = direct + texture2D(gaux1, (vIn.lmtexcoord.zw * 15.0 + 0.5) * texelSize).rgb;
+		vec3 diffuseLight = direct + texture(gaux1, (vIn.lmtexcoord.zw * 15.0 + 0.5) * texelSize).rgb;
 		vec3 color = diffuseLight * albedo * 8.0 / 150.0 / 3.0;
 
 		if (iswater > 0.0) {
@@ -294,31 +276,34 @@ void main() {
 
 			vec3 wrefl = mat3(gbufferModelViewInverse) * reflectedVector;
 			vec3 sky_c = mix(skyCloudsFromTex(wrefl, gaux1).rgb, texture(gaux1, (vIn.lmtexcoord.zw * 15.0 + 0.5) * texelSize).rgb * 0.5, isEyeInWater);
-			sky_c.rgb *= vIn.lmtexcoord.w * vIn.lmtexcoord.w * 255.0*255.0/240.0/240.0/150.0*8.0/3.0;
+			sky_c.rgb *= vIn.lmtexcoord.w * vIn.lmtexcoord.w * 255.0*255.0/240.0/240.0 / 150.0*8.0/3.0;
 
 			vec4 reflection = vec4(sky_c.rgb, 0.0);
 			#ifdef SCREENSPACE_REFLECTIONS
 				vec3 rtPos = rayTrace(reflectedVector, fragpos.xyz, blueNoise(gl_FragCoord.xy, frameCounter), fresnel);
 
 				if (rtPos.z < 1.0) {
-					vec3 previousPosition = mul3(gbufferModelViewInverse, toScreenSpace(rtPos)) + cameraPosition - previousCameraPosition;
+					vec3 previousPosition = mul3(gbufferModelViewInverse, toScreenSpace(rtPos));
+					previousPosition += cameraPosition - previousCameraPosition;
 					previousPosition = mul3(gbufferPreviousModelView, previousPosition);
 					previousPosition.xy = projMAD(gbufferPreviousProjection, previousPosition).xy / -previousPosition.z * 0.5 + 0.5;
 
 					if (previousPosition.x > 0.0 && previousPosition.y > 0.0 && previousPosition.x < 1.0 && previousPosition.x < 1.0) {
+						reflection.rgb = texture(gaux2, previousPosition.xy).rgb;
 						reflection.a = 1.0;
-						reflection.rgb = texture2D(gaux2, previousPosition.xy).rgb;
 					}
 				}
 			#endif
 
 			reflection.rgb = mix(sky_c.rgb, reflection.rgb, reflection.a);
 
+			vec3 lightCol2 = texelFetch(gaux1, ivec2(6, 37), 0).rgb / PI;
 			#ifdef SUN_MICROFACET_SPECULAR
-				vec3 sunSpec = GGX(normal,-normalize(fragpos), lightSign*sunVec, rainStrength*0.2+roughness+0.05+saturate(lightSign * -0.15), f0) * texelFetch(gaux1, ivec2(6, 37), 0).rgb*8.0/3.0/150.0/PI * (1.0-rainStrength*0.9);
+				vec3 sunSpec = GGX(normal, -normalize(fragpos), lightSign*sunVec, rainStrength*0.2 + roughness + 0.05+saturate(lightSign * -0.15), f0) * lightCol2 * 8.0/3.0/150.0;
 			#else
-				vec3 sunSpec = drawSun(dot(lightSign * sunVec, reflectedVector), 0.0, texelFetch(gaux1, ivec2(6, 37), 0).rgb, vec3(0.0)) * 8.0/3.0/150.0 * fresnel/PI * (1.0-rainStrength*0.9);
+				vec3 sunSpec = drawSun(dot(lightSign * sunVec, reflectedVector), 0.0, lightCol2, vec3(0.0)) * fresnel * 8.0/3.0/150.0;
 			#endif
+			sunSpec *= 1.0 - 0.9*rainStrength;
 
 			vec3 reflected = reflection.rgb * fresnel + shading * sunSpec;
 

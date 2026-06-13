@@ -18,7 +18,7 @@ void main() {
 
 	vOut.texcoord = gl_MultiTexCoord0.xy;
 
-	vOut.exposure = vec4(texelFetch2D(colortex4, ivec2(10, 37), 0).r * vec3(FinalR, FinalG, FinalB), texelFetch(colortex4, ivec2(10, 37), 0).r);
+	vOut.exposure = vec4(texelFetch(colortex4, ivec2(10, 37), 0).r * vec3(FinalR, FinalG, FinalB), texelFetch(colortex4, ivec2(10, 37), 0).r);
 	vOut.rodExposureDepth = texelFetch(colortex4, ivec2(14, 37), 0).rg;
 	vOut.rodExposureDepth.y = sqrt(vOut.rodExposureDepth.y / 65000.0);
 }

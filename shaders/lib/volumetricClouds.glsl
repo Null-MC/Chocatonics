@@ -96,49 +96,50 @@ float cloudVol(in vec3 pos, in vec3 samplePos, in float cov, in int LoD) {
 }
 
 float getCloudDensity(in vec3 pos, in int LoD) {
-	vec3 samplePos = pos*vec3(1.0,1./32.,1.0)/4 + frameTimeCounter*vec3(0.5,0.,0.5)*5.;
-	float coverageSP = cloudCov(pos,samplePos);
-	if (coverageSP > 0.001) {
-		if (LoD < 0)
-			return max(coverageSP - 0.27*(fbmAmount+rainStrength),0.0);
-		return cloudVol(pos,samplePos,coverageSP, LoD);
+	vec3 samplePos = pos*vec3(1.0, 1.0/32.0, 1.0) / 4.0 + frameTimeCounter * vec3(0.5, 0.0, 0.5) * 5.0;
+	float coverageSP = cloudCov(pos, samplePos);
+	if (coverageSP <= 0.001) return 0.0;
+
+	if (LoD < 0) {
+		return max(coverageSP - 0.27 * (fbmAmount + rainStrength), 0.0);
 	}
-	else
-		return 0.0;
+
+	return cloudVol(pos, samplePos, coverageSP, LoD);
 }
 
-
-//Mie phase function
+// Mie phase function
 float phaseg(float x, float g) {
     float gg = g * g;
     return (gg * -0.25 /3.14 + 0.25 /3.14) * pow(-2.0 * (g * x) + (gg + 1.0), -1.5);
 }
 
-float calcShadow(vec3 pos, vec3 ray) {
-	float shadowStep = length(ray);
-	float d = 0.0;
-	for (int j=1;j<6;j++){
-		float cloudS=1.0;
-		d += cloudS*cloudDensity;
-
-		}
-	return max(exp(-shadowStep*d),exp(-0.25*shadowStep*d)*0.7);
-}
+//float calcShadow(vec3 pos, vec3 ray) {
+//	float shadowStep = length(ray);
+//	float d = 0.0;
+//
+//	for (int j = 1; j < 6; j++) {
+//		d += cloudDensity;
+//	}
+//
+//	return max(exp(-shadowStep*d),exp(-0.25*shadowStep*d)*0.7);
+//}
 
 float cirrusClouds(vec3 pos) {
-	vec2 pos2D = pos.xz/50000.0 + frameTimeCounter/200.;
-	float cirrusMap = clamp(texture2D(noisetex,pos2D.yx/6. ).b-0.7+0.7*rainStrength,0.0,1.0);
-	float cloud = texture2D(noisetex, pos2D).r;
+	vec2 pos2D = pos.xz/50000.0 + frameTimeCounter/200.0;
+	float cirrusMap = saturate(texture(noisetex, pos2D.yx / 6.0).b - 0.7 + 0.7 * rainStrength);
+	float cloud = texture(noisetex, pos2D).r;
 	float weights = 1.0;
-	vec2 posMult = vec2(2.0,1.5);
-	for (int i = 1; i < 4; i++){
-		pos2D *= posMult;
-		float weight =exp2(-i*1.0);
-		cloud += texture2D(noisetex, pos2D).r*weight;
+	vec2 posMult = vec2(2.0, 1.5);
 
+	for (int i = 1; i < 4; i++) {
+		pos2D *= posMult;
+
+		float weight = exp2(float(-i));
+		cloud += texture(noisetex, pos2D).r * weight;
 		weights += weight;
 	}
-	cloud = clamp(cloud*cirrusMap*0.25,0.0,1.0);
+
+	cloud = saturate(cloud * cirrusMap * 0.25);
 	return cloud/weights * float(abs(pos.y - 5500.0) < 200.0);
 }
 

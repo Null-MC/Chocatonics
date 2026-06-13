@@ -90,7 +90,7 @@ void main() {
 
 	direct *= diffuseSun;
 
-	vec3 ambient = texture2D(gaux1, (vIn.lmtexcoord.zw * 15.0 + 0.5) * texelSize).rgb;
+	vec3 ambient = texture(gaux1, (vIn.lmtexcoord.zw * 15.0 + 0.5) * texelSize).rgb;
 
 	vec3 diffuseLight = direct + ambient;
 
