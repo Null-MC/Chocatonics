@@ -34,7 +34,7 @@ void sample_indirect(inout vec3 indirect_color, vec3 sample_rt_pos, vec3 geo_nor
     vec3 final_color = vec3(0.0);
 
     if (!is_hit) {
-        #ifdef PH_ENABLE_GI
+        #ifdef PHOTONICS_GI_ENABLED
             // hit sky
             vec3 playerPos = sample_rt_pos - rt_camera_position;
             final_color = get_sky_color(playerPos, trace_localDir);
@@ -58,7 +58,7 @@ void sample_indirect(inout vec3 indirect_color, vec3 sample_rt_pos, vec3 geo_nor
         vec3 hit_emission = vec3(0.0); //8.0 * lightEmittance;
         vec3 sample_color = vec3(0.0);
 
-        #ifdef PH_ENABLE_GI
+        #ifdef PHOTONICS_GI_ENABLED
             vec3 localSkyLightDir = normalize(mat3(gbufferModelViewInverse) * shadowLightPosition);
 
             float hit_skyLightF = ray_result_skylight(hit) / 15.0;

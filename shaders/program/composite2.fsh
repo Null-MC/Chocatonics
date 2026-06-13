@@ -92,7 +92,7 @@ vec3 toScreenSpacePrev(vec3 p) {
 #include "/lib/stars.glsl"
 #include "/lib/volumetricClouds.glsl"
 
-#if defined(PH_ENABLE_BLOCKLIGHT) || defined(PH_ENABLE_HANDHELD_LIGHT)
+#if defined(PHOTONICS_BLOCK_LIGHT_ENABLED) || defined(PHOTONICS_HAND_LIGHT_ENABLED) || defined(PHOTONICS_GI_ENABLED)
 	#include "/photonics/samplers.glsl"
 #endif
 
@@ -630,10 +630,22 @@ void main() {
 
 		vec3 skyDirectLight = vIn.lightCol.rgb;
 
-		#ifdef PHOTONICS_BLOCK_LIGHT_ENABLED
+		#if defined(PHOTONICS_BLOCK_LIGHT_ENABLED) && defined(PHOTONICS_GI_ENABLED)
 			vec3 custom_lightmap = vec3(0.0);
 		#else
+			#ifdef PHOTONICS_BLOCK_LIGHT_ENABLED
+				lightmap.x = 0.0;
+			#endif
+
+			#ifdef PHOTONICS_GI_ENABLED
+				lightmap.y = 0.0;
+			#endif
+
 			vec3 custom_lightmap = texture(colortex4, (lightmap * 15.0 + 0.5 + vec2(0.0, 19.0)) * texelSize).rgb * 8.0 / 150.0 / 3.0;
+		#endif
+
+		#ifdef PHOTONICS_BLOCK_LIGHT_ENABLED
+		#else
 		#endif
 
 		float emitting = 0.0;
