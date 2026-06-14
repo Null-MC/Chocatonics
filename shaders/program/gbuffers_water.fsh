@@ -18,10 +18,11 @@ uniform sampler2D gtexture;
 uniform sampler2D noisetex;
 uniform sampler2D texBlueNoise;
 uniform sampler2DShadow shadowtex0HW;
+uniform sampler2D gaux1;
 uniform sampler2D gaux2;
 uniform sampler2D texWave;
-uniform sampler2D gaux1;
 uniform sampler2D depthtex1;
+uniform sampler2D colortex12;
 
 uniform vec4 lightCol;
 uniform vec3 sunVec;
@@ -104,7 +105,7 @@ vec3 rayTrace(vec3 dir,vec3 position,float dither, float fresnel) {
     for (int i = 0; i <= int(quality); i++) {
 		#ifdef USE_QUARTER_RES_DEPTH
 			// decode depth buffer
-			float sp = sqrt(texelFetch(gaux1, ivec2(spos.xy/texelSize/4), 0).w / 65000.0);
+			float sp = sqrt(texelFetch(colortex12, ivec2(spos.xy/texelSize/4), 0).r / 65000.0);
 			sp = invLinZ(sp);
 
 			if (sp <= max(maxZ, minZ) && sp >= min(maxZ, minZ)) {

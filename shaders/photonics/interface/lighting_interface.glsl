@@ -20,7 +20,7 @@ vec3 get_sun_color(vec3 playerPos, vec3 direction) {
 }
 
 vec3 get_sky_color(vec3 playerPos, vec3 direction) {
-    vec3 color = skyFromTex(direction, colortex4) / 150.0;
+    vec3 color = skyCloudsFromTex(direction, colortex4).rgb / 150.0;
     return clamp(color * 8.0/3.0, 0.0, 65000.0);
 }
 
