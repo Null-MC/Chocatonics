@@ -24,7 +24,7 @@ float cloudVol(in vec3 pos, in float VFAmount, in float fogAmount) {
 	return pow(saturate(coverage - noise - 0.76), 2.0) * 1200.0/0.23 / (coverage + 0.01) * VFAmount * 600.0 + unifCov * 60.0 * fogAmount + rainStrength*2.0;
 }
 
-mat2x3 getVolumetricRays(float dither, vec3 fragpos, vec4 lightCol) {
+mat2x3 getVolumetricRays(float dither, vec3 fragpos, vec4 lightCol, float VFAmount, float fogAmount) {
 	// project pixel position into projected shadowmap space
 	vec3 wpos = mul3(gbufferModelViewInverse, fragpos);
 	vec3 fragposition = mul3(shadowModelView, wpos);
@@ -57,12 +57,12 @@ mat2x3 getVolumetricRays(float dither, vec3 fragpos, vec4 lightCol) {
 
 	vec3 ambientCoefs = dVWorld / dot(abs(dVWorld), vec3(1.0));
 
-	vec3 ambientLight = vIn.ambientUp * saturate(ambientCoefs.y);
-	ambientLight += vIn.ambientDown * saturate(-ambientCoefs.y);
-	ambientLight += vIn.ambientRight * saturate(ambientCoefs.x);
-	ambientLight += vIn.ambientLeft * saturate(-ambientCoefs.x);
-	ambientLight += vIn.ambientB * saturate(ambientCoefs.z);
-	ambientLight += vIn.ambientF * saturate(-ambientCoefs.z);
+	vec3 ambientLight = scene.ambientUp * saturate(ambientCoefs.y);
+	ambientLight += scene.ambientDown * saturate(-ambientCoefs.y);
+	ambientLight += scene.ambientRight * saturate(ambientCoefs.x);
+	ambientLight += scene.ambientLeft * saturate(-ambientCoefs.x);
+	ambientLight += scene.ambientB * saturate(ambientCoefs.z);
+	ambientLight += scene.ambientF * saturate(-ambientCoefs.z);
 
 	vec3 skyCol0 = ambientLight * eyeBrightnessSmooth.y/240.0 * Ambient_Mult*2.0;
 	// Makes fog more white idk how to simulate it correctly
@@ -86,10 +86,10 @@ mat2x3 getVolumetricRays(float dither, vec3 fragpos, vec4 lightCol) {
 		progress = start.xyz + d*dV;
 		progressW = gbufferModelViewInverse[3].xyz+cameraPosition + d*dVWorld;
 
-		//project into biased shadowmap space
+		// project into biased shadowmap space
 		float distortFactor = calcDistort(progress.xy);
 		vec3 pos = vec3(progress.xy*distortFactor, progress.z);
-		float densityVol = cloudVol(progressW, vIn.VFAmount, vIn.fogAmount);
+		float densityVol = cloudVol(progressW, VFAmount, fogAmount);
 		float sh = 1.0;
 
 		if (abs(pos.x) < 1.0-0.5/2048. && abs(pos.y) < 1.0-0.5/2048) {

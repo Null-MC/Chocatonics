@@ -143,134 +143,134 @@ float cirrusClouds(vec3 pos) {
 	return cloud/weights * float(abs(pos.y - 5500.0) < 200.0);
 }
 
-vec4 renderClouds(vec3 fragpositi, vec3 color, float dither, vec3 sunColor, vec3 moonColor, vec3 avgAmbient) {
-		#ifndef VOLUMETRIC_CLOUDS
-			return vec4(0.0, 0.0, 0.0, 1.0);
-		#endif
-
-		//setup ray in projected shadow map space
+#ifdef VOLUMETRIC_CLOUDS
+	vec4 renderClouds(vec3 fragPos, vec3 color, float dither, vec3 sunColor, vec3 moonColor, vec3 avgAmbient) {
+		// setup ray in projected shadow map space
 		bool land = false;
 
-		float SdotU = dot(normalize(fragpositi.xyz),sunVec);
-		float z2 = length(fragpositi);
-		float z = -fragpositi.z;
+		float SdotU = dot(normalize(fragPos.xyz), sunVec);
+		float z2 = length(fragPos);
+		float z = -fragPos.z;
 
-
-		//project pixel position into projected shadowmap space
-		vec4 fragposition = gbufferModelViewInverse*vec4(fragpositi,1.0);
+		// project pixel position into projected shadowmap space
+		vec4 fragposition = gbufferModelViewInverse * vec4(fragPos, 1.0);
 
 		vec3 worldV = normalize(fragposition.rgb);
 		float VdotU = worldV.y;
-		maxIT_clouds = int(clamp(maxIT_clouds/sqrt(VdotU),0.0,maxIT*1.0));
+		maxIT_clouds = int(clamp(maxIT_clouds / sqrt(VdotU), 0.0, float(maxIT)));
 		//worldV.y -= -length(worldV.xz)/sqrt(-length(worldV.xz/earthRad)*length(worldV.xz/earthRad)+earthRad);
 
-		//project view origin into projected shadowmap space
-		vec4 start = (gbufferModelViewInverse*vec4(0.0,0.0,0.,1.));
+		// project view origin into projected shadowmap space
+		vec4 start = gbufferModelViewInverse * vec4(0.0, 0.0, 0.0, 1.0);
 		vec3 dV_view = worldV;
 
-
-		vec3 progress_view = dV_view*dither+cameraPosition;
+		vec3 progress_view = dV_view * dither + cameraPosition;
 
 		float vL = 0.0;
 		float total_extinction = 1.0;
 
-
 		float distW = length(worldV);
-		worldV = normalize(worldV)*100000. + cameraPosition; //makes max cloud distance not dependant of render distance
+		worldV = normalize(worldV) * 100000.0 + cameraPosition; //makes max cloud distance not dependant of render distance
 		dV_view = normalize(dV_view);
 
-		//setup ray to start at the start of the cloud plane and end at the end of the cloud plane
-		dV_view *= max(maxHeight-cloud_height, 0.0)/dV_view.y/maxIT_clouds;
-		vec3 startOffset = dV_view*dither;
+		// setup ray to start at the start of the cloud plane and end at the end of the cloud plane
+		dV_view *= max(maxHeight - cloud_height, 0.0) / dV_view.y / maxIT_clouds;
+		vec3 startOffset = dV_view * dither;
 
-		progress_view = startOffset + cameraPosition + dV_view*(cloud_height-cameraPosition.y)/(dV_view.y);
+		progress_view = startOffset + cameraPosition + dV_view * (cloud_height - cameraPosition.y) / dV_view.y;
 
+		if (worldV.y < cloud_height) {
+			// don't trace if no intersection is possible
+			return vec4(0.0, 0.0, 0.0, 1.0);
+		}
 
-		if (worldV.y < cloud_height) return vec4(0.,0.,0.,1.);	//don't trace if no intersection is possible
-
-
-
-		float shadowStep = 200.;
-		vec3 dV_Sun = normalize(mat3(gbufferModelViewInverse)*sunVec)*shadowStep;
+		float shadowStep = 200.0;
+		vec3 dV_Sun = normalize(mat3(gbufferModelViewInverse) * sunVec) * shadowStep;
 
 		float mult = length(dV_view);
-
 
 		color = vec3(0.0);
 
 		total_extinction = 1.0;
-		float SdotV = dot(sunVec,normalize(fragpositi));
-		float SdotV01 = SdotV*0.5+0.5;
+		float SdotV = dot(sunVec, normalize(fragPos));
+		float SdotV01 = SdotV * 0.5 + 0.5;
 
-		float mieDay = mix(phaseg(SdotV, cloudMieG),phaseg(SdotV, cloudMieG2),0.1);
+		float mieDay = mix(phaseg(SdotV, cloudMieG), phaseg(SdotV, cloudMieG2), 0.1);
 		float mieDayMulti = phaseg(SdotV, 0.2);
-		float mieNight = mix(phaseg(-SdotV, cloudMieG),phaseg(-SdotV, cloudMieG2),0.1);
+		float mieNight = mix(phaseg(-SdotV, cloudMieG), phaseg(-SdotV, cloudMieG2), 0.1);
 		float mieNightMulti = phaseg(-SdotV, 0.2);
 
-		vec3 sunContribution = mieDay*sunColor;
-		vec3 sunContributionMulti = mieDayMulti*sunColor;
-		vec3 moonContribution = mieNight*moonColor;
-		vec3 moonContributionMulti = mieNightMulti*moonColor;
-		float ambientMult = 1.0;
-		vec3 skyCol0 = avgAmbient * ambientMult;
+		vec3 sunContribution = mieDay * sunColor;
+		vec3 sunContributionMulti = mieDayMulti * sunColor;
+		vec3 moonContribution = mieNight * moonColor;
+		vec3 moonContributionMulti = mieNightMulti * moonColor;
 
 		float powderMulMoon = 1.0;
 		float powderMulSun = 1.0;
 
-		for (int i=0;i<maxIT_clouds;i++) {
+		for (int i = 0; i < maxIT_clouds; i++) {
 			float cloud = getCloudDensity(progress_view, cloudLoD);
-				if (cloud > 0.0001){
-					float muS = cloud*cloudDensity;
-					float muE =	cloud*cloudDensity;
-					float muEshD = 0.0;
-					if (sunContribution.g > 1e-5){
-						for (int j=0;j<8;j++){
-							vec3 shadowSamplePos = progress_view+dV_Sun*(j+0.5);
-							if (shadowSamplePos.y < maxHeight)
-							{
-								float cloudS=getCloudDensity(vec3(shadowSamplePos), cloudShadowLoD);
-								muEshD += cloudS*cloudDensity*shadowStep;
-							}
+
+			if (cloud > 0.0001) {
+				float muS = cloud * cloudDensity;
+				float muE =	cloud * cloudDensity;
+
+				float muEshD = 0.0;
+				if (sunContribution.g > 1e-5) {
+					for (int j = 0; j < 8; j++) {
+						vec3 shadowSamplePos = progress_view + dV_Sun * (j + 0.5);
+
+						if (shadowSamplePos.y < maxHeight) {
+							float cloudS = getCloudDensity(vec3(shadowSamplePos), cloudShadowLoD);
+							muEshD += cloudS * cloudDensity * shadowStep;
 						}
 					}
-					float muEshN = 0.0;
-					if (moonContribution.g > 1e-5){
-						for (int j=0;j<8;j++){
-							vec3 shadowSamplePos = progress_view-dV_Sun*(j+0.5);
-							if (shadowSamplePos.y < maxHeight)
-							{
-								float cloudS=getCloudDensity(vec3(shadowSamplePos), cloudShadowLoD);
-								muEshN += cloudS*cloudDensity*shadowStep;
-							}
-						}
-					}
-					//fake multiple scattering approx 2  (from horizon zero down clouds)
-					float h = 0.35-0.35*clamp(progress_view.y/4000.-1500./4000.,0.0,1.0);
-					float powder = 1.0-exp(-muE*400);
-					float sunShadowMulti = exp(-log(muEshD*0.15+0.5)) * powder;
-					float sunShadow = exp(-muEshD);
-					float moonShadow = exp(-muEshN);
-					float moonShadowMulti = exp(-log(muEshN*0.15+0.5)) * powder;
-					float ambientPowder = mix(1.0, powder, h)*(1.0-h);
-					vec3 S = vec3(sunContribution*sunShadow + sunShadowMulti*sunContributionMulti + moonShadowMulti*moonContributionMulti +  moonShadow*moonContribution+skyCol0*ambientPowder);
-
-
-					vec3 Sint=(S - S * exp(-mult*muE)) / (muE);
-					color += muS*Sint*total_extinction;
-					total_extinction *= exp(-muE*mult);
-
-					if (total_extinction < 1e-5) break;
 				}
-				progress_view += dV_view;
+
+				float muEshN = 0.0;
+				if (moonContribution.g > 1e-5) {
+					for (int j = 0; j < 8; j++) {
+						vec3 shadowSamplePos = progress_view - dV_Sun * (j + 0.5);
+
+						if (shadowSamplePos.y < maxHeight) {
+							float cloudS = getCloudDensity(vec3(shadowSamplePos), cloudShadowLoD);
+							muEshN += cloudS * cloudDensity * shadowStep;
+						}
+					}
+				}
+
+				// fake multiple scattering approx 2  (from horizon zero down clouds)
+				float h = 0.35 - 0.35 * saturate((progress_view.y - 1500.0) / 4000.0);
+				float powder = 1.0 - exp(muE * -400);
+				float sunShadowMulti = exp(-log(muEshD*0.15+0.5)) * powder;
+				float sunShadow = exp(-muEshD);
+				float moonShadow = exp(-muEshN);
+				float moonShadowMulti = exp(-log(muEshN*0.15+0.5)) * powder;
+				float ambientPowder = mix(1.0, powder, h)*(1.0-h);
+
+				vec3 S = vec3(sunContribution * sunShadow + sunShadowMulti * sunContributionMulti + moonShadowMulti * moonContributionMulti + moonShadow * moonContribution + avgAmbient * ambientPowder);
+
+				vec3 Sint = (S - S * exp(-mult*muE)) / muE;
+				color += muS * Sint * total_extinction;
+				total_extinction *= exp(-muE * mult);
+
+				if (total_extinction < 1e-5) break;
 			}
 
+			progress_view += dV_view;
+		}
 
 		vec3 normView = normalize(dV_view);
+
 		// Assume fog color = sky gradient at long distance
-		vec3 fogColor = skyFromTex(normView, colortex4)/150.;
-		float dist = (cloud_height - cameraPosition.y)/normalize(dV_view).y;
-		float fog = exp(-dist/40000.0*(1.0+rainStrength*2.));
+		vec3 fogColor = skyFromTex(normView, texSkyGradient);
+		float dist = (cloud_height - cameraPosition.y) / normalize(dV_view).y;
+		float fog = exp(-dist/40000.0 * (1.0 + 2.0*rainStrength));
 
-		return mix(vec4(fogColor,0.0), vec4(color,clamp(total_extinction,0.0,1.0)), fog);
-
-}
+		return mix(vec4(fogColor, 0.0), vec4(color, saturate(total_extinction)), fog);
+	}
+#else
+	vec4 renderClouds(vec3 fragPos, vec3 color, float dither, vec3 sunColor, vec3 moonColor, vec3 avgAmbient) {
+		return vec4(0.0, 0.0, 0.0, 1.0);
+	}
+#endif

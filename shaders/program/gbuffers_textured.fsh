@@ -11,7 +11,7 @@ in VertexData {
 } vIn;
 
 uniform sampler2D gtexture;
-uniform sampler2D gaux1;
+uniform sampler2D texLightMap_forward;
 uniform sampler2DShadow shadowtex0HW;
 
 uniform vec3 sunVec;
@@ -31,6 +31,8 @@ uniform vec3 cameraPosition;
 //uniform float frameTimeCounter;
 //uniform int frameCounter;
 uniform int framemod8;
+
+#include "/lib/sceneBuffer.glsl"
 
 #include "/lib/ign.glsl"
 #include "/lib/bicubic.glsl"
@@ -57,7 +59,8 @@ void main() {
 	float NdotL = -lightSign * dot(normal, sunVec);
 	float NdotU = dot(upVec, normal);
 	float diffuseSun = 0.712;
-	vec3 direct = texelFetch(gaux1, ivec2(6, 37), 0).rgb / PI;
+
+	vec3 direct = scene.lightSourceColor / PI;
 
 	// compute shadows only if not backface
 	if (diffuseSun > 0.001) {
@@ -90,9 +93,10 @@ void main() {
 
 	direct *= diffuseSun;
 
-	vec3 ambient = texture(gaux1, (vIn.lmtexcoord.zw * 15.0 + 0.5) * texelSize).rgb;
+	vec2 lmcoord = (vIn.lmtexcoord.zw * 15.0 + 0.5) / 16.0;
+	vec3 ambient = texture(texLightMap_forward, lmcoord).rgb;
 
 	vec3 diffuseLight = direct * vIn.lmtexcoord.w + ambient;
 
-	outColor2.rgb = diffuseLight * albedo * 8.0 / 3.0 / 150.0 * 0.1;
+	outColor2.rgb = diffuseLight * albedo * 8.0/3.0 * 0.1;
 }

@@ -1,6 +1,6 @@
 #version 430 compatibility
 
-//Render sky, volumetric clouds, direct lighting
+// Render sky, volumetric clouds, direct lighting
 
 #include "/lib/common.glsl"
 #include "/lib/settings.glsl"
@@ -26,7 +26,8 @@ uniform sampler2D TEX_GB_SPECULAR;
 uniform sampler2D TEX_GB_WORLD;
 uniform sampler2D colortex0;//clouds
 //uniform sampler2D colortex1;//albedo(rgb),material(alpha) RGBA16
-uniform sampler2D colortex4;//Skybox
+uniform sampler2D colortex4;//tracing
+uniform sampler2D texLightMap_deferred;
 uniform sampler2D colortex3;
 uniform sampler2D colortex5;
 uniform sampler2D colortex7;
@@ -34,6 +35,7 @@ uniform sampler2D depthtex1;//depth
 uniform sampler2D depthtex0;//depth
 uniform sampler2D noisetex;//depth
 uniform sampler2D texBlueNoise;
+uniform sampler2D texSkyGradient;
 uniform sampler2DShadow shadowtex0HW;
 
 #ifdef SHADOW_COLORED
@@ -211,15 +213,15 @@ void waterVolumetrics(inout vec3 inColor, vec3 rayStart, vec3 rayEnd, float estE
 		vec3 pos = vec3(spPos.xy * distortFactor, spPos.z);
 		float sh = 1.0;
 
-		if (abs(pos.x) < 1.0-0.5/2048. && abs(pos.y) < 1.0-0.5/2048){
+		if (abs(pos.x) < 1.0 - 0.5/2048.0 && abs(pos.y) < 1.0 - 0.5/2048){
 			pos = pos * vec3(0.5, 0.5, 0.5/6.0) + 0.5;
 			sh = texture(shadowtex0HW, pos);
 		}
 
 		vec3 ambientMul = exp(-estEndDepth * d * waterCoefs * 1.1);
 		vec3 sunMul = exp(-estSunDepth * d * waterCoefs);
-		vec3 light = (sh * lightSource*8./150./3.0 * phase * sunMul + ambientMul * ambient)*scatterCoef;
-		vL += (light - light * exp(-waterCoefs * dd * rayLength)) / waterCoefs *absorbance;
+		vec3 light = (sh * lightSource * 8.0/3.0 * phase * sunMul + ambientMul * ambient) * scatterCoef;
+		vL += (light - light * exp(-waterCoefs * dd * rayLength)) / waterCoefs * absorbance;
 		absorbance *= exp(-dd * rayLength * waterCoefs);
 	}
 
@@ -407,11 +409,11 @@ void main() {
 
 		if (np3.y > 0.0) {
 			color += stars(np3);
-			color += drawSun(dot(vIn.lightCol.a * vIn.WsunVec, np3), 0, vIn.lightCol.rgb/150.0, vec3(0.0));
+			color += drawSun(dot(vIn.lightCol.a * vIn.WsunVec, np3), 0, vIn.lightCol.rgb, vec3(0.0));
 		}
 
 		vec3 albedo = toLinear(texture(TEX_GB_COLOR, texcoord).rgb);
-		color += skyFromTex(np3, colortex4)/150.0 + albedo/10.0 * 4.0*ffstep(0.985, -dot(vIn.lightCol.a * vIn.WsunVec, np3));
+		color += skyFromTex(np3, texSkyGradient) + albedo/10.0 * 4.0*ffstep(0.985, -dot(vIn.lightCol.a * vIn.WsunVec, np3));
 		color = color * cloud.a + cloud.rgb;
 
 		outColor3 = clamp(fp10Dither(color * 8.0/3.0, triangularize(noise)), 0.0, 65000.0);
@@ -427,7 +429,7 @@ void main() {
 			float estimatedSunDepth = estimatedDepth / abs(vIn.refractedSunVec.y); // assuming water plane
 
 			vec3 lightColVol = vIn.lightCol.rgb * (1.0 - pow(1.0 - vIn.WsunVec.y, 5.0)); // fresnel
-			vec3 ambientColVol = vIn.ambientUp * 8.0/150.0/3.0 * 0.5 * eyeBrightnessSmooth.y/240.0;
+			vec3 ambientColVol = vIn.ambientUp * 8.0/3.0 * 0.5 * eyeBrightnessSmooth.y/240.0;
 
 			if (isEyeInWater == 0)
 				waterVolumetrics(outColor3, fragpos0, fragpos, estimatedDepth, estimatedSunDepth, Vdiff, noise, totEpsilon, scatterCoef, ambientColVol, lightColVol, dot(np3, vIn.WsunVec));
@@ -506,8 +508,7 @@ void main() {
 			if (diffuseSun > 0.000)
 		#endif
 		{
-			vec3 projectedShadowPosition = mat3(shadowModelView) * p3 + shadowModelView[3].xyz;
-			projectedShadowPosition = diagonal3(shadowProjection) * projectedShadowPosition + shadowProjection[3].xyz;
+			vec3 projectedShadowPosition = diagonal3(shadowProjection) * mul3(shadowModelView, p3) + shadowProjection[3].xyz;
 
 			// apply distortion
 			float distortFactor = calcDistort(projectedShadowPosition.xy);
@@ -594,6 +595,7 @@ void main() {
 				vec3 vec = vIn.lightCol.a * sunVec;
 				float screenShadow = rayTraceShadow(vec, fragpos, noise);
 				shading = min(screenShadow, shading);
+
 				// Out of shadow map
 				if (abs(filtered.y-0.1) < 0.0004)
 					SSS *= screenShadow;
@@ -652,7 +654,8 @@ void main() {
 				lightmap.y = 0.0;
 			#endif
 
-			vec3 custom_lightmap = texture(colortex4, (lightmap * 15.0 + 0.5 + vec2(0.0, 19.0)) * texelSize).rgb * 8.0 / 150.0 / 3.0;
+			vec2 lmcoord = (lightmap * 15.0 + 0.5) / 16.0;
+			vec3 custom_lightmap = texture(texLightMap_deferred, lmcoord).rgb * 8.0/3.0;
 		#endif
 
 		if (hand && heldBlockLightValue > 0.1) {
@@ -695,7 +698,7 @@ void main() {
 			}
 			else {
 				ambientLight += 10.0 * exp(totEpsilon * -8.0);
-				ambientLight *= exp(-totEpsilon * estimatedDepth) * 8.0/150.0/3.0;
+				ambientLight *= exp(-totEpsilon * estimatedDepth) * 8.0/3.0;
 			}
 
 			ambientLight *= mix(caustics, 1.0, 0.85);
@@ -741,8 +744,8 @@ void main() {
 			albedo = vec3(1.0);
 		#endif
 
-		vec3 diffuseFinal = (skyDiffuse/PI * skyDirectLight * 8.0/150.0/3.0 + ambientLight + directLighting + emitting) * albedo;
-		vec3 specularFinal = skySpecular * skyDirectLight * 8.0/150.0/3.0;
+		vec3 diffuseFinal = (skyDiffuse/PI * skyDirectLight * 8.0/3.0 + ambientLight + directLighting + emitting) * albedo;
+		vec3 specularFinal = skySpecular * skyDirectLight * 8.0/3.0;
 
 		#ifndef MC_TEXTURE_FORMAT_LAB_PBR
 			float f0 = 0.04;
@@ -756,7 +759,7 @@ void main() {
 		if (iswater != (isEyeInWater == 1)) {
 			// Bruteforce integration is probably overkill
 			vec3 lightColVol = vIn.lightCol.rgb * (1.0 - pow(1.0 - vIn.WsunVec.y, 5.0)); // fresnel
-			vec3 ambientColVol = vIn.ambientUp * 8.0/150.0/3.0 * 0.5 * eyeBrightnessSmooth.y/240.0;
+			vec3 ambientColVol = vIn.ambientUp * 8.0/3.0 * 0.5 * eyeBrightnessSmooth.y/240.0;
 
 			if (isEyeInWater == 0)
 				waterVolumetrics(outColor3, fragpos0, fragpos, estimatedDepth, estimatedSunDepth, Vdiff, noise, totEpsilon, scatterCoef, ambientColVol, lightColVol, dot(np3, vIn.WsunVec));

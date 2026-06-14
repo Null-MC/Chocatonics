@@ -14,8 +14,11 @@ vec2 sphereToCarte(vec3 dir) {
 }
 
 vec3 skyFromTex(vec3 pos, sampler2D sampler) {
-	vec2 p = sphereToCarte(pos);
-	return texture(sampler, p * texelSize * 256.0 + vec2(18.5, 1.5) * texelSize).rgb;
+	return texture(sampler, sphereToCarte(pos)).rgb;
+}
+
+vec4 skyCloudsFromTex(vec3 pos, sampler2D sampler) {
+	return texture(sampler, sphereToCarte(pos));
 }
 
 vec4 texture2D_bicubic(sampler2D tex, vec2 uv) {
@@ -41,9 +44,4 @@ vec4 texture2D_bicubic(sampler2D tex, vec2 uv) {
                         g1x * texture(tex, p1)) +
            g1(fuv.y) * (g0x * texture(tex, p2)  +
                         g1x * texture(tex, p3));
-}
-
-vec4 skyCloudsFromTex(vec3 pos, sampler2D sampler) {
-	vec2 p = sphereToCarte(pos);
-	return texture(sampler, p * texelSize * 256.0 + vec2(18.5 + 257.0, 1.5) * texelSize);
 }

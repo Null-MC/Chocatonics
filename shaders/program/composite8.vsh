@@ -8,8 +8,9 @@ out vec2 texcoord;
 flat out float exposureA;
 flat out float tempOffsets;
 
-uniform sampler2D colortex4;
 uniform int frameCounter;
+
+#include "/lib/sceneBuffer.glsl"
 
 #include "/lib/util.glsl"
 
@@ -19,5 +20,5 @@ void main() {
 	texcoord = gl_MultiTexCoord0.xy;
 
 	tempOffsets = HaltonSeq2(frameCounter % 10000);
-	exposureA = texelFetch(colortex4, ivec2(10, 37), 0).r;
+	exposureA = scene.exposure;
 }

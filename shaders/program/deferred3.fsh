@@ -17,6 +17,7 @@ uniform sampler2D depthtex0;
 uniform sampler2D noisetex;
 uniform sampler2D texBlueNoise;
 uniform sampler2D colortex4;
+uniform sampler2D texSkyGradient;
 
 uniform vec3 sunVec;
 uniform vec2 texelSize;
@@ -50,7 +51,7 @@ void main() {
 
 		float noise = blueNoise(gl_FragCoord.xy, frameCounter);
 		vec3 fragpos = toScreenSpace(vec3(halfResTC * texelSize, 1.0));
-		outColor0 = renderClouds(fragpos, vec3(0.0), noise, vIn.sunColor/150.0, vIn.moonColor/150.0, vIn.avgAmbient/150.0);
+		outColor0 = renderClouds(fragpos, vec3(0.0), noise, vIn.sunColor, vIn.moonColor, vIn.avgAmbient);
 	#else
 		outColor0 = vec4(0.0, 0.0, 0.0, 1.0);
 	#endif

@@ -28,6 +28,7 @@ uniform sampler2DShadow shadowtex0HW;
 uniform sampler2D colortex2;
 uniform sampler2D colortex3;
 uniform sampler2D colortex4;
+uniform sampler2D texSkyGradient;
 
 uniform vec3 sunVec;
 uniform float far;
@@ -136,9 +137,9 @@ mat2x3 getVolumetricRays(float dither, vec3 fragpos, vec4 lightCol) {
 	ambientLight += vIn.ambientB * saturate(ambientCoefs.z);
 	ambientLight += vIn.ambientF * saturate(-ambientCoefs.z);
 
-	vec3 skyCol0 = ambientLight * eyeBrightnessSmooth.y/vec3(240.0) * Ambient_Mult*2.0 * 8.0/150.0/3.0;
+	vec3 skyCol0 = ambientLight * eyeBrightnessSmooth.y/vec3(240.0) * Ambient_Mult*2.0 * 8.0/3.0;
 	// Makes fog more white idk how to simulate it correctly
-	vec3 sunColor = lightCol.rgb * 8.0/150.0/3.0;
+	vec3 sunColor = lightCol.rgb * 8.0/3.0;
 	skyCol0 = skyCol0.rgb;
 
 	vec3 rC = vec3(fog_coefficientRayleighR*1e-6, fog_coefficientRayleighG*1e-5, fog_coefficientRayleighB*1e-5);
@@ -185,7 +186,7 @@ mat2x3 getVolumetricRays(float dither, vec3 fragpos, vec4 lightCol) {
 		float density = densityVol * ATMOSPHERIC_DENSITY * mu * 300.0;
 
 		//Just air
-		vec2 airCoef = exp2(-max(progressW.y-SEA_LEVEL,0.0)/vec2(8.0e3, 1.2e3)*vec2(6.,7.0))*6.0;
+		vec2 airCoef = exp2(-max(progressW.y - SEA_LEVEL, 0.0) / vec2(8.0e3, 1.2e3) * vec2(6.0, 7.0)) * 6.0;
 
 		//Pbr for air, yolo mix between mie and rayleigh for water droplets
 		vec3 rL = rC*airCoef.x;
@@ -233,7 +234,7 @@ void waterVolumetrics(inout vec3 inColor, vec3 rayStart, vec3 rayEnd, float estE
 
 	// limit ray length at 32 blocks for performance and reducing integration error
 	// you can't see above this anyway
-	float maxZ = min(rayLength,32.0)/(1e-8+rayLength);
+	float maxZ = min(rayLength,32.0) / (1e-8+rayLength);
 	dV *= maxZ;
 	vec3 dVWorld = mat3(gbufferModelViewInverse) * (rayEnd - rayStart) * maxZ;
 	rayLength *= maxZ;
@@ -242,22 +243,22 @@ void waterVolumetrics(inout vec3 inColor, vec3 rayStart, vec3 rayEnd, float estE
 	vec3 vL = vec3(0.0);
 	float phase = phaseg(VdotL, Dirt_Mie_Phase);
 	float expFactor = 11.0;
-	vec3 progressW = gbufferModelViewInverse[3].xyz+cameraPosition;
+	vec3 progressW = gbufferModelViewInverse[3].xyz + cameraPosition;
 //	vec3 WsunVec = mat3(gbufferModelViewInverse) * sunVec * vIn.lightCol.a;
 
 	for (int i = 0; i < spCount; i++) {
 		float d = (pow(expFactor, float(i+dither)/float(spCount))/expFactor - 1.0/expFactor)/(1-1.0/expFactor);		// exponential step position (0-1)
 		float dd = pow(expFactor, float(i+dither)/float(spCount)) * log(expFactor) / float(spCount)/(expFactor-1.0);	//step length (derivative)
 		vec3 spPos = start.xyz + dV*d;
-		progressW = gbufferModelViewInverse[3].xyz+cameraPosition + d*dVWorld;
+		progressW = gbufferModelViewInverse[3].xyz + cameraPosition + d*dVWorld;
 
 		// project into biased shadowmap space
 		float distortFactor = calcDistort(spPos.xy);
-		vec3 pos = vec3(spPos.xy*distortFactor, spPos.z);
+		vec3 pos = vec3(spPos.xy * distortFactor, spPos.z);
 		float sh = 1.0;
 
 		if (abs(pos.x) < 1.0-0.5/2048. && abs(pos.y) < 1.0-0.5/2048){
-			pos = pos*vec3(0.5,0.5,0.5/6.0)+0.5;
+			pos = pos * vec3(0.5, 0.5, 0.5/6.0) + 0.5;
 			sh = texture(shadowtex0HW, pos);
 		}
 
@@ -299,13 +300,14 @@ void main() {
 		vec3 scatterCoef = Dirt_Amount * vec3(Dirt_Scatter_R, Dirt_Scatter_G, Dirt_Scatter_B);
 
 		float estEyeDepth = saturate((14.0 - eyeBrightnessSmooth.y/255.0 * 16.0) / 14.0);
+
 		estEyeDepth *= estEyeDepth * estEyeDepth * 34.0;
 		#ifndef lightMapDepthEstimation
 			estEyeDepth = max(Water_Top_Layer - cameraPosition.y, 0.0);
 		#endif
 
 		vec3 vl = vec3(0.0);
-		waterVolumetrics(vl, vec3(0.0), fragpos, estEyeDepth, estEyeDepth, length(fragpos), noise, totEpsilon, scatterCoef, vIn.ambientUp * 8.0/150.0/3.0*0.5, vIn.lightCol.rgb * 8.0/150.0/3.0 * (1.0 - pow(1.0 - sunElevation * vIn.lightCol.a, 5.0)), dot(normalize(fragpos), normalize(sunVec)));
+		waterVolumetrics(vl, vec3(0.0), fragpos, estEyeDepth, estEyeDepth, length(fragpos), noise, totEpsilon, scatterCoef, vIn.ambientUp * 8.0/3.0 * 0.5, vIn.lightCol.rgb * 8.0/3.0 * (1.0 - pow(1.0 - sunElevation * vIn.lightCol.a, 5.0)), dot(normalize(fragpos), normalize(sunVec)));
 
 		color = vec4(vl, 1.0);
 	}

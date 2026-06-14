@@ -1,9 +1,11 @@
 #define NO_SHADOW_MAPPING
 
-uniform sampler2D colortex4;
+uniform sampler2D texSkyGradientClouds;
 
 uniform vec3 sunPosition;
 uniform float sunElevation;
+
+#include "/lib/sceneBuffer.glsl"
 
 #include "/lib/bicubic.glsl"
 #include "/lib/sky_gradient.glsl"
@@ -16,11 +18,11 @@ vec3 get_sun_direction() {
 }
 
 vec3 get_sun_color(vec3 playerPos, vec3 direction) {
-    return texelFetch(colortex4, ivec2(6, 37), 0).rgb / 150.0;
+    return scene.lightSourceColor;
 }
 
 vec3 get_sky_color(vec3 playerPos, vec3 direction) {
-    vec3 color = skyFromTex(direction, colortex4) / 150.0;
+    vec3 color = skyCloudsFromTex(direction, texSkyGradientClouds).rgb;
     return clamp(color * 8.0/3.0, 0.0, 65000.0);
 }
 

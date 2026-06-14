@@ -2,22 +2,27 @@
 
 // Vignetting, applies bloom, applies exposure and tonemaps the final image
 
+#define TEX_DEBUG texLightMap_forward
+
 #include "/lib/common.glsl"
 #include "/lib/settings.glsl"
 
 
-in VertexData {
-    vec2 texcoord;
-} vIn;
+in vec2 texcoord;
 
 uniform sampler2D colortex7;
 
+// TODO: DEBUG
+#ifdef TEX_DEBUG
+    uniform sampler2D TEX_DEBUG;
+#endif
+
 uniform vec2 texelSize;
-uniform float viewWidth;
-uniform float viewHeight;
+//uniform float viewWidth;
+//uniform float viewHeight;
 uniform float frameTimeCounter;
-uniform int frameCounter;
-uniform int isEyeInWater;
+//uniform int frameCounter;
+//uniform int isEyeInWater;
 
 #include "/lib/color_transforms.glsl"
 #include "/lib/color_dither.glsl"
@@ -75,17 +80,17 @@ vec4 SampleTextureCatmullRom(sampler2D tex, vec2 uv, vec2 texSize) {
 
 void main() {
     #ifdef BICUBIC_UPSCALING
-        vec3 col = SampleTextureCatmullRom(colortex7, vIn.texcoord, 1.0/texelSize).rgb;
+        vec3 col = SampleTextureCatmullRom(colortex7, texcoord, 1.0/texelSize).rgb;
     #else
-        vec3 col = texture(colortex7, vIn.texcoord).rgb;
+        vec3 col = texture(colortex7, texcoord).rgb;
     #endif
 
     #ifdef CONTRAST_ADAPTATIVE_SHARPENING
         // Weights : 1 in the center, 0.5 middle, 0.25 corners
-        vec3 albedoCurrent1 = texture(colortex7, vIn.texcoord + vec2( texelSize.x, texelSize.y) / MC_RENDER_QUALITY*0.5).rgb;
-        vec3 albedoCurrent2 = texture(colortex7, vIn.texcoord + vec2( texelSize.x,-texelSize.y) / MC_RENDER_QUALITY*0.5).rgb;
-        vec3 albedoCurrent3 = texture(colortex7, vIn.texcoord + vec2(-texelSize.x,-texelSize.y) / MC_RENDER_QUALITY*0.5).rgb;
-        vec3 albedoCurrent4 = texture(colortex7, vIn.texcoord + vec2(-texelSize.x, texelSize.y) / MC_RENDER_QUALITY*0.5).rgb;
+        vec3 albedoCurrent1 = texture(colortex7, texcoord + vec2( texelSize.x, texelSize.y) / MC_RENDER_QUALITY*0.5).rgb;
+        vec3 albedoCurrent2 = texture(colortex7, texcoord + vec2( texelSize.x,-texelSize.y) / MC_RENDER_QUALITY*0.5).rgb;
+        vec3 albedoCurrent3 = texture(colortex7, texcoord + vec2(-texelSize.x,-texelSize.y) / MC_RENDER_QUALITY*0.5).rgb;
+        vec3 albedoCurrent4 = texture(colortex7, texcoord + vec2(-texelSize.x, texelSize.y) / MC_RENDER_QUALITY*0.5).rgb;
 
         vec3 m1 = -0.5/3.5*col + albedoCurrent1/3.5 + albedoCurrent2/3.5 + albedoCurrent3/3.5 + albedoCurrent4/3.5;
 
@@ -102,5 +107,13 @@ void main() {
     vec3 diff = col - lum;
     col = col + diff * (-lum * CROSSTALK + SATURATION);
 
-    gl_FragColor.rgb = saturate(int8Dither(col, vIn.texcoord));
+    // TODO: DEBUG
+    #ifdef TEX_DEBUG
+        if (all(lessThan(gl_FragCoord.xy, ivec2(256)))) {
+            col = texture(TEX_DEBUG, gl_FragCoord.xy/256.0, 0).rgb;
+            col = pow(col / (col + 1.0), vec3(1.0/2.2));
+        }
+    #endif
+
+    gl_FragColor.rgb = saturate(int8Dither(col, texcoord));
 }

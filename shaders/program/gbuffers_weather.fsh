@@ -10,11 +10,13 @@ in VertexData {
 } vIn;
 
 uniform sampler2D gtexture;
-uniform sampler2D gaux1;
+uniform sampler2D texLightMap_forward;
 
 uniform vec2 texelSize;
 uniform mat4 gbufferProjectionInverse;
 //uniform float alphaTestRef;
+
+#include "/lib/sceneBuffer.glsl"
 
 
 /* RENDERTARGETS: 2 */
@@ -27,7 +29,9 @@ void main() {
 //	if (outColor2.a < alphaTestRef) discard;
 
 	vec3 albedo = toLinear(outColor2.rgb * vIn.color.rgb);
-	vec3 ambient = texture(gaux1, (vIn.lmtexcoord.zw * 15.0 + 0.5) * texelSize).rgb;
 
-	outColor2.rgb = dot(albedo, vec3(1.0)) * ambient * 10.0/3.0/150.0 * 0.1;
+	vec2 lmcoord = (vIn.lmtexcoord.zw * 15.0 + 0.5) / 16.0;
+	vec3 ambient = texture(texLightMap_forward, lmcoord).rgb;
+
+	outColor2.rgb = dot(albedo, vec3(1.0)) * ambient * 10.0/3.0 * 0.1;
 }

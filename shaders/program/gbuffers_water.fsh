@@ -21,6 +21,8 @@ uniform sampler2DShadow shadowtex0HW;
 uniform sampler2D gaux2;
 uniform sampler2D texWave;
 uniform sampler2D gaux1;
+uniform sampler2D texLightMap_forward;
+uniform sampler2D texSkyGradientClouds;
 uniform sampler2D depthtex1;
 
 uniform vec4 lightCol;
@@ -54,6 +56,8 @@ uniform vec3 previousCameraPosition;
 uniform int isEyeInWater;
 uniform int frameCounter;
 uniform int framemod8;
+
+#include "/lib/sceneBuffer.glsl"
 
 #include "/lib/ign.glsl"
 #include "/lib/ggx.glsl"
@@ -217,7 +221,7 @@ void main() {
 		float NdotU = dot(upVec, normal);
 		float diffuseSun = saturate(NdotL);
 
-		vec3 direct = texelFetch(gaux1, ivec2(6, 37), 0).rgb / PI;
+		vec3 direct = scene.lightSourceColor / PI;
 
 		float shading = 1.0;
 
@@ -255,8 +259,9 @@ void main() {
 
 		direct *= (iswater > 0.9 ? 0.2 : 1.0) * diffuseSun * vIn.lmtexcoord.w;
 
-		vec3 diffuseLight = direct + texture(gaux1, (vIn.lmtexcoord.zw * 15.0 + 0.5) * texelSize).rgb;
-		vec3 color = diffuseLight * albedo * 8.0 / 150.0 / 3.0;
+		vec2 lmcoord = (vIn.lmtexcoord.zw * 15.0 + 0.5) / 16.0;
+		vec3 diffuseLight = direct + texture(texLightMap_forward, lmcoord).rgb;
+		vec3 color = diffuseLight * albedo * 8.0/3.0;
 
 		if (iswater > 0.0) {
 			float f0 = iswater > 0.1 ? 0.02 : 0.05 * (1.0 - outColor2.a);
@@ -274,9 +279,10 @@ void main() {
 				roughness = 0.1;
 			}
 
-			vec3 wrefl = mat3(gbufferModelViewInverse) * reflectedVector;
-			vec3 sky_c = mix(skyCloudsFromTex(wrefl, gaux1).rgb, texture(gaux1, (vIn.lmtexcoord.zw * 15.0 + 0.5) * texelSize).rgb * 0.5, isEyeInWater);
-			sky_c.rgb *= vIn.lmtexcoord.w * vIn.lmtexcoord.w * 255.0*255.0/240.0/240.0 / 150.0*8.0/3.0;
+			vec3 localReflectDir = mat3(gbufferModelViewInverse) * reflectedVector;
+			vec2 lmcoord = (vIn.lmtexcoord.zw * 15.0 + 0.5) * texelSize;
+			vec3 sky_c = mix(skyCloudsFromTex(localReflectDir, texSkyGradientClouds).rgb, texture(texLightMap_forward, lmcoord).rgb * 0.5, isEyeInWater);
+			sky_c.rgb *= vIn.lmtexcoord.w * vIn.lmtexcoord.w * (255.0*255.0)/(240.0*240.0) * 8.0/3.0;
 
 			vec4 reflection = vec4(sky_c.rgb, 0.0);
 			#ifdef SCREENSPACE_REFLECTIONS
@@ -297,11 +303,11 @@ void main() {
 
 			reflection.rgb = mix(sky_c.rgb, reflection.rgb, reflection.a);
 
-			vec3 lightCol2 = texelFetch(gaux1, ivec2(6, 37), 0).rgb / PI;
+			vec3 lightCol2 = scene.lightSourceColor / PI;
 			#ifdef SUN_MICROFACET_SPECULAR
-				vec3 sunSpec = GGX(normal, -normalize(fragpos), lightSign*sunVec, rainStrength*0.2 + roughness + 0.05+saturate(lightSign * -0.15), f0) * lightCol2 * 8.0/3.0/150.0;
+				vec3 sunSpec = GGX(normal, -normalize(fragpos), lightSign*sunVec, rainStrength*0.2 + roughness + 0.05+saturate(lightSign * -0.15), f0) * lightCol2 * 8.0/3.0;
 			#else
-				vec3 sunSpec = drawSun(dot(lightSign * sunVec, reflectedVector), 0.0, lightCol2, vec3(0.0)) * fresnel * 8.0/3.0/150.0;
+				vec3 sunSpec = drawSun(dot(lightSign * sunVec, reflectedVector), 0.0, lightCol2, vec3(0.0)) * fresnel * 8.0/3.0;
 			#endif
 			sunSpec *= 1.0 - 0.9*rainStrength;
 
