@@ -55,6 +55,25 @@ screen.MATERIALS=PBR Materials
         option.MAT_EMISSION_CURVE=Curve
         suffix.MAT_EMISSION_CURVE=%
 
+    screen.MAT_SPECULAR=Specular
+
+        option.MAT_SPECULAR_ENABLED=Enabled
+
+
+screen.REFLECTIONS=Reflections
+
+    option.REFLECTION_ENABLED=Enabled
+    option.REFLECTION_ENABLED.comment=Can be really expensive at high resolutions/render quality, especially on ice
+
+    option.REFLECTION_QUARTER_RES_DEPTH=Quarter-Res Tracing
+    option.REFLECTION_QUARTER_RES_DEPTH.comment=Uses a quarter resolution depth buffer to raymarch screen space reflections, improves performance but may introduce artifacts
+
+    option.REFLECTION_QUALITY=Quality
+    option.REFLECTION_QUALITY.comment=Adjust the quality of the screenspace reflections.
+
+    option.REFLECTION_ROUGH=Roughness Scattering
+    option.REFLECTION_ROUGH.comment=Turns the roughness GGXVNDF ON. sizable performance impact, and introduces alot of noise.
+
 
 screen.TAA_OPTIONS=TAA
 

@@ -1,3 +1,7 @@
+vec4 blueNoise(sampler2D tex, const in vec2 coord) {
+    return texelFetch(tex, ivec2(coord) % 512, 0);
+}
+
 vec4 blueNoise(const in vec2 coord) {
     return texelFetch(noisetex, ivec2(coord) % 512, 0);
 }

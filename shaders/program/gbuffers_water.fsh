@@ -22,7 +22,7 @@ uniform sampler2D gaux1;
 uniform sampler2D gaux2;
 uniform sampler2D texWave;
 uniform sampler2D depthtex1;
-uniform sampler2D colortex12;
+uniform sampler2D TEX_DEPTH_QRES;
 
 uniform vec4 lightCol;
 uniform vec3 sunVec;
@@ -70,10 +70,6 @@ uniform int framemod8;
 #include "/lib/stars.glsl"
 
 
-float invLinZ(float lindepth) {
-	return -((2.0*near/lindepth)-far-near)/(far-near);
-}
-
 vec3 nvec3(vec4 pos) {
     return pos.xyz / pos.w;
 }
@@ -82,9 +78,10 @@ vec4 nvec4(vec3 pos) {
     return vec4(pos.xyz, 1.0);
 }
 
-vec3 rayTrace(vec3 dir,vec3 position,float dither, float fresnel) {
-    float quality = mix(15,SSR_STEPS,fresnel);
+vec3 rayTrace(vec3 dir, vec3 position, float dither, float fresnel) {
+    float quality = mix(15, REFLECTION_QUALITY, fresnel);
     vec3 clipPosition = toClipSpace3(position);
+
 	float rayLength = ((position.z + dir.z * far*sqrt(3.)) > -near) ?
        (-near -position.z) / dir.z : far*sqrt(3.);
 
@@ -103,10 +100,10 @@ vec3 rayTrace(vec3 dir,vec3 position,float dither, float fresnel) {
 	spos.xy += taa_offsets[framemod8] * texelSize * 0.5 / RENDER_SCALE;
 
     for (int i = 0; i <= int(quality); i++) {
-		#ifdef USE_QUARTER_RES_DEPTH
+		#ifdef REFLECTION_QUARTER_RES_DEPTH
 			// decode depth buffer
-			float sp = sqrt(texelFetch(colortex12, ivec2(spos.xy/texelSize/4), 0).r / 65000.0);
-			sp = invLinZ(sp);
+			float sp = texelFetch(TEX_DEPTH_QRES, ivec2(spos.xy/texelSize/4), 0).r;
+			sp = invLinZ(sqrt(sp / 65000.0), near, far);
 
 			if (sp <= max(maxZ, minZ) && sp >= min(maxZ, minZ)) {
 				return vec3(spos.xy / RENDER_SCALE, sp);
@@ -280,7 +277,7 @@ void main() {
 			sky_c.rgb *= vIn.lmtexcoord.w * vIn.lmtexcoord.w * 255.0*255.0/240.0/240.0 / 150.0*8.0/3.0;
 
 			vec4 reflection = vec4(sky_c.rgb, 0.0);
-			#ifdef SCREENSPACE_REFLECTIONS
+			#ifdef REFLECTION_ENABLED
 				vec3 rtPos = rayTrace(reflectedVector, fragpos.xyz, blueNoise(gl_FragCoord.xy, frameCounter), fresnel);
 
 				if (rtPos.z < 1.0) {
@@ -299,11 +296,11 @@ void main() {
 			reflection.rgb = mix(sky_c.rgb, reflection.rgb, reflection.a);
 
 			vec3 lightCol2 = texelFetch(gaux1, ivec2(6, 37), 0).rgb / PI;
-			#ifdef SUN_MICROFACET_SPECULAR
+//			#ifdef SUN_MICROFACET_SPECULAR
 				vec3 sunSpec = GGX(normal, -normalize(fragpos), lightSign*sunVec, rainStrength*0.2 + roughness + 0.05+saturate(lightSign * -0.15), f0) * lightCol2 * 8.0/3.0/150.0;
-			#else
-				vec3 sunSpec = drawSun(dot(lightSign * sunVec, reflectedVector), 0.0, lightCol2, vec3(0.0)) * fresnel * 8.0/3.0/150.0;
-			#endif
+//			#else
+//				vec3 sunSpec = drawSun(dot(lightSign * sunVec, reflectedVector), 0.0, lightCol2, vec3(0.0)) * fresnel * 8.0/3.0/150.0;
+//			#endif
 			sunSpec *= 1.0 - 0.9*rainStrength;
 
 			vec3 reflected = reflection.rgb * fresnel + shading * sunSpec;

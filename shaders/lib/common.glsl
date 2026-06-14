@@ -58,8 +58,12 @@ float facos(const in float sx) {
     return sx > 0.0 ? a : PI - a;
 }
 
-float linZ(float dist, float near, float far) {
-    return (2.0 * near) / (far + near - dist * (far - near));
+float linZ(float depth, float near, float far) {
+    return (2.0 * near) / (far + near - depth * (far - near));
+}
+
+float invLinZ(float depth, float near, float far) {
+    return -((2.0*near / depth) - far - near) / (far - near);
 }
 
 float ld_reverse(float depth, float y, float z) {
@@ -68,7 +72,13 @@ float ld_reverse(float depth, float y, float z) {
 
 float luma(const in vec3 color) {return dot(color, lumCoeff);}
 
+float minOf(const in vec3 vec) {return min(min(vec[0], vec[1]), vec[2]);}
+
 float maxOf(const in vec2 vec) {return max(vec[0], vec[1]);}
+
+float square(float x) {
+    return x * x;
+}
 
 vec3 toLinear(const in vec3 sRGB){
     return sRGB * (sRGB * (sRGB * 0.305306011 + 0.682171111) + 0.012522878);
@@ -84,6 +94,7 @@ float pow5(const in float value) {
 #define TEX_GB_NORMAL colortex9
 #define TEX_GB_SPECULAR colortex10
 #define TEX_GB_WORLD colortex11
+#define TEX_DEPTH_QRES colortex12
 
 
 const vec2[8] taa_offsets = vec2[8](

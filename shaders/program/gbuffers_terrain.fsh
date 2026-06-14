@@ -233,8 +233,19 @@ void main() {
 	#else
 		const float roughness = 1.0;
 		const float f0 = 0.04;
-		const float sss = 0.0;
-		const float emission = 0.0;
+		float emission = 0.0;
+		float sss = 0.0;
+
+		if (vIn.normalMat.a < 0.51) {
+			sss = 0.5;
+		}
+		else if (vIn.normalMat.a < 0.61) {
+			sss = 0.2;
+		}
+		else if (vIn.normalMat.a < 0.91) {
+			vec3 albedo = toLinear(color.rgb);
+			emission = saturate(luma(albedo) * 3.0);
+		}
 	#endif
 
 	outColor = color;

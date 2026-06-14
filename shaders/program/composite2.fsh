@@ -41,6 +41,11 @@ uniform sampler2DShadow shadowtex0HW;
 	uniform sampler2D shadowcolor0;
 #endif
 
+#ifdef REFLECTION_ENABLED
+	uniform sampler2D gaux2;
+	uniform sampler2D TEX_DEPTH_QRES;
+#endif
+
 //#ifdef PH_ENABLE_GI
 //	uniform sampler2D texPhotonicsIndirect;
 //#endif
@@ -50,8 +55,9 @@ uniform int frameCounter;
 uniform int isEyeInWater;
 uniform float far;
 uniform float near;
-uniform float frameTimeCounter;
+//uniform float wetness;
 uniform float rainStrength;
+uniform float frameTimeCounter;
 uniform mat4 gbufferProjection;
 uniform mat4 gbufferProjectionInverse;
 uniform mat4 gbufferModelViewInverse;
@@ -68,6 +74,7 @@ uniform vec2 texelSize;
 uniform vec3 cameraPosition;
 uniform vec3 sunVec;
 uniform ivec2 eyeBrightnessSmooth;
+uniform int framemod8;
 
 
 vec3 toScreenSpacePrev(vec3 p) {
@@ -93,6 +100,7 @@ vec3 toScreenSpacePrev(vec3 p) {
 #include "/lib/sky_gradient.glsl"
 #include "/lib/stars.glsl"
 #include "/lib/volumetricClouds.glsl"
+#include "/lib/specular.glsl"
 
 #if defined(PHOTONICS_BLOCK_LIGHT_ENABLED) || defined(PHOTONICS_HAND_LIGHT_ENABLED) || defined(PHOTONICS_GI_ENABLED)
 	#include "/photonics/samplers.glsl"
@@ -444,10 +452,10 @@ void main() {
 		vec3 albedo = toLinear(color.rgb);
 
 		vec4 normalData = texture(TEX_GB_NORMAL, texcoord);
-		vec3 geo_normal = mat3(gbufferModelViewInverse) * OctDecode(normalData.xy);
-		vec3 tex_normal = mat3(gbufferModelViewInverse) * OctDecode(normalData.zw);
+//		vec3 geo_normal = mat3(gbufferModelViewInverse) * OctDecode(normalData.xy);
+		vec3 tex_normal = OctDecode(normalData.zw);
 
-		vec3 normal = tex_normal;
+		vec3 normal = mat3(gbufferModelViewInverse) * tex_normal;
 
 		vec4 specularData = texture(TEX_GB_SPECULAR, texcoord);
 		float emissive = specularData.a;
@@ -467,16 +475,6 @@ void main() {
 			NdotL = dot(normal, vIn.refractedSunVec);
 
 		float diffuseSun = saturate(NdotL);
-		float specularSun = 0.0;
-
-		#ifdef MC_TEXTURE_FORMAT_LAB_PBR
-			float roughness = specularData.r*specularData.r;
-			float f0 = specularData.g;
-			if (f0 < EPSILON) f0 = 0.04;
-
-			specularSun = GGX(tex_normal, -np3, vIn.WsunVec, roughness, f0);
-			specularSun *= 1.0 - 0.9*rainStrength;
-		#endif
 
 		vec3 filtered = vec3(1.412, 1.0, 0.0);
 		if (!hand) {
@@ -573,7 +571,7 @@ void main() {
 				SSS = exp(-filtered.y*11.0*extinction) + 3.0*exp(-filtered.y*11./3.*extinction);
 				float scattering = saturate((0.7+0.3*PI * phaseg(dot(np3, vIn.WsunVec), 0.85)) * 1.5/4.0 * sssAmount);
 				SSS *= scattering;
-				shading *= 1.0 - sssAmount;
+				diffuseSun *= 1.0 - sssAmount;
 				SSS *= sqrt(lightmap.y);
 			}
 
@@ -584,12 +582,12 @@ void main() {
 				SSS = exp(-filtered.y*11.0*extinction) + 3.0*exp(-filtered.y*11./3.*extinction);
 				float scattering = saturate((0.7+0.3*PI * phaseg(dot(np3, vIn.WsunVec), 0.85)) * 1.26/4.0 * sssAmount);
 				SSS *= scattering;
-				shading *= 1.0 - sssAmount;
+				diffuseSun *= 1.0 - sssAmount;
 				SSS *= sqrt(lightmap.y);
 			}
 		#endif
 
-		if ((diffuseSun*shading > 0.001 || abs(filtered.y-0.1) < 0.0004) && !hand) {
+		if ((diffuseSun * shading > 0.001 || abs(filtered.y-0.1) < 0.0004) && !hand) {
 			#ifdef SCREENSPACE_CONTACT_SHADOWS
 				vec3 vec = vIn.lightCol.a * sunVec;
 				float screenShadow = rayTraceShadow(vec, fragpos, noise);
@@ -695,7 +693,7 @@ void main() {
 			}
 			else {
 				ambientLight += 10.0 * exp(totEpsilon * -8.0);
-				ambientLight *= exp(-totEpsilon * estimatedDepth) * 8.0/150.0/3.0;
+				ambientLight *= exp(-totEpsilon * estimatedDepth) * 8.0/3.0 / 150.0;
 			}
 
 			ambientLight *= mix(caustics, 1.0, 0.85);
@@ -718,48 +716,43 @@ void main() {
 			#endif
 		}
 
-		#ifdef MC_TEXTURE_FORMAT_LAB_PBR
-			float emitting = pow(emissive, Emission_Curve) * 3.0 * MAT_EMISSION_SCALE;
-		#else
-			bool is_emissive = abs(mat - 0.9) < 0.01;
-
-			float emitting = 0.0;
-			if (is_emissive || (hand && heldBlockLightValue > 0.1))
-			emitting = pow(luma(albedo), Emission_Curve) * 3.0 * MAT_EMISSION_SCALE;
-		#endif
+		float emitting = pow(emissive, Emission_Curve) * 3.0 * MAT_EMISSION_SCALE;
 
 		// combine all light sources
 		vec3 skyDiffuse = vec3(shading * diffuseSun);
-		vec3 skySpecular = vec3(shading * specularSun);
+
 		#ifdef SHADOW_COLORED
 			skyDiffuse *= shadowColor;
-			skySpecular *= shadowColor;
 		#endif
+
 		skyDiffuse += SSS;
 
 		#ifdef DEBUG_WHITEWORLD
 			albedo = vec3(1.0);
 		#endif
 
-		vec3 diffuseFinal = (skyDiffuse/PI * skyDirectLight * 8.0/150.0/3.0 + ambientLight + directLighting + emitting) * albedo;
-		vec3 specularFinal = skySpecular * skyDirectLight * 8.0/150.0/3.0;
+		outColor3 = (skyDiffuse/PI * skyDirectLight * 8.0/3.0 / 150.0 + ambientLight + directLighting + emitting) * albedo;
 
-		#ifndef MC_TEXTURE_FORMAT_LAB_PBR
-			float f0 = 0.04;
+		#ifdef MAT_SPECULAR_ENABLED
+			#ifdef MC_TEXTURE_FORMAT_LAB_PBR
+				float roughness = square(1.0 - specularData.r);
+				float f0 = specularData.g;
+				if (f0 < EPSILON) f0 = 0.04;
+			#else
+				float roughness = 1.0;
+				float f0 = 0.04;
+			#endif
+
+			vec2 noise2 = blueNoise(texBlueNoise, gl_FragCoord.xy).rg;
+			MaterialReflections(outColor3, roughness, vec3(f0), albedo, vIn.WsunVec, vIn.lightCol.rgb, shading * diffuseSun, lightmap.y, normal, np3, fragpos, vec3(noise2, noise), hand);
 		#endif
 
-//		float NoV = max(dot(tex_normal, -np3), 0.0);
-//		float F = schlick(NoV, f0, 1.0, roughness);
-//		outColor3 = mix(diffuseFinal, specularFinal, F);
-		outColor3 = diffuseFinal * (1.0 - f0) + specularFinal;
-
-		if (iswater != (isEyeInWater == 1)) {
+		if (iswater && isEyeInWater == 0) {
 			// Bruteforce integration is probably overkill
 			vec3 lightColVol = vIn.lightCol.rgb * (1.0 - pow(1.0 - vIn.WsunVec.y, 5.0)); // fresnel
-			vec3 ambientColVol = vIn.ambientUp * 8.0/150.0/3.0 * 0.5 * eyeBrightnessSmooth.y/240.0;
+			vec3 ambientColVol = vIn.ambientUp * 8.0/3.0 / 150.0 * 0.5 * eyeBrightnessSmooth.y/240.0;
 
-			if (isEyeInWater == 0)
-				waterVolumetrics(outColor3, fragpos0, fragpos, estimatedDepth, estimatedSunDepth, Vdiff, noise, totEpsilon, scatterCoef, ambientColVol, lightColVol, dot(np3, vIn.WsunVec));
+			waterVolumetrics(outColor3, fragpos0, fragpos, estimatedDepth, estimatedSunDepth, Vdiff, noise, totEpsilon, scatterCoef, ambientColVol, lightColVol, dot(np3, vIn.WsunVec));
 		}
 	}
 }

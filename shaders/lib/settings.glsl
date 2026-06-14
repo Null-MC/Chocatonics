@@ -18,6 +18,8 @@
 #define MAT_EMISSION_SCALE 10 // [1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49 50 51 52 53 54 55 56 57 58 59 60 61 62 63 64 65 66 67 68 69 70 71 72 73 74 75 76 77 78 79 80 81 82 83 84 85 86 87 88 89 90 91 92 93 94 95 96 97 98 99 100]
 #define MAT_EMISSION_CURVE 50 // [1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49 50 51 52 53 54 55 56 57 58 59 60 61 62 63 64 65 66 67 68 69 70 71 72 73 74 75 76 77 78 79 80 81 82 83 84 85 86 87 88 89 90 91 92 93 94 95 96 97 98 99 100]
 
+#define MAT_SPECULAR_ENABLED // reflections on blocks. REQUIRES A PBR RESOURCEPACK.
+
 
 #define SEPARATE_AO
 #define Texture_MipMap_Bias -1.00 // Uses a another mip level for textures. When reduced will increase texture detail but may induce a lot of shimmering. [-5.00 -4.75 -4.50 -4.25 -4.00 -3.75 -3.50 -3.25 -3.00 -2.75 -2.50 -2.25 -2.00 -1.75 -1.50 -1.25 -1.00 -0.75 -0.50 -0.25 0.00 0.25 0.50 0.75 1.00 1.25 1.50 1.75 2.00 2.25 2.50 2.75 3.00 3.25 3.50 3.75 4.00 4.25 4.50 4.75 5.00]
@@ -77,10 +79,13 @@
 
 #define Underwater_Fog_Density 1.0 //[0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.75 0.8 0.85 0.9 0.95 1.0 1.5 2.0 3.0 4.0]
 
-#define SCREENSPACE_REFLECTIONS	//can be really expensive at high resolutions/render quality, especially on ice
-#define SSR_STEPS 50 //[10 15 20 25 30 35 40 50 100 200 400]
-#define SUN_MICROFACET_SPECULAR // If enabled will use realistic rough microfacet model, else will just reflect the sun. No performance impact.
-#define USE_QUARTER_RES_DEPTH // Uses a quarter resolution depth buffer to raymarch screen space reflections, improves performance but may introduce artifacts
+#define REFLECTION_ENABLED
+#define REFLECTION_QUARTER_RES_DEPTH
+#define REFLECTION_QUALITY 30 // [6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 25 30 35 40 45 50 55 60 65 70 75 80 85 90 95 100]
+#define Roughness_Threshold 1.5 // using a curve on the roughness, make the reflections more or less visible on rough surfaces. good for hiding noise on rough materials [1.0 1.1 1.2 1.3 1.4 1.5 1.6 1.7 1.8 1.9 2.0 2.1 2.2 2.3 2.4 2.5 2.6 2.7 2.8 2.9 3.0 ]
+#define sky_occlusion_threshold 0.7 // control how far indoors the sky is able to reflect [0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0]
+#define Sun_specular_Strength 1 // increase for more sparkles [1 2 3 4 5 6 7 8 9 10]
+#define REFLECTION_ROUGH
 
 //#define SSGI
 #define RAY_COUNT 6 // [1 2 3 4 5 6 7 8 9 10 12 14 16 18 21 24 28 32 37 43 49 57 65 75 86 100]
@@ -155,6 +160,10 @@ const vec3 TorchColor = vec3(TORCH_R, TORCH_G, TORCH_B);
 
 
 // AUTOMATION
+
+#if MAT_FORMAT == 0 && !defined(MC_TEXTURE_FORMAT_LAB_PBR)
+    #undef MAT_SPECULAR_ENABLED
+#endif
 
 #if !defined(MAT_PARALLAX_GENERATED) && !defined(MC_NORMAL_MAP)
     #undef MAT_PARALLAX_ENABLED
