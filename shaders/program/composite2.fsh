@@ -106,10 +106,6 @@ vec3 toScreenSpacePrev(vec3 p) {
 	#include "/photonics/samplers.glsl"
 #endif
 
-vec3 normVec(vec3 vec) {
-	return vec * inversesqrt(dot(vec, vec));
-}
-
 float lengthVec(vec3 vec) {
 	return sqrt(dot(vec, vec));
 }
@@ -400,11 +396,9 @@ void main() {
 	float z0 = texture(depthtex0, texcoord).x;
 	float z = texture(depthtex1, texcoord).x;
 
-	vec2 tempOffset = vIn.TAA_Offset;
-
 	float noise = blueNoise(gl_FragCoord.xy, frameCounter);
 
-	vec3 fragpos = toScreenSpace(vec3(texcoord / RENDER_SCALE - vec2(tempOffset) * texelSize * 0.5, z));
+	vec3 fragpos = toScreenSpace(vec3(texcoord / RENDER_SCALE - vIn.TAA_Offset * texelSize * 0.5, z));
 	vec3 p3 = mat3(gbufferModelViewInverse) * fragpos;
 	vec3 np3 = normVec(p3);
 
@@ -428,7 +422,7 @@ void main() {
 		vec4 trpData = texture(colortex7, texcoord);
 
 		if (trpData.a > 0.99) {
-			vec3 fragpos0 = toScreenSpace(vec3(texcoord/RENDER_SCALE-vec2(tempOffset)*texelSize*0.5,z0));
+			vec3 fragpos0 = toScreenSpace(vec3(texcoord/RENDER_SCALE - vIn.TAA_Offset*texelSize*0.5,z0));
 			float Vdiff = distance(fragpos,fragpos0);
 			float VdotU = np3.y;
 			float estimatedDepth = Vdiff * abs(VdotU); // assuming water plane
@@ -504,7 +498,7 @@ void main() {
 			if (diffuseSun > 0.000)
 		#endif
 		{
-			vec3 projectedShadowPosition = mat3(shadowModelView) * p3 + shadowModelView[3].xyz;
+			vec3 projectedShadowPosition = mul3(shadowModelView, p3);
 			projectedShadowPosition = diagonal3(shadowProjection) * projectedShadowPosition + shadowProjection[3].xyz;
 
 			// apply distortion
@@ -664,7 +658,7 @@ void main() {
 		float estimatedDepth;
 		float estimatedSunDepth;
 		if (iswater != (isEyeInWater == 1)) {
-			fragpos0 = toScreenSpace(vec3(texcoord / RENDER_SCALE - vec2(tempOffset) * texelSize * 0.5, z0));
+			fragpos0 = toScreenSpace(vec3(texcoord / RENDER_SCALE - vIn.TAA_Offset * texelSize * 0.5, z0));
 			Vdiff = distance(fragpos, fragpos0);
 			float VdotU = np3.y;
 			estimatedDepth = Vdiff * abs(VdotU); // assuming water plane

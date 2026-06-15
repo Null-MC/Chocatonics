@@ -1,5 +1,3 @@
-#define PH_MAX_GI_ITERATIONS 100
-
 uniform vec3 shadowLightPosition;
 
 #include "/photonics/interface/lighting_interface.glsl"
@@ -16,7 +14,7 @@ void sample_indirect(inout vec3 indirect_color, vec3 sample_rt_pos, vec3 geo_nor
     vec3 trace_localDir = ph_rand_direction(rnd_state, tex_normal);
 
     RayIterator ray;
-    ray.iterations = PH_MAX_GI_ITERATIONS;
+    ray.iterations = PHOTONICS_GI_STEPS;
     ray_iter_set_position(ray, sample_rt_pos);
     ray_iter_set_direction(ray, trace_localDir);
     ray_iter_offset_position(ray, 0.1 * geo_normal);
@@ -48,7 +46,7 @@ void sample_indirect(inout vec3 indirect_color, vec3 sample_rt_pos, vec3 geo_nor
         for (int bounce = 0; bounce < PH_MAX_GI_BOUNCES; bounce++) {
             VoxelData voxel_data = ray_result_voxel_data(hit);
             vec3 hit_albedo = voxel_data_albedo(voxel_data).rgb;
-            hit_albedo = toLinear(hit_albedo);
+//            hit_albedo = toLinear(hit_albedo);
 
             vec3 hit_position = ray_result_position(hit);
             vec3 hit_localPos = hit_position - rt_camera_position;
@@ -64,7 +62,7 @@ void sample_indirect(inout vec3 indirect_color, vec3 sample_rt_pos, vec3 geo_nor
 
                 // trace sun
                 RayIterator ray_sun;
-                ray_sun.iterations = PH_MAX_GI_ITERATIONS;
+                ray_sun.iterations = 100; // TODO: setting?
                 ray_iter_set_position(ray_sun, hit_position);
                 ray_iter_set_direction(ray_sun, localSkyLightDir);
                 ray_iter_offset_position(ray_sun, 0.1 * hit_localNormal);

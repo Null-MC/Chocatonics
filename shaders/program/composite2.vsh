@@ -32,6 +32,12 @@ uniform int frameCounter;
 
 
 void main() {
+	#ifdef TAA_ENABLED
+		vOut.TAA_Offset = taa_offsets[frameCounter % 8];
+	#else
+		vOut.TAA_Offset = vec2(0.0);
+	#endif
+
 	gl_Position = ftransform();
 
 	#ifdef TAA_UPSCALING
@@ -39,11 +45,6 @@ void main() {
 	#endif
 
 //	vOut.tempOffsets = HaltonSeq2(frameCounter % 10000);
-	vOut.TAA_Offset = taa_offsets[frameCounter % 8];
-
-	#ifndef TAA_ENABLED
-		vOut.TAA_Offset = vec2(0.0);
-	#endif
 
 	vOut.lightCol.a = float(sunElevation > 1.e-5) * 2.0 - 1.0;
 	vOut.lightCol.rgb = texelFetch(colortex4, ivec2(6, 37), 0).rgb;

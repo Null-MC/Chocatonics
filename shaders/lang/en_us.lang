@@ -11,6 +11,14 @@ screen.PHOTONICS=Photonics
 
     option.PHOTONICS_HAND_LIGHT_ENABLED=Hand Light
 
+    screen.PHOTONICS_REFLECTIONS=Reflections
+
+        option.PHOTONICS_REFLECT_ENABLED=Enabled
+
+        option.PHOTONICS_REFLECT_BOUNCES=Bounces
+
+        option.PHOTONICS_REFLECT_STEPS=Trace Steps
+
     screen.PHOTONICS_GI=Global Illumination
 
         option.PHOTONICS_GI_ENABLED=Enabled
@@ -18,6 +26,8 @@ screen.PHOTONICS=Photonics
         option.PHOTONICS_GI_BOUNCES=Bounces
 
         option.PHOTONICS_GI_BLOCK=Block Light
+
+        option.PHOTONICS_GI_STEPS=Trace Steps
 
 
 screen.MATERIALS=PBR Materials

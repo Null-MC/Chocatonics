@@ -1,3 +1,21 @@
+void frisvad(in vec3 n, out vec3 f, out vec3 r) {
+    if (n.z < -0.9) {
+        f = vec3(0, -1, 0);
+        r = vec3(-1, 0, 0);
+    } else {
+        float a = 1.0 / (1.0 + n.z);
+        float b = -n.x*n.y*a;
+        f = vec3(1.0 - n.x*n.x*a, b, -n.x) ;
+        r = vec3(b, 1.0 - n.y*n.y*a , -n.y);
+    }
+}
+
+mat3 CoordBase(vec3 n) {
+    vec3 x, y;
+    frisvad(n, x, y);
+    return mat3(x, y, n);
+}
+
 float GGX(vec3 n, vec3 v, vec3 l, float r, float F0) {
     r*=r; r*=r;
 
@@ -48,4 +66,26 @@ vec3 GGX2(vec3 n, vec3 v, vec3 l, float r, vec3 F0) {
     vec3 F = F0 + (1.0 - F0) * exp2((-5.55473*dotVH - 6.98316)*dotVH);
 
     return dotNL * F * (G * D / (4 * dotNV * dotNL + 1e-7));
+}
+
+vec3 sampleGGXVNDF(vec3 view, vec2 alpha, float U1, float U2, bool ishand) {
+    // stretch view
+    vec3 V = normalize(vec3(alpha.xy * view.xy, view.z));
+
+    // orthonormal basis
+    vec3 T1 = (V.z < 0.9999) ? normalize(cross(V, vec3(0, 0, 1))) : vec3(1, 0, 0);
+    vec3 T2 = cross(T1, V);
+
+    // sample point with polar coordinates (r, phi)
+    float a = 1.0 / (1.0 + V.z);
+    float r = sqrt(U1);
+    float phi = (U2 < a) ? U2/a * PI : PI + (U2-a)/(1.0-a) * PI;
+    float P1 = r * cos(phi);
+    float P2 = r * sin(phi) * ((U2 < a) ? 1.0 : V.z);
+
+    // compute normal
+    vec3 N = P1*T1 + P2*T2 + sqrt(max(0.0, 1.0 - P1*P1 - P2*P2)) * V;
+
+    // unstretch
+    return normalize(vec3(alpha.xy * N.xy, max(0.0, N.z)));
 }

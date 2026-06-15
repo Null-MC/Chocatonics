@@ -1,43 +1,3 @@
-void frisvad(in vec3 n, out vec3 f, out vec3 r) {
-    if (n.z < -0.9) {
-        f = vec3(0, -1, 0);
-        r = vec3(-1, 0, 0);
-    } else {
-    	float a = 1.0 / (1.0 + n.z);
-    	float b = -n.x*n.y*a;
-    	f = vec3(1.0 - n.x*n.x*a, b, -n.x) ;
-    	r = vec3(b, 1.0 - n.y*n.y*a , -n.y);
-    }
-}
-
-mat3 CoordBase(vec3 n) {
-	vec3 x, y;
-    frisvad(n, x, y);
-    return mat3(x, y, n);
-}
-
-vec3 sampleGGXVNDF(vec3 view, vec2 alpha, float U1, float U2, bool ishand) {
-	// stretch view
-	vec3 V = normalize(vec3(alpha.xy * view.xy, view.z));
-
-	// orthonormal basis
-	vec3 T1 = (V.z < 0.9999) ? normalize(cross(V, vec3(0, 0, 1))) : vec3(1, 0, 0);
-	vec3 T2 = cross(T1, V);
-
-	// sample point with polar coordinates (r, phi)
-	float a = 1.0 / (1.0 + V.z);
-	float r = sqrt(U1);
-	float phi = (U2 < a) ? U2/a * PI : PI + (U2-a)/(1.0-a) * PI;
-	float P1 = r * cos(phi);
-	float P2 = r * sin(phi) * ((U2 < a) ? 1.0 : V.z);
-
-	// compute normal
-	vec3 N = P1*T1 + P2*T2 + sqrt(max(0.0, 1.0 - P1*P1 - P2*P2)) * V;
-
-	// unstretch
-	return normalize(vec3(alpha.xy * N.xy, max(0.0, N.z)));
-}
-
 vec3 rayTraceSpeculars(vec3 dir, vec3 position, float dither, float quality, bool hand, float fres) {
 	vec3 clipPosition = toClipSpace3(position);
 
@@ -132,14 +92,17 @@ void MaterialReflections(
 
 	// SSR, Sky, and Sun reflections
 	vec4 Reflections = vec4(0.0);
-	vec3 SkyReflection = skyCloudsFromTex(L, colortex4).rgb * 0.035;
 	vec3 SunReflection = diffuse * GGX2(normal, -np3,  sunPos, roughness, f0)/150.0 * 8.0/3.0 * sunCol * Sun_specular_Strength;
+
+	#ifndef PHOTONICS_REFLECT_ENABLED
+		vec3 SkyReflection = skyCloudsFromTex(L, colortex4).rgb * 0.035;
+	#endif
 
 //	#ifndef Sky_reflection
 //		SkyReflection = Reflections_Final;
 //	#endif
 
-	#ifdef REFLECTION_ENABLED
+	#if defined(REFLECTION_ENABLED) && !defined(PHOTONICS_REFLECT_ENABLED)
 		if (hasReflections && NdotV < 0.00001) { // Skip SSR if ray contribution is low
 			// float rayQuality = REFLECTION_QUALITY;
 			float rayQuality = mix(REFLECTION_QUALITY, 0.0, sqrt(roughness)); // Scale quality with ray contribution
@@ -164,14 +127,24 @@ void MaterialReflections(
 
 	Reflections.rgb *= Metals;
 	SunReflection *= Metals;
-	SkyReflection *= Metals;
+
+	#ifndef PHOTONICS_REFLECT_ENABLED
+		SkyReflection *= Metals;
+	#endif
 
 	// darken albedos, and stop darkening where the sky gets occluded indoors
-	Reflections_Final *= mix(1.0 - (Reflections.a * luma(rayContrib)), 1.0 - luma(rayContrib), Outdoors);
+	#ifdef PHOTONICS_REFLECT_ENABLED
+		Reflections_Final *= 1.0 - luma(rayContrib);
+	#else
+		Reflections_Final *= mix(1.0 - (Reflections.a * luma(rayContrib)), 1.0 - luma(rayContrib), Outdoors);
+	#endif
 	
 	// apply all reflections to the lighting
 	Reflections_Final += Reflections.rgb * luma(rayContrib);
-	Reflections_Final += SkyReflection * luma(rayContrib) * (1.0-Reflections.a) * Outdoors;
+
+	#ifndef PHOTONICS_REFLECT_ENABLED
+		Reflections_Final += SkyReflection * luma(rayContrib) * (1.0-Reflections.a) * Outdoors;
+	#endif
 
 	#ifdef REFLECTION_ROUGH
 		Output = Reflections_Final;

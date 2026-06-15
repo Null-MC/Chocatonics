@@ -1,13 +1,15 @@
 /*
 const int colortex0Format = RGBA16F;			// low res clouds (deferred->composite2) + low res VL (composite5->composite15)
-const int colortex1Format = RGBA16;				//terrain gbuffer (gbuffer->composite2)
-const int colortex2Format = RGBA16F;			//forward + transparencies (gbuffer->composite4)
-const int colortex3Format = R11F_G11F_B10F;		//frame buffer + bloom (deferred6->final)
-const int colortex4Format = RGBA16F;			//light values and skyboxes (everything)
-const int colortex5Format = R11F_G11F_B10F;		//TAA buffer (everything)
-const int colortex6Format = R11F_G11F_B10F;		//additionnal buffer for bloom (composite3->final)
-const int colortex7Format = RGBA8;			    //Final output, transparencies id (gbuffer->composite4)
-const int colortex12Format = R16F;
+const int colortex1Format = RGBA16;				// terrain gbuffer (gbuffer->composite2)
+const int colortex2Format = RGBA16F;			// forward + transparencies (gbuffer->composite4)
+const int colortex3Format = R11F_G11F_B10F;		// frame buffer + bloom (deferred6->final)
+const int colortex4Format = RGBA16F;			// light values and skyboxes (everything)
+const int colortex5Format = R11F_G11F_B10F;		// TAA buffer (everything)
+const int colortex6Format = R11F_G11F_B10F;		// additionnal buffer for bloom (composite3->final)
+const int colortex7Format = RGBA8;			    // Final output, transparencies id (gbuffer->composite4)
+const int colortex9Format = RGBA16;             // GBuffer Normals
+const int colortex12Format = R16F;              // Linear-Z Depth
+const int colortex13Format = RGB16F;            // Rough Reflections
 */
 //no need to clear the buffers, saves a few fps
 /*
@@ -70,6 +72,10 @@ float ld_reverse(float depth, float y, float z) {
     return 1.0 / (y - depth * z);
 }
 
+vec3 normVec(vec3 vec) {
+    return vec * inversesqrt(dot(vec, vec));
+}
+
 float luma(const in vec3 color) {return dot(color, lumCoeff);}
 
 float minOf(const in vec3 vec) {return min(min(vec[0], vec[1]), vec[2]);}
@@ -96,6 +102,8 @@ float pow5(const in float value) {
 #define TEX_GB_WORLD colortex11
 #define TEX_DEPTH_QRES colortex12
 
+#define MAT_FORMAT_OLDPBR 1
+#define MAT_FORMAT_LABPBR 2
 
 const vec2[8] taa_offsets = vec2[8](
     vec2( 1.0, -3.0) / 8.0,

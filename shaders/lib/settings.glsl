@@ -2,7 +2,11 @@
 
 #define PHOTONICS_BLOCK_LIGHT_ENABLED
 #define PHOTONICS_HAND_LIGHT_ENABLED
+#define PHOTONICS_REFLECT_ENABLED
+#define PHOTONICS_REFLECT_STEPS 100 // [10 20 30 40 50 60 70 80 90 100 110 120 130 140 150 160 170 180 190 200]
+#define PHOTONICS_REFLECT_BOUNCES 1 // [1 2 3 4]
 #define PHOTONICS_GI_ENABLED
+#define PHOTONICS_GI_STEPS 100 // [10 20 30 40 50 60 70 80 90 100 110 120 130 140 150 160 170 180 190 200]
 #define PHOTONICS_GI_BOUNCES 1 // [1 2 3]
 #define PHOTONICS_GI_BLOCK
 
@@ -51,7 +55,7 @@
 #define SHADOW_FILTER_SAMPLE_COUNT 30 // Number of samples used to filter the actual shadows [1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49 50 51 52 53 54 55 56 57 58 59 60 61 62 63 64 65 66 67 68 69 70 71 72 73 74 75 76 77 78 79 80 81 82 83 84 85 86 87 88 89 90 91 92 93 94 95 96 97 98 99 100 101 102 103 104 105 106 107 108 109 110 111 112 113 114 115 116 117 118 119 120 ]
 #define SHADOW_MAP_BIAS 0.8
 #define CAVE_LIGHT_LEAK_FIX // Hackish way to remove sunlight incorrectly leaking into the caves. Can inacurrately create shadows in some places
-#define SHADOW_FRUSTRUM_CULLING   // If enabled, removes most of the blocks during shadow rendering that would not cast shadows on the player field of view. Improves performance but can be sometimes incorrect and causes flickering shadows on distant occluders
+//#define SHADOW_FRUSTRUM_CULLING   // If enabled, removes most of the blocks during shadow rendering that would not cast shadows on the player field of view. Improves performance but can be sometimes incorrect and causes flickering shadows on distant occluders
 //#define SHADOW_DISABLE_ALPHA_MIPMAPS // Disables mipmaps on the transparency of alpha-tested things like foliage, may cost a few fps in some cases
 //#define Stochastic_Transparent_Shadows // Highly recommanded to enable SHADOW_DISABLE_ALPHA_MIPMAPS with it. Uses noise to simulate transparent objects' shadows (not colored). It is also recommended to increase Min_Shadow_Filter_Radius with this.
 
@@ -151,6 +155,8 @@ const int shadowMapResolution = 3172; //Will probably crash at 16 384 [512 768 1
 const float shadowDistance = 128;		//[32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49 50 51 52 53 54 55 56 57 58 59 60 61 62 63 64 65 66 67 68 69 70 71 72 73 74 75 76 77 78 79 80 81 82 83 84 85 86 87 88 89 90 91 92 93 94 95 96 97 98 99 100 101 102 103 104 105 106 107 108 109 110 111 112 113 114 115 116 117 118 119 120 121 122 123 124 125 126 127 128 129 130 131 132 133 134 135 136 137 138 139 140 141 142 143 144 145 146 147 148 149 150 151 152 153 154 155 156 157 158 159 160 161 162 163 164 165 166 167 168 169 170 171 172 173 174 175 176 177 178 179 180 181 182 183 184 185 186 187 188 189 190 191 192 193 194 195 196 197 198 199 200 201 202 203 204 205 206 207 208 209 210 211 212 213 214 215 216 217 218 219 220 221 222 223 224 225 226 227 228 229 230 231 232 233 234 235 236 237 238 239 240 241 242 243 244 245 246 247 248 249 250 251 252 253 254 255 256 ] Not linear at all when shadowDistanceRenderMul is set to -1.0, 175.0 is enough for 40 render distance
 const float shadowDistanceRenderMul = -1.0; //[-1.0 1.0] Can help to increase shadow draw distance when set to -1.0, at the cost of performance
 const bool shadowHardwareFiltering = true;
+
+const float voxelDistance = 160.0;
 
 const float Parallax_Depth = MAT_PARALLAX_DEPTH * 0.01;
 
