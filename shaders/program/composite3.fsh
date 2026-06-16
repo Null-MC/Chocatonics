@@ -159,11 +159,9 @@ void main() {
 			vec3 localSkyLightDir = normalize(mat3(gbufferModelViewInverse) * shadowLightPosition);
 			float noise = blueNoise(gl_FragCoord.xy, frameCounter);
 
-			vec3 rtPos = p3 + rt_camera_position;
-
 			RayIterator ray;
 			ray.iterations = PHOTONICS_REFLECT_STEPS;
-			ray_iter_set_position(ray, rtPos);
+			ray_iter_set_position(ray, p3 + rt_camera_position);
 			ray_iter_set_direction(ray, reflectLocalDir);
 			ray_iter_offset_position(ray, 0.004 * geoLocalNormal);
 

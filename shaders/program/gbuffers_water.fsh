@@ -158,6 +158,7 @@ vec3 TangentToWorld(vec3 N, vec3 H) {
 /* RENDERTARGETS: 2,7 */
 layout(location = 0) out vec4 outColor2;
 layout(location = 1) out vec4 outColor7;
+//layout(location = 2) out vec4 outTint;
 
 void main() {
 	if (all(lessThan(gl_FragCoord.xy * texelSize.xy, RENDER_SCALE_2))) {

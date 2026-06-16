@@ -121,21 +121,66 @@ void main() {
     vec4 transparencies = texture(colortex2, texcoord);
     vec4 trpData = texture(colortex7, texcoord);
     bool iswater = trpData.a > 0.99;
-    vec2 refractedCoord = texcoord;
 
-    if (iswater) {
-//        vec3 fragpos = toScreenSpace(vec3(texcoord-vec2(0.0)*texelSize*0.5,z));
-        vec3 fragpos = toScreenSpace(vec3(texcoord, z));
-        vec3 np3 = mul3(gbufferModelViewInverse, fragpos) + cameraPosition;
-        float norm = getWaterHeightmap(np3.xz + np3.y, 1.0) - 0.5;
-        float displ = norm / (length(fragpos) / far) / 2000.0 * (isEyeInWater*2.0 + 1.0);
-        refractedCoord += displ * RENDER_SCALE;
+    #ifdef PHOTONICS_REFRACTION_ENABLED
+        vec3 tex_normal = ; // TODO
 
-        if (texture(colortex7, refractedCoord).a < 0.99)
-            refractedCoord = texcoord;
-    }
+        vec3 viewPos = toScreenSpace(vec3(texcoord, z));
+        vec3 viewDir = normalize(viewPos);
 
-    vec3 color = texture(colortex3, refractedCoord).rgb;
+        float eta = ; // TODO
+        vec3 refractViewDir = refract(viewDir, tex_normal, eta);
+
+        vec3 localPos = mul3(gbufferModelViewInverse, viewPos);
+        vec3 refractLocalDir = mat3(gbufferModelViewInverse) * refractViewDir;
+
+        RayIterator ray;
+        ray.iterations = PHOTONICS_REFLECT_STEPS;
+        ray_iter_set_position(ray, localPos + rt_camera_position);
+        ray_iter_set_direction(ray, refractLocalDir);
+        ray_iter_offset_position(ray, 0.004 * geoLocalNormal);
+
+        vec3 radiance = vec3(0.0);
+        vec3 transmittance = vec3(1.0);
+
+        bool bounce_hit = true;
+        for (int bounce = 0; bounce < PHOTONICS_REFLECT_BOUNCES; bounce++) {
+            RayResult hit = ray_iter_next(ray);
+            bounce_hit = ray_result_is_hit(hit);
+            if (!bounce_hit || !ray_iter_is_in_bounds(ray)) break;
+
+            vec3 hit_position = ray_result_position(hit);
+
+            VoxelData voxel_data = ray_result_voxel_data(hit);
+            vec3 hit_albedo = voxel_data_albedo(voxel_data).rgb;
+
+            // TODO
+        }
+    #else
+        vec2 refractedCoord = texcoord;
+
+        if (iswater) {
+    //        vec3 fragpos = toScreenSpace(vec3(texcoord-vec2(0.0)*texelSize*0.5,z));
+            vec3 fragpos = toScreenSpace(vec3(texcoord, z));
+            vec3 np3 = mul3(gbufferModelViewInverse, fragpos) + cameraPosition;
+            float norm = getWaterHeightmap(np3.xz + np3.y, 1.0) - 0.5;
+            float displ = norm / (length(fragpos) / far) / 2000.0 * (isEyeInWater*2.0 + 1.0);
+            refractedCoord += displ * RENDER_SCALE;
+
+            if (texture(colortex7, refractedCoord).a < 0.99)
+                refractedCoord = texcoord;
+        }
+
+        vec3 color = texture(colortex3, refractedCoord).rgb;
+
+        if (!iswater) {
+            // multiplicative tinting
+            vec3 albedo_translucent = toLinear(trpData.rgb);
+            albedo_translucent = normalize(albedo_translucent + EPSILON) / sqrt(3.0);
+            color *= mix(vec3(1.0), albedo_translucent, sqrt(transparencies.a));
+        }
+    #endif
+
     if (frDepth > 2.5/far || transparencies.a < 0.99)  // Discount fix for transparencies through hand
         color = color * (1.0 - transparencies.a) + transparencies.rgb * 10.0;
 
