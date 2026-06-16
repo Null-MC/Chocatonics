@@ -427,7 +427,7 @@ void main() {
 		vec4 trpData = texture(colortex7, texcoord);
 
 		if (trpData.a > 0.99) {
-			vec3 fragpos0 = toScreenSpace(vec3(texcoord/RENDER_SCALE - vIn.TAA_Offset*texelSize*0.5,z0));
+			vec3 fragpos0 = toScreenSpace(vec3(texcoord/RENDER_SCALE - vIn.TAA_Offset*texelSize*0.5, z0));
 			float Vdiff = distance(fragpos, fragpos0);
 			float VdotU = np3.y;
 
@@ -758,6 +758,11 @@ void main() {
 			// Bruteforce integration is probably overkill
 			vec3 lightColVol = vIn.lightCol.rgb * (1.0 - pow(1.0 - vIn.WsunVec.y, 5.0)); // fresnel
 			vec3 ambientColVol = vIn.ambientUp * 8.0/3.0 / 150.0 * 0.5 * eyeBrightnessSmooth.y/240.0;
+
+			#ifdef VOXY
+				// Fake water depth since we cannot sample it
+				if (Vdiff == 0.0) Vdiff = 20.0;
+			#endif
 
 			waterVolumetrics(outColor3, fragpos0, fragpos, estimatedDepth, estimatedSunDepth, Vdiff, noise, totEpsilon, scatterCoef, ambientColVol, lightColVol, dot(np3, vIn.WsunVec));
 		}
