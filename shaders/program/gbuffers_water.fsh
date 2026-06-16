@@ -21,8 +21,8 @@ uniform sampler2DShadow shadowtex0HW;
 uniform sampler2D gaux1;
 uniform sampler2D gaux2;
 uniform sampler2D texWave;
+uniform sampler2D texDepthQ;
 uniform sampler2D depthtex1;
-uniform sampler2D TEX_DEPTH_QRES;
 
 uniform vec4 lightCol;
 uniform vec3 sunVec;
@@ -102,7 +102,7 @@ vec3 rayTrace(vec3 dir, vec3 position, float dither, float fresnel) {
     for (int i = 0; i <= int(quality); i++) {
 		#ifdef REFLECTION_QUARTER_RES_DEPTH
 			// decode depth buffer
-			float sp = texelFetch(TEX_DEPTH_QRES, ivec2(spos.xy/texelSize/4), 0).r;
+			float sp = texelFetch(texDepthQ, ivec2(spos.xy/texelSize/4), 0).r;
 			sp = invLinZ(sqrt(sp / 65000.0), nearPlane, farPlane);
 
 			if (sp <= max(maxZ, minZ) && sp >= min(maxZ, minZ)) {

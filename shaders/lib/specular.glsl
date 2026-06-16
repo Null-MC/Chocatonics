@@ -22,20 +22,25 @@ vec3 rayTraceSpeculars(vec3 dir, vec3 position, float dither, float quality, boo
 
 	for (int i = 0; i <= int(quality); i++) {
 		// decode depth buffer
-		vec2 testthing = hand ? spos.xy*texelSize : spos.xy/texelSize/4.0; // fix for ssr on hand
+		#ifdef REFLECTION_QUARTER_RES_DEPTH
+			vec2 testthing = hand ? spos.xy*texelSize : spos.xy/texelSize/4.0; // fix for ssr on hand
 
-		float sp = sqrt(texelFetch(colortex12, ivec2(testthing), 0).r / 65000.0);
-		sp = invLinZ(sp, near, far);
+			float sp = sqrt(texelFetch(texDepthQ, ivec2(testthing), 0).r / 65000.0);
+			sp = invLinZ(sp, nearPlane, farPlane);
+		#else
+			float sp = texelFetch(depthtex1, ivec2(spos.xy / texelSize), 0).r;
+		#endif
 
-		if (sp <= max(maxZ, minZ) && sp >= min(maxZ, minZ))
+		if (sp <= max(maxZ, minZ) && sp >= min(maxZ, minZ)) {
 			return vec3(spos.xy / RENDER_SCALE, sp);
+		}
 
 		spos += stepv;
 
 		// small bias
 		float biasamount = 0.0002;
 		if (hand) biasamount = 0.01;
-		minZ = maxZ-biasamount / linZ(spos.z, near, far);
+		minZ = maxZ-biasamount / linZ(spos.z, nearPlane, farPlane);
 
 		maxZ += stepv.z;
 	}

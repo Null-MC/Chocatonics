@@ -86,12 +86,12 @@
 #define Underwater_Fog_Density 1.0 //[0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.75 0.8 0.85 0.9 0.95 1.0 1.5 2.0 3.0 4.0]
 
 #define REFLECTION_ENABLED
-#define REFLECTION_QUARTER_RES_DEPTH
+#define REFLECTION_ROUGH
+//#define REFLECTION_QUARTER_RES_DEPTH
 #define REFLECTION_QUALITY 30 // [6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 25 30 35 40 45 50 55 60 65 70 75 80 85 90 95 100]
 #define Roughness_Threshold 1.5 // using a curve on the roughness, make the reflections more or less visible on rough surfaces. good for hiding noise on rough materials [1.0 1.1 1.2 1.3 1.4 1.5 1.6 1.7 1.8 1.9 2.0 2.1 2.2 2.3 2.4 2.5 2.6 2.7 2.8 2.9 3.0 ]
 #define sky_occlusion_threshold 0.7 // control how far indoors the sky is able to reflect [0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0]
 #define Sun_specular_Strength 1 // increase for more sparkles [1 2 3 4 5 6 7 8 9 10]
-#define REFLECTION_ROUGH
 
 //#define SSGI
 #define RAY_COUNT 6 // [1 2 3 4 5 6 7 8 9 10 12 14 16 18 21 24 28 32 37 43 49 57 65 75 86 100]

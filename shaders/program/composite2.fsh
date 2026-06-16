@@ -34,7 +34,7 @@ uniform sampler2D depthtex1;//depth
 uniform sampler2D depthtex0;//depth
 uniform sampler2D noisetex;//depth
 uniform sampler2D texBlueNoise;
-uniform sampler2D TEX_DEPTH_QRES;
+uniform sampler2D texDepthQ;
 uniform sampler2DShadow shadowtex0HW;
 
 #ifdef SHADOW_COLORED
@@ -252,7 +252,13 @@ vec3 RT(vec3 dir, vec3 position, float noise, vec3 N) {
 	vec3 spos = clipPosition * vec3(RENDER_SCALE_2, 1.0) + stepv/stepSize*6.0;
 	spos.xy += vIn.TAA_Offset * texelSize * 0.5*RENDER_SCALE;
 
-	float sp = sqrt(texelFetch(colortex12, ivec2(spos.xy/texelSize/4.0), 0).r / 65000.0);
+	#ifdef REFLECTION_QUARTER_RES_DEPTH
+		float sp = sqrt(texelFetch(texDepthQ, ivec2(spos.xy / texelSize/4.0), 0).r / 65000.0);
+	#else
+		float sp = texelFetch(depthtex1, ivec2(spos.xy / texelSize), 0).r;
+		sp = linZ(sp, nearPlane, farPlane);
+	#endif
+
 	float currZ = linZ(spos.z, nearPlane, farPlane);
 
 	if (sp < currZ) {
@@ -264,7 +270,13 @@ vec3 RT(vec3 dir, vec3 position, float noise, vec3 N) {
 	spos += stepv * noise;
 
 	for (int i = 0; i < iterations; i++) {
-		float sp = sqrt(texelFetch(colortex12, ivec2(spos.xy/texelSize/4.0), 0).r / 65000.0);
+		#ifdef REFLECTION_QUARTER_RES_DEPTH
+			float sp = sqrt(texelFetch(texDepthQ, ivec2(spos.xy / texelSize/4.0), 0).r / 65000.0);
+		#else
+			float sp = texelFetch(depthtex1, ivec2(spos.xy / texelSize), 0).r;
+			sp = linZ(sp, nearPlane, farPlane);
+		#endif
+
 		float currZ = linZ(spos.z, nearPlane, farPlane);
 
 		if (sp < currZ) {
