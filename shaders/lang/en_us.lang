@@ -11,6 +11,11 @@ screen.PHOTONICS=Photonics
 
     option.PHOTONICS_HAND_LIGHT_ENABLED=Hand Light
 
+    option.PHOTONICS_TINTING=Tint Mode
+    value.PHOTONICS_TINTING.0=Disabled
+    value.PHOTONICS_TINTING.1=Block
+    value.PHOTONICS_TINTING.2=Voxel
+
     screen.PHOTONICS_REFLECTIONS=Reflections
 
         option.PHOTONICS_REFLECT_ENABLED=Enabled

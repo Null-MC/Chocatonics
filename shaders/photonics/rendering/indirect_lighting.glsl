@@ -22,7 +22,7 @@ void sample_indirect(inout vec3 indirect_color, vec3 sample_rt_pos, vec3 geo_nor
     RayResult hit;
     vec3 tint = vec3(1.0);
 
-    #ifdef SHADOW_COLORED
+    #if PHOTONICS_TINTING > 0
         bool is_hit = trace_ray(ray, hit, tint);
     #else
         bool is_hit = trace_ray(ray, hit);
@@ -72,7 +72,7 @@ void sample_indirect(inout vec3 indirect_color, vec3 sample_rt_pos, vec3 geo_nor
                 RayResult hit2;
                 vec3 tint2 = vec3(1.0);
 
-                #ifdef SHADOW_COLORED
+                #if PHOTONICS_TINTING > 0
                     bool is_hit2 = trace_ray(ray_sun, hit2, tint2);
                 #else
                     bool is_hit2 = trace_ray(ray_sun, hit2);
@@ -108,5 +108,5 @@ void sample_indirect(inout vec3 indirect_color, vec3 sample_rt_pos, vec3 geo_nor
         final_color = radiance;
     }
 
-    indirect_color += PI * final_color * tint;
+    indirect_color += final_color * tint * 8.0/3.0;
 }

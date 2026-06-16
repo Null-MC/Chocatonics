@@ -34,6 +34,7 @@ uniform sampler2D depthtex1;//depth
 uniform sampler2D depthtex0;//depth
 uniform sampler2D noisetex;//depth
 uniform sampler2D texBlueNoise;
+uniform sampler2D TEX_DEPTH_QRES;
 uniform sampler2DShadow shadowtex0HW;
 
 #ifdef SHADOW_COLORED
@@ -43,7 +44,6 @@ uniform sampler2DShadow shadowtex0HW;
 
 #ifdef REFLECTION_ENABLED
 	uniform sampler2D gaux2;
-	uniform sampler2D TEX_DEPTH_QRES;
 #endif
 
 //#ifdef PH_ENABLE_GI
