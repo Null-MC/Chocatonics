@@ -95,11 +95,8 @@ float cloudVol(in vec3 pos) {
 
 mat2x3 getVolumetricRays(float dither, vec3 fragpos, vec4 lightCol) {
 	// project pixel position into projected shadowmap space
-//	vec3 wpos = mat3(gbufferModelViewInverse) * fragpos + gbufferModelViewInverse[3].xyz;
 	vec3 wpos = toWorldSpace(fragpos);
-
 	vec3 fragposition = mul3(shadowModelView, wpos);
-
 	fragposition = diagonal3(shadowProjection) * fragposition + shadowProjection[3].xyz;
 
 	// project view origin into projected shadowmap space
@@ -156,14 +153,15 @@ mat2x3 getVolumetricRays(float dither, vec3 fragpos, vec4 lightCol) {
 		float d = (pow(expFactor, float(i+dither)/float(VL_SAMPLES))/expFactor - 1.0/expFactor)/(1-1.0/expFactor);
 		float dd = pow(expFactor, float(i+dither)/float(VL_SAMPLES)) * log(expFactor) / float(VL_SAMPLES)/(expFactor-1.0);
 		progress = start.xyz + d*dV;
-		progressW = gbufferModelViewInverse[3].xyz+cameraPosition + d*dVWorld;
+		progressW = gbufferModelViewInverse[3].xyz + cameraPosition + d*dVWorld;
 
-		//project into biased shadowmap space
+		// project into biased shadowmap space
 		float distortFactor = calcDistort(progress.xy);
-		vec3 pos = vec3(progress.xy*distortFactor, progress.z);
+		vec3 pos = vec3(progress.xy * distortFactor, progress.z);
 		float densityVol = cloudVol(progressW);
 		float sh = 1.0;
-		if (abs(pos.x) < 1.0-0.5/2048. && abs(pos.y) < 1.0-0.5/2048){
+
+		if (abs(pos.x) < 1.0-0.5/2048.0 && abs(pos.y) < 1.0-0.5/2048){
 			pos = pos * vec3(0.5, 0.5, 0.5/6.0) + 0.5;
 			sh = texture(shadowtex0HW, pos);
 
@@ -172,7 +170,7 @@ mat2x3 getVolumetricRays(float dither, vec3 fragpos, vec4 lightCol) {
 
 				float cloudShadow = 0.0;
 				for (int i = 0; i < rayMarchSteps; i++) {
-					vec3 cloudPos = progressW + vIn.WsunVec/abs(vIn.WsunVec.y)*(1500+(dither+i)/rayMarchSteps*1700-progressW.y);
+					vec3 cloudPos = progressW + vIn.WsunVec / abs(vIn.WsunVec.y) * (1500 + (dither+i) / rayMarchSteps*1700 - progressW.y);
 					cloudShadow += getCloudDensity(cloudPos, 0);
 				}
 
@@ -181,17 +179,17 @@ mat2x3 getVolumetricRays(float dither, vec3 fragpos, vec4 lightCol) {
 			#endif
 		}
 
-		//Water droplets(fog)
+		// Water droplets(fog)
 		float density = densityVol * ATMOSPHERIC_DENSITY * mu * 300.0;
 
-		//Just air
-		vec2 airCoef = exp2(-max(progressW.y-SEA_LEVEL,0.0)/vec2(8.0e3, 1.2e3)*vec2(6.,7.0))*6.0;
+		// Just air
+		vec2 airCoef = exp2(-max(progressW.y - SEA_LEVEL, 0.0) / vec2(8.0e3, 1.2e3) * vec2(6.0, 7.0)) * 6.0;
 
-		//Pbr for air, yolo mix between mie and rayleigh for water droplets
-		vec3 rL = rC*airCoef.x;
-		vec3 m = (airCoef.y+density)*mC;
-		vec3 vL0 = sunColor*sh*(rayL*rL+m*mie) + skyCol0*(rL+m);
-		vL += (vL0 - vL0 * exp(-(rL+m)*dd*dL)) / ((rL+m)+0.00000001)*absorbance;
+		// Pbr for air, yolo mix between mie and rayleigh for water droplets
+		vec3 rL = rC * airCoef.x;
+		vec3 m = (airCoef.y + density) * mC;
+		vec3 vL0 = sunColor * sh * (rayL*rL+m*mie) + skyCol0 * (rL + m);
+		vL += (vL0 - vL0 * exp(-(rL+m)*dd*dL)) / ((rL+m)+0.00000001) * absorbance;
 		absorbance *= saturate(exp(-(rL+m)*dd*dL));
 	}
 

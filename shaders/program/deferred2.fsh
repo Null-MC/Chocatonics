@@ -17,7 +17,7 @@ void main() {
 	float depth = texelFetch(depthtex1, ivec2(gl_FragCoord.xy * 4.0), 0).x;
 
     if (depth < 1.0) {
-        float z = linZ(depth, near, far);
+        float z = linZ(depth, nearPlane, farPlane);
         outDepthL = z*z * 65000.0;
     }
     else {

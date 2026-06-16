@@ -106,21 +106,15 @@ vec3 toScreenSpacePrev(vec3 p) {
 	#include "/photonics/samplers.glsl"
 #endif
 
-float lengthVec(vec3 vec) {
-	return sqrt(dot(vec, vec));
-}
-
-float invLinZ (float lindepth){
-	return -((2.0*near/lindepth)-far-near)/(far-near);
-}
 
 float rayTraceShadow(vec3 dir, vec3 position, float dither) {
     const int quality = 16;
 
     vec3 clipPosition = toClipSpace3(position);
-	//prevents the ray from going behind the camera
-	float rayLength = ((position.z + dir.z * far*sqrt(3.0)) > -near) ?
-       (-near -position.z) / dir.z : far*sqrt(3.);
+
+	// prevents the ray from going behind the camera
+	float rayLength = ((position.z + dir.z * farPlane*sqrt(3.0)) > -nearPlane) ?
+       (-nearPlane -position.z) / dir.z : farPlane*sqrt(3.0);
 
     vec3 direction = toClipSpace3(dir * rayLength + position) - clipPosition;  // convert to clip space
     direction.xyz = direction.xyz / max(abs(direction.x) / texelSize.x, abs(direction.y) / texelSize.y);	// fixed step size
@@ -135,8 +129,8 @@ float rayTraceShadow(vec3 dir, vec3 position, float dither) {
 		float sp = texture(depthtex1, spos.xy).x;
 
         if (sp < spos.z) {
-			float z2 = linZ(spos.z, near, far);
-			float dist = abs(linZ(sp, near, far) - z2) / z2;
+			float z2 = linZ(spos.z, nearPlane, farPlane);
+			float dist = abs(linZ(sp, nearPlane, farPlane) - z2) / z2;
 
 			if (dist < 0.01) return 0.0;
 		}
@@ -152,7 +146,7 @@ vec2 tapLocation_AO(int sampleNumber, float spinAngle, int nb, float nbRot, floa
 	return vec2(cos(angle), sin(angle)) * alpha;
 }
 
-vec3 BilateralFiltering(sampler2D tex, sampler2D depth,vec2 coord,float frDepth,float maxZ){
+vec3 BilateralFiltering(sampler2D tex, sampler2D depth, vec2 coord, float frDepth, float maxZ) {
 	vec4 sampled = vec4(texelFetch(tex, ivec2(coord), 0).rgb, 1.0);
 	return vec3(sampled.x, sampled.yz / sampled.w);
 }
@@ -192,16 +186,20 @@ void waterVolumetrics(inout vec3 inColor, vec3 rayStart, vec3 rayEnd, float estE
 
 	// limit ray length at 32 blocks for performance and reducing integration error
 	// you can't see above this anyway
-	float maxZ = min(rayLength,32.0)/(1e-8+rayLength);
+	float maxZ = min(rayLength, 32.0) / (1e-8 + rayLength);
 	dV *= maxZ;
+
 	vec3 dVWorld = -mat3(gbufferModelViewInverse) * (rayEnd - rayStart) * maxZ;
+
 	rayLength *= maxZ;
 	estEndDepth *= maxZ;
 	estSunDepth *= maxZ;
+
 	vec3 absorbance = vec3(1.0);
 	vec3 vL = vec3(0.0);
 	float phase = phaseg(VdotL, Dirt_Mie_Phase);
 	float expFactor = 11.0;
+
 	vec3 progressW = gbufferModelViewInverse[3].xyz + cameraPosition;
 
 	for (int i = 0; i < spCount; i++) {
@@ -222,7 +220,7 @@ void waterVolumetrics(inout vec3 inColor, vec3 rayStart, vec3 rayEnd, float estE
 
 		vec3 ambientMul = exp(-estEndDepth * d * waterCoefs * 1.1);
 		vec3 sunMul = exp(-estSunDepth * d * waterCoefs);
-		vec3 light = (sh * lightSource*8./150./3.0 * phase * sunMul + ambientMul * ambient)*scatterCoef;
+		vec3 light = (sh * lightSource/150.0 * 8.0/3.0 * phase * sunMul + ambientMul * ambient) * scatterCoef;
 		vL += (light - light * exp(-waterCoefs * dd * rayLength)) / waterCoefs *absorbance;
 		absorbance *= exp(-dd * rayLength * waterCoefs);
 	}
@@ -236,8 +234,8 @@ vec3 RT(vec3 dir, vec3 position, float noise, vec3 N) {
 
 	vec3 clipPosition = toClipSpace3(position);
 
-	float rayLength = ((position.z + dir.z * sqrt(3.0)*far) > -sqrt(3.0)*near) ?
-	   								(-sqrt(3.0)*near -position.z) / dir.z : sqrt(3.0)*far;
+	float rayLength = ((position.z + dir.z * sqrt(3.0)*farPlane) > -sqrt(3.0)*nearPlane) ?
+	   								(-sqrt(3.0)*nearPlane -position.z) / dir.z : sqrt(3.0)*farPlane;
 
 	vec3 end = toClipSpace3(dir * rayLength + position);
 	vec3 direction = end - clipPosition;  //convert to clip space
@@ -245,31 +243,33 @@ vec3 RT(vec3 dir, vec3 position, float noise, vec3 N) {
 
 	// get at which length the ray intersects with the edge of the screen
 	vec3 maxLengths = (step(0.0, direction) - clipPosition) / direction;
-	float mult = min(min(maxLengths.x, maxLengths.y), maxLengths.z);
+	float mult = minOf(maxLengths);
 	vec3 stepv = direction / len;
-	int iterations = min(int(min(len, mult*len)-2), maxSteps);
+
+	int iterations = min(int(min(len, mult * len) - 2), maxSteps);
 
 	// Do one iteration for closest texel (good contact shadows)
 	vec3 spos = clipPosition * vec3(RENDER_SCALE_2, 1.0) + stepv/stepSize*6.0;
 	spos.xy += vIn.TAA_Offset * texelSize * 0.5*RENDER_SCALE;
-	float sp = sqrt(texelFetch(colortex4, ivec2(spos.xy/texelSize/4), 0).w / 65000.0);
-	float currZ = linZ(spos.z, near, far);
+
+	float sp = sqrt(texelFetch(colortex12, ivec2(spos.xy/texelSize/4.0), 0).r / 65000.0);
+	float currZ = linZ(spos.z, nearPlane, farPlane);
 
 	if (sp < currZ) {
 		float dist = abs(sp - currZ) / currZ;
-		if (dist <= 0.035) return vec3(spos.xy, invLinZ(sp)) / vec3(RENDER_SCALE_2, 1.0);
+		if (dist <= 0.035) return vec3(spos.xy, invLinZ(sp, nearPlane, farPlane)) / vec3(RENDER_SCALE_2, 1.0);
 	}
 
 	stepv *= vec3(RENDER_SCALE_2, 1.0);
 	spos += stepv * noise;
 
 	for (int i = 0; i < iterations; i++) {
-		float sp = sqrt(texelFetch(colortex4, ivec2(spos.xy/texelSize/4), 0).w / 65000.0);
-		float currZ = linZ(spos.z, near, far);
+		float sp = sqrt(texelFetch(colortex12, ivec2(spos.xy/texelSize/4.0), 0).r / 65000.0);
+		float currZ = linZ(spos.z, nearPlane, farPlane);
 
 		if (sp < currZ) {
 			float dist = abs(sp - currZ) / currZ;
-			if (dist <= 0.035) return vec3(spos.xy, invLinZ(sp)) / vec3(RENDER_SCALE_2, 1.0);
+			if (dist <= 0.035) return vec3(spos.xy, invLinZ(sp, nearPlane, farPlane)) / vec3(RENDER_SCALE_2, 1.0);
 		}
 
 		spos += stepv;
@@ -301,6 +301,8 @@ vec3 rtGI(vec3 normal, vec4 noise, vec3 fragpos, vec3 ambient, float translucent
 	float occlusion = 0.0;
 	float accLight = 0.0;
 
+	vec3 viewNormal = mat3(gbufferModelView) * normal;
+
 	for (int i = 0; i < RAY_COUNT; i++) {
 		int seed = (frameCounter % 40000) * RAY_COUNT + i;
 		vec2 ij = fract(R2_samples(seed) + noise.rg);
@@ -308,10 +310,10 @@ vec3 rtGI(vec3 normal, vec4 noise, vec3 fragpos, vec3 ambient, float translucent
 		vec3 rayDir = normalize(cosineHemisphereSample(ij));
 		rayDir = TangentToWorld(normal, rayDir);
 
-		vec3 rayHit = RT(mat3(gbufferModelView) * rayDir, fragpos, fract(seed/1.6180339887 + noise.b), mat3(gbufferModelView) * normal);
+		vec3 rayHit = RT(mat3(gbufferModelView) * rayDir, fragpos, fract(seed/1.6180339887 + noise.b), viewNormal);
 
 		if (rayHit.z < 1.0) {
-			vec3 previousPosition = mat3(gbufferModelViewInverse) * toScreenSpace(rayHit) + gbufferModelViewInverse[3].xyz + cameraPosition - previousCameraPosition;
+			vec3 previousPosition = mul3(gbufferModelViewInverse, toScreenSpace(rayHit)) + (cameraPosition - previousCameraPosition);
 			previousPosition = mul3(gbufferPreviousModelView, previousPosition);
 			previousPosition.xy = projMAD(gbufferPreviousProjection, previousPosition).xy / -previousPosition.z * 0.5 + 0.5;
 
@@ -358,14 +360,17 @@ void ssao(inout float occlusion, vec3 fragpos, float mulfov, float dither, vec3 
 
 	for (int j = 0; j < 7; j++) {
 		vec2 sp = tapLocation_AO(j, v.x, 7, 88.0, v.y);
-		vec2 sampleOffset = sp*rd;
+		vec2 sampleOffset = sp * rd;
+
 		ivec2 offset = ivec2(gl_FragCoord.xy + sampleOffset * vec2(viewWidth, viewHeight * aspectRatio) * RENDER_SCALE);
+
 //		if (offset.x >= 0 && offset.y >= 0 && offset.x < viewWidth*RENDER_SCALE && offset.y < viewHeight*RENDER_SCALE) {
 		if (all(equal(clamp(offset, ivec2(0), vec2(viewWidth, viewHeight)*RENDER_SCALE), offset))) {
 			vec3 t0 = toScreenSpace(vec3((offset + 0.5) * texelSize + acc, texelFetch(depthtex1, offset, 0).x) * vec3(1.0/RENDER_SCALE_2, 1.0));
 
 			vec3 vec = t0.xyz - fragpos;
 			float dsquared = dot(vec, vec);
+
 			if (dsquared > 1.e-5) {
 				if (dsquared < maxR2) {
 					float NdotV = saturate(dot(vec * inversesqrt(dsquared), normalize(normal)));
@@ -423,8 +428,9 @@ void main() {
 
 		if (trpData.a > 0.99) {
 			vec3 fragpos0 = toScreenSpace(vec3(texcoord/RENDER_SCALE - vIn.TAA_Offset*texelSize*0.5,z0));
-			float Vdiff = distance(fragpos,fragpos0);
+			float Vdiff = distance(fragpos, fragpos0);
 			float VdotU = np3.y;
+
 			float estimatedDepth = Vdiff * abs(VdotU); // assuming water plane
 			float estimatedSunDepth = estimatedDepth / abs(vIn.refractedSunVec.y); // assuming water plane
 
@@ -440,7 +446,8 @@ void main() {
 		p3 += gbufferModelViewInverse[3].xyz;
 
 		vec4 trpData = texture(colortex7, texcoord);
-		bool iswater = texture(colortex7, texcoord).a > 0.99;
+//		bool iswater = texture(colortex7, texcoord).a > 0.99;
+		bool iswater = trpData.a > 0.99;
 
 		vec4 color = texture(TEX_GB_COLOR, texcoord);
 		vec3 albedo = toLinear(color.rgb);
@@ -479,7 +486,7 @@ void main() {
 		float pShadow = filtered.b * 2.0 - 1.0;
 
 		#ifdef SHADOW_COLORED
-			vec3 shadowColor = vec3(0.0);
+			vec3 shadowColor = vec3(1.0);
 		#endif
 
 		vec3 SSS = vec3(0.0);
@@ -586,8 +593,9 @@ void main() {
 				vec3 vec = vIn.lightCol.a * sunVec;
 				float screenShadow = rayTraceShadow(vec, fragpos, noise);
 				shading = min(screenShadow, shading);
+
 				// Out of shadow map
-				if (abs(filtered.y-0.1) < 0.0004)
+				if (abs(filtered.y - 0.1) < 0.0004)
 					SSS *= screenShadow;
 			#endif
 
@@ -601,7 +609,7 @@ void main() {
 			const int rayMarchSteps = 6;
 			float cloudShadow = 0.0;
 
-			for (int i = 0; i < rayMarchSteps; i++){
+			for (int i = 0; i < rayMarchSteps; i++) {
 				vec3 cloudPos = pos + vIn.WsunVec / abs(vIn.WsunVec.y) * (1500 + (noise+i) / rayMarchSteps*1700 - pos.y);
 				cloudShadow += getCloudDensity(cloudPos, 0);
 			}
@@ -644,7 +652,7 @@ void main() {
 				lightmap.y = 0.0;
 			#endif
 
-			vec3 custom_lightmap = texture(colortex4, (lightmap * 15.0 + 0.5 + vec2(0.0, 19.0)) * texelSize).rgb * 8.0 / 150.0 / 3.0;
+			vec3 custom_lightmap = texture(colortex4, (lightmap * 15.0 + 0.5 + vec2(0.0, 19.0)) * texelSize).rgb / 150.0 * 8.0/3.0;
 		#endif
 
 		if (hand && heldBlockLightValue > 0.1) {
@@ -658,8 +666,10 @@ void main() {
 		float estimatedDepth;
 		float estimatedSunDepth;
 		if (iswater != (isEyeInWater == 1)) {
+//		if (!iswater && isEyeInWater != 1) {
 			fragpos0 = toScreenSpace(vec3(texcoord / RENDER_SCALE - vIn.TAA_Offset * texelSize * 0.5, z0));
 			Vdiff = distance(fragpos, fragpos0);
+
 			float VdotU = np3.y;
 			estimatedDepth = Vdiff * abs(VdotU); // assuming water plane
 
@@ -694,15 +704,18 @@ void main() {
 			ambientLight += custom_lightmap.y * TorchColor;
 
 			#ifdef SSGI
-				float ao = 1.0;
-				if (!hand) ssao(ao, fragpos, 1.0, noise, decode(dataUnpacked0.yw));
-				ambientLight *= ao;
+				if (!hand) {
+					float ao = 1.0;
+//					ssao(ao, fragpos, 1.0, noise, decode(dataUnpacked0.yw));
+					ssao(ao, fragpos, 1.0, noise, tex_normal);
+					ambientLight *= ao;
+				}
 			#endif
 		}
 		else {
 			#ifdef SSGI
 				if (!hand)
-					ambientLight = rtGI(normal, blueNoise(gl_FragCoord.xy), fragpos, ambientLight * custom_lightmap.x, sssAmount, custom_lightmap.z * vec3(0.9, 1.0, 1.5) + custom_lightmap.y * TorchColor, normalize(albedo + 1.e-5) * 0.7);
+					ambientLight = rtGI(normal, blueNoise(texBlueNoise, gl_FragCoord.xy), fragpos, ambientLight * custom_lightmap.x, sssAmount, custom_lightmap.z * vec3(0.9, 1.0, 1.5) + custom_lightmap.y * TorchColor, normalize(albedo + 1.e-5) * 0.7);
 				else
 					ambientLight = ambientLight * custom_lightmap.x + custom_lightmap.z * vec3(0.9, 1.0, 1.5) + custom_lightmap.y * TorchColor;
 			#else

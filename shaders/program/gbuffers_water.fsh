@@ -85,25 +85,25 @@ vec3 rayTrace(vec3 dir, vec3 position, float dither, float fresnel) {
 	float rayLength = ((position.z + dir.z * far*sqrt(3.)) > -near) ?
        (-near -position.z) / dir.z : far*sqrt(3.);
 
-    vec3 direction = normalize(toClipSpace3(position+dir*rayLength)-clipPosition);  //convert to clip space
+    vec3 direction = normalize(toClipSpace3(dir * rayLength + position) - clipPosition);  //convert to clip space
     direction.xy = normalize(direction.xy);
 
     //get at which length the ray intersects with the edge of the screen
-    vec3 maxLengths = (step(0.,direction)-clipPosition) / direction;
-    float mult = min(min(maxLengths.x,maxLengths.y),maxLengths.z);
+    vec3 maxLengths = (step(0.0, direction) - clipPosition) / direction;
+    float mult = minOf(maxLengths);
 
     vec3 stepv = direction * mult / quality * vec3(RENDER_SCALE_2, 1.0);
 
 	vec3 spos = clipPosition * vec3(RENDER_SCALE_2, 1.0) + stepv*dither;
 	float minZ = clipPosition.z;
-	float maxZ = spos.z+stepv.z * 0.5;
+	float maxZ = spos.z + stepv.z * 0.5;
 	spos.xy += taa_offsets[framemod8] * texelSize * 0.5 / RENDER_SCALE;
 
     for (int i = 0; i <= int(quality); i++) {
 		#ifdef REFLECTION_QUARTER_RES_DEPTH
 			// decode depth buffer
 			float sp = texelFetch(TEX_DEPTH_QRES, ivec2(spos.xy/texelSize/4), 0).r;
-			sp = invLinZ(sqrt(sp / 65000.0), near, far);
+			sp = invLinZ(sqrt(sp / 65000.0), nearPlane, farPlane);
 
 			if (sp <= max(maxZ, minZ) && sp >= min(maxZ, minZ)) {
 				return vec3(spos.xy / RENDER_SCALE, sp);
@@ -296,11 +296,7 @@ void main() {
 			reflection.rgb = mix(sky_c.rgb, reflection.rgb, reflection.a);
 
 			vec3 lightCol2 = texelFetch(gaux1, ivec2(6, 37), 0).rgb / PI;
-//			#ifdef SUN_MICROFACET_SPECULAR
-				vec3 sunSpec = GGX(normal, -normalize(fragpos), lightSign*sunVec, rainStrength*0.2 + roughness + 0.05+saturate(lightSign * -0.15), f0) * lightCol2 * 8.0/3.0/150.0;
-//			#else
-//				vec3 sunSpec = drawSun(dot(lightSign * sunVec, reflectedVector), 0.0, lightCol2, vec3(0.0)) * fresnel * 8.0/3.0/150.0;
-//			#endif
+			vec3 sunSpec = GGX(normal, -normalize(fragpos), lightSign*sunVec, rainStrength*0.2 + roughness + 0.05+saturate(lightSign * -0.15), f0) * lightCol2 * 8.0/3.0/150.0;
 			sunSpec *= 1.0 - 0.9*rainStrength;
 
 			vec3 reflected = reflection.rgb * fresnel + shading * sunSpec;

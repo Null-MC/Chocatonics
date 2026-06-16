@@ -207,8 +207,8 @@ void main() {
 		vec4 color = texture(gtexture, vIn.lmtexcoord.xy, Texture_MipMap_Bias);
 		color.rgb *= vIn.color.rgb;
 
-		float avgBlockLum = luma(textureLod(gtexture, vIn.lmtexcoord.xy, 128).rgb * vIn.color.rgb);
-		color.rgb = saturate(color.rgb * pow(avgBlockLum, -0.33) * 0.85);
+//		float avgBlockLum = luma(textureLod(gtexture, vIn.lmtexcoord.xy, 128).rgb * vIn.color.rgb);
+//		color.rgb = saturate(color.rgb * pow(avgBlockLum, -0.33) * 0.85);
 
 		#ifdef DISABLE_ALPHA_MIPMAPS
 			color.a = textureLod(gtexture, vIn.lmtexcoord.xy, 0).a;

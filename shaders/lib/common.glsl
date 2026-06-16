@@ -34,6 +34,9 @@ const bool colortex15Clear = false;
 const float PI = acos(-1.0);
 const float EPSILON = 1.e-6;
 
+const float vxNearPlane = 16.0;
+const float vxFarPlane = 16.0 * 3000.0;
+
 
 #define lumCoeff vec3(0.2125, 0.7154, 0.0721)
 
@@ -48,6 +51,14 @@ const float EPSILON = 1.e-6;
 #define fsign(x) (saturate(x * 1e35) * 2.0 - 1.0)
 
 #define fstep(x,y) saturate((y - x) * 1e35)
+
+#ifdef VOXY
+    #define nearPlane near
+    #define farPlane vxFarPlane
+#else
+    #define nearPlane near
+    #define farPlane far
+#endif
 
 
 //float facos(float sx) {

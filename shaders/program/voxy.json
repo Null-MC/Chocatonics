@@ -1,0 +1,64 @@
+{
+  "unusedString": "
+    #include "/lib/common.glsl"
+    #include "/lib/settings.glsl"
+  ",
+  "version": 1,
+  "excludeLodsFromVanillaDepth": false,
+  "opaqueDrawBuffers": [8,9,10,11],
+  "translucentDrawBuffers": [2,7],
+  "blending": {
+    -1: "off",
+    0: "SRC_ALPHA ONE_MINUS_SRC_ALPHA ONE_MINUS_DST_ALPHA ONE"
+  },
+  "useViewportDims": true,
+  #if   TAA_RENDER_SCALE == 90
+    "renderScale": [0.9],
+  #elif TAA_RENDER_SCALE == 80
+    "renderScale": [0.8],
+  #elif TAA_RENDER_SCALE == 70
+    "renderScale": [0.7],
+  #elif TAA_RENDER_SCALE == 60
+    "renderScale": [0.6],
+  #elif TAA_RENDER_SCALE == 50
+    "renderScale": [0.5],
+  #endif
+  "uniforms": [
+    "cameraPosition",
+    "far",
+    "frameCounter",
+    "framemod8",
+    "frameTimeCounter",
+    "gbufferModelView",
+    "gbufferPreviousModelView",
+    "gbufferPreviousProjection",
+    "gbufferProjection",
+    "isEyeInWater",
+    "lightSign",
+    "near",
+    "nsunColor",
+    "previousCameraPosition",
+    "rainStrength",
+    "shadowModelView",
+    "shadowProjection",
+    "skyIntensity",
+    "skyIntensityNight",
+    "sunVec",
+    "texelSize",
+    "upVec",
+    "vxModelView",
+    "vxModelViewInv",
+    "vxProj",
+    "vxProjInv",
+    "vxProjPrev",
+    "wetness"
+  ],
+  "samplers": {
+    "gaux1": "sampler2D",
+    "gaux2": "sampler2D",
+    "noisetex": "sampler2D",
+    "depthtex1": "sampler2D",
+    "shadowtex0HW": "sampler2DShadow",
+    "texWave": "sampler2D"
+  }
+}
