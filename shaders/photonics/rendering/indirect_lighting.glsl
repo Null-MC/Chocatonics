@@ -52,8 +52,10 @@ void sample_indirect(inout vec3 indirect_color, vec3 sample_rt_pos, vec3 geo_nor
             vec3 hit_localPos = hit_position - rt_camera_position;
             vec3 hit_localNormal = ray_result_normal(hit);
 
-            first_hit = hit_position;
-            first_normal = hit_localNormal;
+            if (bounce == 0) {
+                first_hit = hit_position;
+                first_normal = hit_localNormal;
+            }
 
             vec3 sample_color = vec3(0.0);
 

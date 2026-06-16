@@ -68,7 +68,6 @@ bool is_in_world() {
 }
 
 bool is_hand_at() {
-//    return false;
     ivec2 uv = ivec2(gl_FragCoord.xy);
     float mat = texelFetch(TEX_GB_WORLD, uv, 0).w;
     return abs(mat - 0.75) < 0.01;
