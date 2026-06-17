@@ -16,6 +16,10 @@ in VertexData {
 
 uniform sampler2D gtexture;
 
+#ifdef MC_NORMAL_MAP
+	uniform sampler2D normals;
+#endif
+
 #ifdef MC_TEXTURE_FORMAT_LAB_PBR
 	uniform sampler2D specular;
 #endif
@@ -35,6 +39,11 @@ uniform vec4 entityColor;
 #include "/lib/octohedral.glsl"
 #include "/lib/projections.glsl"
 
+#ifdef MC_NORMAL_MAP
+	const float wetness = 0.0;
+	#include "/lib/normal_map.glsl"
+#endif
+
 
 /* RENDERTARGETS: 8,9,10,11 */
 layout(location = 0) out vec4 outColor;
@@ -46,6 +55,15 @@ void main() {
 	float noise = IGN_time(frameTimeCounter);
 	vec3 normal = vIn.normalMat.xyz;
 
+	#ifdef MC_NORMAL_MAP
+		vec3 tangent2 = normalize(cross(vIn.tangent.rgb, normal) * vIn.tangent.w);
+
+		mat3 tbnMatrix = mat3(
+			vIn.tangent.x, tangent2.x, normal.x,
+			vIn.tangent.y, tangent2.y, normal.y,
+			vIn.tangent.z, tangent2.z, normal.z);
+	#endif
+
 	vec4 color = texture(gtexture, vIn.lmtexcoord.xy) * vIn.color;
 
 //	float avgBlockLum = luma(textureLod(gtexture, vIn.lmtexcoord.xy, 128).rgb * vIn.color.rgb);
@@ -54,6 +72,10 @@ void main() {
 	color.rgb = mix(color.rgb, entityColor.rgb, entityColor.a);
 
 	if (color.a < alphaTestRef) discard;
+
+	#ifdef MC_NORMAL_MAP
+		normal = applyBump(tbnMatrix, texture(normals, vIn.lmtexcoord.xy).rgb * 2.0 - 1.0);
+	#endif
 
 	#ifdef MC_TEXTURE_FORMAT_LAB_PBR
 		vec4 specularData = texture(specular, vIn.lmtexcoord.xy);
