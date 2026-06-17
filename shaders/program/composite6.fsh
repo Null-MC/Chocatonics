@@ -31,6 +31,7 @@ uniform mat4 shadowProjection;
 
 #include "/lib/projections.glsl"
 #include "/lib/waterOptions.glsl"
+#include "/lib/color_transforms.glsl"
 
 
 vec4 BilateralUpscale(sampler2D tex, sampler2D depth, vec2 coord, float frDepth) {
@@ -173,7 +174,7 @@ void main() {
 
         if (!iswater) {
             // multiplicative tinting
-            vec3 albedo_translucent = toLinear(trpData.rgb);
+            vec3 albedo_translucent = InputTransform(trpData.rgb);
             albedo_translucent = normalize(albedo_translucent + EPSILON) / sqrt(3.0);
             color *= mix(vec3(1.0), albedo_translucent, sqrt(transparencies.a));
         }

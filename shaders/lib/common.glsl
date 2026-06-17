@@ -97,7 +97,11 @@ float square(float x) {
     return x * x;
 }
 
-vec3 toLinear(const in vec3 sRGB){
+void applyLinear(inout vec3 color) {
+    color = color * (color * (color * 0.305306011 + 0.682171111) + 0.012522878);
+}
+
+vec3 toLinear(const in vec3 sRGB) {
     return sRGB * (sRGB * (sRGB * 0.305306011 + 0.682171111) + 0.012522878);
 }
 

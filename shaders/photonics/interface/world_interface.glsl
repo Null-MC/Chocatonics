@@ -36,6 +36,7 @@ uniform mat4 shadowProjection;
 
 #include "/lib/octohedral.glsl"
 #include "/lib/projections.glsl"
+#include "/lib/color_transforms.glsl"
 
 
 vec3 load_player_position() {

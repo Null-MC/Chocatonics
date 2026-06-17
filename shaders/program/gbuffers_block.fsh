@@ -36,9 +36,10 @@ void main() {
 	vec3 normal = vIn.normalMat.xyz;
 
 	vec4 color = texture(gtexture, vIn.lmtexcoord.xy);
-	float avgBlockLum = luma(textureLod(gtexture, vIn.lmtexcoord.xy, 128).rgb * vIn.color.rgb);
 
-	color.rgb = saturate(color.rgb * pow(avgBlockLum, -0.33) * 0.85);
+//	float avgBlockLum = luma(textureLod(gtexture, vIn.lmtexcoord.xy, 128).rgb * vIn.color.rgb);
+//	color.rgb = saturate(color.rgb * pow(avgBlockLum, -0.33) * 0.85);
+
 	#ifdef DISABLE_ALPHA_MIPMAPS
 		color.a = textureLod(gtexture, vIn.lmtexcoord.xy, 0).a;
 	#endif

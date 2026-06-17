@@ -243,7 +243,7 @@ void main() {
 			sss = 0.2;
 		}
 		else if (vIn.normalMat.a < 0.91) {
-			vec3 albedo = toLinear(color.rgb);
+			vec3 albedo = InputTransform(color.rgb);
 			emission = saturate(luma(albedo) * 3.0);
 		}
 	#endif

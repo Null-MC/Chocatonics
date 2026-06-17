@@ -13,9 +13,9 @@ const vec3 nsunColor = vec3(0.0);
 #include "/lib/ggx.glsl"
 #include "/lib/bicubic.glsl"
 #include "/lib/blueNoise.glsl"
+#include "/lib/color_transforms.glsl"
 #include "/lib/Shadow_Params.glsl"
 #include "/lib/shadowSampling.glsl"
-#include "/lib/color_transforms.glsl"
 #include "/lib/sky_gradient.glsl"
 #include "/lib/waterBump.glsl"
 #include "/lib/clouds.glsl"
@@ -99,7 +99,7 @@ void voxy_emitFragment(VoxyFragmentParameters parameters) {
 	vec3 fragpos = toScreenSpace(gl_FragCoord.xyz * vec3(texelSize / RENDER_SCALE, 1.0) - vec3(vec2(tempOffset) * texelSize * 0.5, 0.0));
 
 	outColor2 = parameters.sampledColour * parameters.tinting;
-	vec3 albedo = toLinear(outColor2.rgb);
+	vec3 albedo = InputTransform(outColor2.rgb);
 
 	if (iswater > 0.4) {
 		albedo = vec3(0.42, 0.6, 0.7);

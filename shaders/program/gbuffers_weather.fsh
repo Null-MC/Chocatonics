@@ -16,6 +16,8 @@ uniform vec2 texelSize;
 uniform mat4 gbufferProjectionInverse;
 //uniform float alphaTestRef;
 
+#include "/lib/color_transforms.glsl"
+
 
 /* RENDERTARGETS: 2 */
 layout(location = 0) out vec4 outColor2;
@@ -26,7 +28,7 @@ void main() {
 
 //	if (outColor2.a < alphaTestRef) discard;
 
-	vec3 albedo = toLinear(outColor2.rgb * vIn.color.rgb);
+	vec3 albedo = InputTransform(outColor2.rgb * vIn.color.rgb);
 	vec3 ambient = texture(gaux1, (vIn.lmtexcoord.zw * 15.0 + 0.5) * texelSize).rgb;
 
 	outColor2.rgb = dot(albedo, vec3(1.0)) * ambient * 10.0/3.0/150.0 * 0.1;

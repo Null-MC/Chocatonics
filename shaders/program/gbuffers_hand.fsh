@@ -48,8 +48,8 @@ void main() {
 
 	color.rgb *= vIn.color.rgb;
 
-	float avgBlockLum = luma(textureLod(gtexture, vIn.lmtexcoord.xy, 128).rgb * vIn.color.rgb);
-	color.rgb = saturate((1.e-3 + color.rgb) * pow(avgBlockLum, -0.33) * 0.859);
+//	float avgBlockLum = luma(textureLod(gtexture, vIn.lmtexcoord.xy, 128).rgb * vIn.color.rgb);
+//	color.rgb = saturate((1.e-3 + color.rgb) * pow(avgBlockLum, -0.33) * 0.859);
 
 	if (color.a < alphaTestRef) discard;
 

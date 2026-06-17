@@ -31,8 +31,7 @@ void main() {
 	vec4 reflect_color = vec4(0.0);
 
 	if (z < 1.0) {
-		vec4 color = texture(TEX_GB_COLOR, texcoord);
-		vec3 albedo = toLinear(color.rgb);
+		vec3 albedo = InputTransform(texture(TEX_GB_COLOR, texcoord).rgb);
 
 		vec4 specularData = texture(TEX_GB_SPECULAR, texcoord);
 		float f0 = specularData.g;

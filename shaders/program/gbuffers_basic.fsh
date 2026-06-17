@@ -37,8 +37,10 @@ void main() {
 	vec3 normal = vIn.normalMat.xyz;
 
 	vec4 color = vIn.color;
-	float avgBlockLum = luma(vIn.color.rgb);
-	color.rgb = saturate(color.rgb * pow(avgBlockLum, -0.33) * 0.85);
+
+//	float avgBlockLum = luma(vIn.color.rgb);
+//	color.rgb = saturate(color.rgb * pow(avgBlockLum, -0.33) * 0.85);
+
 	color.a = float(color.a > noise);
 
 	if (color.a < alphaTestRef) discard;

@@ -50,6 +50,7 @@ uniform int worldTime;
 #include "/lib/util.glsl"
 #include "/lib/bicubic.glsl"
 #include "/lib/sky_gradient.glsl"
+#include "/lib/color_transforms.glsl"
 #include "/lib/ROBOBO_sky.glsl"
 
 

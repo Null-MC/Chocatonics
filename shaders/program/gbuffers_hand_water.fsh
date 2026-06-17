@@ -35,6 +35,7 @@ uniform int framemod8;
 #include "/lib/ign.glsl"
 #include "/lib/bicubic.glsl"
 #include "/lib/projections.glsl"
+#include "/lib/color_transforms.glsl"
 #include "/lib/Shadow_Params.glsl"
 #include "/lib/shadowSampling.glsl"
 #include "/lib/shadowSamplingBicubic.glsl"
@@ -45,10 +46,9 @@ layout(location = 0) out vec4 outColor2;
 
 void main() {
 	outColor2 = texture(gtexture, vIn.lmtexcoord.xy) * vIn.color;
+	vec3 albedo = InputTransform(outColor2.rgb);
 
 	vec2 taa_offset = taa_offsets[framemod8];
-
-	vec3 albedo = toLinear(outColor2.rgb);
 
 	vec3 normal = vIn.normalMat.xyz;
 	vec3 fragpos = toScreenSpace(gl_FragCoord.xyz * vec3(texelSize / RENDER_SCALE, 1.0) - vec3(taa_offset * texelSize * 0.5, 0.0));

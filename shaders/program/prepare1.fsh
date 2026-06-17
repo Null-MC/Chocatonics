@@ -60,6 +60,7 @@ vec4 lightCol = vec4(vIn.lightSourceColor, float(sunElevation > 1.e-5) * 2.0 - 1
 #include "/lib/bicubic.glsl"
 #include "/lib/blueNoise.glsl"
 #include "/lib/projections.glsl"
+#include "/lib/color_transforms.glsl"
 #include "/lib/Shadow_Params.glsl"
 #include "/lib/ROBOBO_sky.glsl"
 #include "/lib/sky_gradient.glsl"

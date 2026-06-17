@@ -73,6 +73,7 @@ uniform vec3 shadowLightPosition;
 //#include "/lib/color_transforms.glsl"
 //#include "/lib/color_dither.glsl"
 #include "/lib/projections.glsl"
+#include "/lib/color_transforms.glsl"
 #include "/lib/sky_gradient.glsl"
 //#include "/lib/volumetricClouds.glsl"
 
@@ -161,7 +162,7 @@ void main() {
 		localPos += gbufferModelViewInverse[3].xyz;
 
 		vec4 color = texture(TEX_GB_COLOR, texcoord);
-		vec3 albedo = toLinear(color.rgb);
+		vec3 albedo = InputTransform(color.rgb);
 
 		vec4 normalData = texture(TEX_GB_NORMAL, texcoord);
 		vec3 geoViewNormal = OctDecode(normalData.xy);

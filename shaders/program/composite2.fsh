@@ -429,7 +429,7 @@ void main() {
 			color += drawSun(dot(vIn.lightCol.a * vIn.WsunVec, np3), 0, vIn.lightCol.rgb/150.0, vec3(0.0));
 		}
 
-		vec3 albedo = toLinear(texture(TEX_GB_COLOR, texcoord).rgb);
+		vec3 albedo = InputTransform(texture(TEX_GB_COLOR, texcoord).rgb);
 		color += skyFromTex(np3, colortex4)/150.0 + albedo/10.0 * 4.0*ffstep(0.985, -dot(vIn.lightCol.a * vIn.WsunVec, np3));
 		color = color * cloud.a + cloud.rgb;
 
@@ -461,8 +461,7 @@ void main() {
 //		bool iswater = texture(colortex7, texcoord).a > 0.99;
 		bool iswater = trpData.a > 0.99;
 
-		vec4 color = texture(TEX_GB_COLOR, texcoord);
-		vec3 albedo = toLinear(color.rgb);
+		vec3 albedo = InputTransform(texture(TEX_GB_COLOR, texcoord).rgb);
 
 		vec4 normalData = texture(TEX_GB_NORMAL, texcoord);
 //		vec3 geo_normal = mat3(gbufferModelViewInverse) * OctDecode(normalData.xy);
@@ -560,7 +559,7 @@ void main() {
 
 						sampleColor.rgb = mix(sampleColor.rgb, vec3(1.0), shadowColorF);
 
-						shadowColor += toLinear(sampleColor.rgb) * isShadow;
+						shadowColor += InputTransform(sampleColor.rgb) * isShadow;
 					#else
 						float isShadow = texture(shadowtex0HW, samplePos);
 					#endif

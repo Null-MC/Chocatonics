@@ -84,7 +84,7 @@ mat2x3 getVolumetricRays(float dither, vec3 fragpos, vec4 lightCol) {
 		float dd = pow(expFactor, (i+dither)/float(VL_SAMPLES2)) * log(expFactor) / float(VL_SAMPLES2)/(expFactor-1.0);
 
 		progress = start.xyz + d*dV;
-		progressW = gbufferModelViewInverse[3].xyz+cameraPosition + d*dVWorld;
+		progressW = gbufferModelViewInverse[3].xyz + cameraPosition + d*dVWorld;
 
 		//project into biased shadowmap space
 		float distortFactor = calcDistort(progress.xy);
@@ -92,7 +92,7 @@ mat2x3 getVolumetricRays(float dither, vec3 fragpos, vec4 lightCol) {
 		float densityVol = cloudVol(progressW, vIn.VFAmount, vIn.fogAmount);
 		float sh = 1.0;
 
-		if (abs(pos.x) < 1.0-0.5/2048. && abs(pos.y) < 1.0-0.5/2048) {
+		if (abs(pos.x) < 1.0-0.5/2048.0 && abs(pos.y) < 1.0-0.5/2048) {
 			pos = pos * vec3(0.5, 0.5, 0.5/6.0) + 0.5;
 			sh = texture(shadowtex0HW, pos);
 
@@ -114,15 +114,15 @@ mat2x3 getVolumetricRays(float dither, vec3 fragpos, vec4 lightCol) {
 		float density = densityVol * ATMOSPHERIC_DENSITY * 300.0; // * mu
 
 		// Just air
-		vec2 airCoef = exp2(-max(progressW.y-SEA_LEVEL,0.0)/vec2(8.0e3, 1.2e3)*vec2(6.,7.0))*6.0;
+		vec2 airCoef = exp2(-max(progressW.y - SEA_LEVEL, 0.0) / vec2(8.0e3, 1.2e3) * vec2(6.,7.0)) * 6.0;
 
 		// Pbr for air, yolo mix between mie and rayleigh for water droplets
-		vec3 rL = rC*airCoef.x;
-		vec3 m = (airCoef.y+density)*mC;
-		vec3 vL0 = sunColor*sh*(rayL*rL+m*mie) + skyCol0*(rL+m);
-		vL += (vL0 - vL0 * exp(-(rL+m)*dd*dL)) / ((rL+m)+0.00000001) * absorbance;
+		vec3 rL = rC * airCoef.x;
+		vec3 m = (airCoef.y + density) * mC;
+		vec3 vL0 = sunColor * sh * (rayL*rL+m*mie) + skyCol0 * (rL + m);
+		vL += (vL0 - vL0 * exp(-(rL+m)*dd*dL)) / (rL+m + 0.00000001) * absorbance;
 		absorbance *= saturate(exp(-(rL+m) * dd * dL));
 	}
 
-	return mat2x3(vL, absorbance);
+	return mat2x3(InputTransformLinear(vL), absorbance);
 }

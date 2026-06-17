@@ -35,6 +35,7 @@ uniform int framemod8;
 #include "/lib/ign.glsl"
 #include "/lib/bicubic.glsl"
 #include "/lib/projections.glsl"
+#include "/lib/color_transforms.glsl"
 #include "/lib/Shadow_Params.glsl"
 #include "/lib/shadowSampling.glsl"
 #include "/lib/shadowSamplingBicubic.glsl"
@@ -49,7 +50,7 @@ void main() {
 
 	float avgBlockLum = luma(textureLod(gtexture, vIn.lmtexcoord.xy, 128).rgb * vIn.color.rgb);
 	outColor2.rgb = saturate((outColor2.rgb) * pow(avgBlockLum, -0.33) * 0.85);
-	vec3 albedo = toLinear(outColor2.rgb);
+	vec3 albedo = InputTransform(outColor2.rgb);
 
 	vec3 normal = vIn.normalMat.xyz;
 	vec3 fragpos = toScreenSpace(gl_FragCoord.xyz * vec3(texelSize / RENDER_SCALE, 1.0) - vec3(taa_offset * texelSize * 0.5, 0.0));

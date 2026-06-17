@@ -36,6 +36,7 @@ uniform int framemod8;
 #include "/lib/ign.glsl"
 #include "/lib/bicubic.glsl"
 #include "/lib/projections.glsl"
+#include "/lib/color_transforms.glsl"
 #include "/lib/Shadow_Params.glsl"
 #include "/lib/shadowSampling.glsl"
 #include "/lib/shadowSamplingBicubic.glsl"
@@ -46,14 +47,11 @@ layout(location = 0) out vec4 outColor2;
 
 void main() {
 	outColor2 = texture(gtexture, vIn.lmtexcoord.xy) * vIn.color;
+	vec3 albedo = InputTransform(outColor2.rgb);
 
 	if (outColor2.a < alphaTestRef) discard;
 
 	vec2 taa_offset = taa_offsets[framemod8];
-
-	float avgBlockLum = luma(textureLod(gtexture, vIn.lmtexcoord.xy, 128).rgb * vIn.color.rgb);
-	outColor2.rgb = saturate(outColor2.rgb * pow(avgBlockLum, -0.33) * 0.85);
-	vec3 albedo = toLinear(outColor2.rgb);
 
 	vec3 normal = vIn.normalMat.xyz;
 	vec3 fragpos = toScreenSpace(gl_FragCoord.xyz * vec3(texelSize/RENDER_SCALE, 1.0) - vec3(vec2(taa_offset)*texelSize*0.5, 0.0));
@@ -63,17 +61,17 @@ void main() {
 	float diffuseSun = 0.712;
 	vec3 direct = texelFetch(gaux1, ivec2(6, 37), 0).rgb / PI;
 
-	//compute shadows only if not backface
+	// compute shadows only if not backface
 	if (diffuseSun > 0.001) {
 		vec3 p3 = mul3(gbufferModelViewInverse, fragpos);
 		vec3 projectedShadowPosition = mul3(shadowModelView, p3);
 		projectedShadowPosition = diagonal3(shadowProjection) * projectedShadowPosition + shadowProjection[3].xyz;
 
-		//apply distortion
+		// apply distortion
 		float distortFactor = calcDistort(projectedShadowPosition.xy);
 		projectedShadowPosition.xy *= distortFactor;
 
-		//do shadows only if on shadow map
+		// do shadows only if on shadow map
 		if (abs(projectedShadowPosition.x) < 1.0-1.5/shadowMapResolution && abs(projectedShadowPosition.y) < 1.0-1.5/shadowMapResolution){
 			const float threshMul = sqrt(2048.0 / shadowMapResolution*shadowDistance/128.0);
 			float distortThresh = 1.0 / (distortFactor * distortFactor);

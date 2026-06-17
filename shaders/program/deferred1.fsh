@@ -37,6 +37,7 @@ uniform mat4 shadowProjection;
 #include "/lib/bicubic.glsl"
 #include "/lib/blueNoise.glsl"
 #include "/lib/projections.glsl"
+#include "/lib/color_transforms.glsl"
 #include "/lib/sky_gradient.glsl"
 #include "/lib/volumetricClouds.glsl"
 

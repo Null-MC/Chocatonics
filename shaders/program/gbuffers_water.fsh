@@ -171,7 +171,7 @@ void main() {
 
 		outColor2 = texture(gtexture, vIn.lmtexcoord.xy) * vIn.color;
 		outColor2.rgb = saturate(outColor2.rgb * pow(avgBlockLum, -0.33) * 0.85);
-		vec3 albedo = toLinear(outColor2.rgb);
+		vec3 albedo = InputTransform(outColor2.rgb);
 
 		if (iswater > 0.4) {
 			albedo = vec3(0.42, 0.6, 0.7);

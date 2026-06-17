@@ -47,8 +47,10 @@ void main() {
 	vec3 normal = vIn.normalMat.xyz;
 
 	vec4 color = texture(gtexture, vIn.lmtexcoord.xy) * vIn.color;
-	float avgBlockLum = luma(textureLod(gtexture, vIn.lmtexcoord.xy, 128).rgb * vIn.color.rgb);
-	color.rgb = saturate(color.rgb * pow(avgBlockLum, -0.33) * 0.85);
+
+//	float avgBlockLum = luma(textureLod(gtexture, vIn.lmtexcoord.xy, 128).rgb * vIn.color.rgb);
+//	color.rgb = saturate(color.rgb * pow(avgBlockLum, -0.33) * 0.85);
+
 	color.rgb = mix(color.rgb, entityColor.rgb, entityColor.a);
 
 	if (color.a < alphaTestRef) discard;

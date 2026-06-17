@@ -35,9 +35,15 @@ uniform float far;
 #include "/lib/blueNoise.glsl"
 #include "/lib/color_transforms.glsl"
 #include "/lib/color_dither.glsl"
+#include "/lib/tonemap.glsl"
+
+#ifdef ACES_CG_ENABLED
+	#include "/lib/aces.glsl"
+#endif
+
 
 #ifdef DOF
-	//hexagon pattern
+	// hexagon pattern
 	const vec2 hex_offsets[60] = vec2[60](
 		vec2(  0.2165,  0.1250 ),
 		vec2(  0.0000,  0.2500 ),
@@ -468,6 +474,11 @@ void main() {
 		#endif
 	#endif
 
+	#ifdef ACES_CG_ENABLED
+		col = ACES_cg_to_linear(col);
+//		col = ACEScct_from_Linear(col);
+	#endif
+
 	vec2 clampedRes = max(vec2(viewWidth, viewHeight), vec2(1920.0, 1080.0));
 
 	vec3 bloom = texture(colortex3, vIn.texcoord / clampedRes * vec2(1920.0, 1080.0) * 0.5 * BLOOM_QUALITY).rgb / 2.0 / 7.0;
@@ -486,13 +497,27 @@ void main() {
 	float rodCurve = mix(1.0, rodLum/(2.5+rodLum), purkinje);
 	col = mix(clamp(lum, 0.0, 0.05) * Purkinje_Multiplier * vec3(Purkinje_R, Purkinje_G, Purkinje_B) + 1.5e-3, col, rodCurve);
 
-	#ifndef USE_ACES_COLORSPACE_APPROXIMATION
-  		col = LinearTosRGB(TONEMAP(col));
+	#ifdef ACES_CG_ENABLED
+//		col = ACES_cg_to_linear(col);
+//		col = Linear_from_ACEScct(col);
+//		col = max(col, vec3(0.0));
+
+		col = ACESFilm(col);
+//		col = ApplyRRT(col);
+//		col = ApplyODT(col);
 	#else
-		col = col * ACESInputMat;
+		#ifdef USE_ACES_COLORSPACE_APPROXIMATION
+			col = col * ACESInputMat;
+		#endif
+
 		col = TONEMAP(col);
-		col = LinearTosRGB(saturate(col * ACESOutputMat));
+
+		#ifdef USE_ACES_COLORSPACE_APPROXIMATION
+			col = saturate(col * ACESOutputMat);
+		#endif
 	#endif
+
+	col = linearToSRGB(col);
 
 	outColor7 = saturate(int8Dither(col, vIn.texcoord));
 }
