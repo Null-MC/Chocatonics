@@ -51,6 +51,7 @@ uniform vec3 cameraPosition;
 #include "/lib/material.glsl"
 #include "/lib/octohedral.glsl"
 #include "/lib/projections.glsl"
+#include "/lib/color_transforms.glsl"
 
 #ifdef MC_NORMAL_MAP
 	#include "/lib/normal_map.glsl"
