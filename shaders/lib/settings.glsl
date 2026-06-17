@@ -87,6 +87,7 @@
 
 #define REFLECTION_ENABLED
 #define REFLECTION_ROUGH
+//#define REFLECTION_ACCUMULATE
 //#define REFLECTION_QUARTER_RES_DEPTH
 #define REFLECTION_QUALITY 30 // [6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 25 30 35 40 45 50 55 60 65 70 75 80 85 90 95 100]
 #define Roughness_Threshold 1.5 // using a curve on the roughness, make the reflections more or less visible on rough surfaces. good for hiding noise on rough materials [1.0 1.1 1.2 1.3 1.4 1.5 1.6 1.7 1.8 1.9 2.0 2.1 2.2 2.3 2.4 2.5 2.6 2.7 2.8 2.9 3.0 ]
@@ -179,6 +180,10 @@ const vec3 TorchColor = vec3(TORCH_R, TORCH_G, TORCH_B);
 
 #ifdef MAT_PARALLAX_ENABLED
     #define MC_NORMAL_MAP
+#endif
+
+#ifndef REFLECTION_ROUGH
+    #undef REFLECTION_ACCUMULATE
 #endif
 
 #if defined(TAA_ENABLED) && TAA_RENDER_SCALE != 100

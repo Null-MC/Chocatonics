@@ -89,6 +89,8 @@ screen.REFLECTIONS=Reflections
     option.REFLECTION_ROUGH=Roughness Scattering
     option.REFLECTION_ROUGH.comment=Turns the roughness GGXVNDF ON. sizable performance impact, and introduces alot of noise.
 
+    option.REFLECTION_ACCUMULATE=Accumulation
+
 
 screen.TAA_OPTIONS=TAA
 

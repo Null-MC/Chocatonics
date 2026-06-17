@@ -8,7 +8,8 @@ const int colortex5Format = R11F_G11F_B10F;		// TAA buffer (everything)
 const int colortex6Format = R11F_G11F_B10F;		// additionnal buffer for bloom (composite3->final)
 const int colortex7Format = RGBA8;			    // Final output, transparencies id (gbuffer->composite4)
 const int colortex9Format = RGBA16;             // GBuffer Normals
-const int colortex13Format = RGB16F;            // Rough Reflections
+const int colortex13Format = RGBA16F;            // Rough Reflection Trace
+const int colortex14Format = RGBA16F;            // Rough Reflection History
 */
 //no need to clear the buffers, saves a few fps
 /*
@@ -110,6 +111,7 @@ float pow5(const in float value) {
 #define TEX_GB_NORMAL colortex9
 #define TEX_GB_SPECULAR colortex10
 #define TEX_GB_WORLD colortex11
+#define TEX_REFLECT_HISTORY colortex14
 
 #define MAT_FORMAT_OLDPBR 1
 #define MAT_FORMAT_LABPBR 2

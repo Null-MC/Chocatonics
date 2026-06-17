@@ -1,6 +1,6 @@
 #version 430 compatibility
 
-// Photonics world-space reflections
+// Photonics world-space reflection trace
 
 #include "/lib/common.glsl"
 #include "/lib/settings.glsl"
@@ -34,6 +34,10 @@ uniform sampler2DShadow shadowtex0HW;
 uniform sampler2D colortex3;
 uniform sampler2D colortex4;
 
+#ifdef REFLECTION_ACCUMULATE
+	uniform sampler2D TEX_REFLECT_HISTORY;
+#endif
+
 uniform float far;
 uniform float near;
 //uniform vec3 sunVec;
@@ -46,7 +50,8 @@ uniform int frameCounter;
 uniform vec2 texelSize;
 uniform mat4 gbufferProjection;
 uniform mat4 gbufferProjectionInverse;
-////uniform mat4 gbufferPreviousProjection;
+uniform mat4 gbufferPreviousModelView;
+uniform mat4 gbufferPreviousProjection;
 uniform mat4 gbufferModelViewInverse;
 uniform mat4 gbufferModelView;
 uniform mat4 shadowModelView;
@@ -75,7 +80,62 @@ uniform vec3 shadowLightPosition;
 #include "/photonics/trace_ray.glsl"
 
 
-#ifdef REFLECTION_ROUGH
+vec3 toClipSpacePrev3(const in vec3 viewSpacePosition) {
+	return projMAD(gbufferPreviousProjection, viewSpacePosition) / -viewSpacePosition.z * 0.5 + 0.5;
+}
+
+vec2 reproject(const in vec3 screenPos, const in float reflectDist) {
+	vec3 viewPos = toScreenSpace(screenPos);
+
+	// parallax offset
+	viewPos += reflectDist * normalize(viewPos);
+
+    vec3 localPos = mul3(gbufferModelViewInverse, viewPos);
+
+	// camera movement
+	vec3 prev_localPos = localPos + cameraPosition - previousCameraPosition;
+
+	vec3 prev_viewPos = mul3(gbufferPreviousModelView, prev_localPos);
+
+	// parallax offset
+//	prev_viewPos -= reflectDist * normalize(prev_viewPos);
+
+	return toClipSpacePrev3(prev_viewPos).xy;
+}
+
+float pack_8bit_float_and_uint(float floatVal, uint uintVal) {
+	// 1. Clamp values to guarantee they fit in 8 bits
+	float clampedFloat = clamp(floatVal, 0.0, 1.0);
+	float clampedUint  = float(clamp(uintVal, 0u, 255u));
+
+	// 2. Quantize the float to exactly 8 bits of precision (values like 0/255, 1/255... 255/255)
+	float quantizedFloat = floor(clampedFloat * 255.0) / 255.0;
+
+	// 3. Compress the fractional float so it strictly stays below 1.0
+	// This scales the range [0.0, 1.0] down to [0.0, 255.0/256.0]
+	float fractionalPart = quantizedFloat * (255.0 / 256.0);
+
+	// 4. Combine them into a single float value (Max total value: ~255.996)
+	return clampedUint + fractionalPart;
+}
+
+void unpack_8bit_float_and_uint(float packedVal, out float floatVal, out uint uintVal) {
+	// 1. Extract the integer portion to get the original 8-bit uint
+	float intPart = floor(packedVal);
+	uintVal = uint(intPart);
+
+	// 2. Extract the fractional remainder
+	float fractionalPart = fract(packedVal);
+
+	// 3. Reverse the scaling factor to reconstruct the [0.0, 1.0] range
+	floatVal = fractionalPart * (256.0 / 255.0);
+
+	// 4. Clean up minor floating-point precision variances
+	floatVal = clamp(floatVal, 0.0, 1.0);
+}
+
+
+#ifdef REFLECTION_ACCUMULATE
 	/* RENDERTARGETS: 13 */
 	layout(location = 0) out vec4 outColor13;
 #else
@@ -87,20 +147,24 @@ void main() {
 	vec2 texcoord = gl_FragCoord.xy * texelSize;
 	float z = texture(depthtex0, texcoord).x;
 
-	vec4 reflect_color = vec4(0.0);
+	vec3 screenPos = vec3(texcoord / RENDER_SCALE - vIn.TAA_Offset * texelSize, z);
+
+	vec3 reflect_color = vec3(0.0);
+	float reflectDist = 0.0;
+	float roughness = 1.0;
 
 	if (z < 1.0) {
-		vec3 fragpos = toScreenSpace(vec3(texcoord / RENDER_SCALE - vIn.TAA_Offset * texelSize * 0.5, z));
-		vec3 p3 = mat3(gbufferModelViewInverse) * fragpos;
-		vec3 np3 = normVec(p3);
+		vec3 viewPos = toScreenSpace(screenPos);
+		vec3 localPos = mat3(gbufferModelViewInverse) * viewPos;
+		vec3 localViewDir = normVec(localPos);
 
-		p3 += gbufferModelViewInverse[3].xyz;
+		localPos += gbufferModelViewInverse[3].xyz;
 
 		vec4 color = texture(TEX_GB_COLOR, texcoord);
 		vec3 albedo = toLinear(color.rgb);
 
 		vec4 normalData = texture(TEX_GB_NORMAL, texcoord);
-		vec3 geoViewNormal = mat3(gbufferModelViewInverse) * OctDecode(normalData.xy);
+		vec3 geoViewNormal = OctDecode(normalData.xy);
 		vec3 tex_normal = OctDecode(normalData.zw);
 
 		vec3 geoLocalNormal = mat3(gbufferModelViewInverse) * geoViewNormal;
@@ -114,17 +178,11 @@ void main() {
 
 		bool hand = abs(mat-0.75) < 0.01;
 
-		#ifdef MC_TEXTURE_FORMAT_LAB_PBR
-			float roughness = square(1.0 - specularData.r);
-			float f0 = specularData.g;
-			if (f0 < EPSILON) f0 = 0.04;
-		#else
-			float roughness = 1.0;
-			float f0 = 0.04;
-		#endif
+		roughness = square(1.0 - specularData.r);
+		float f0 = specularData.g;
 
 		mat3 basis = CoordBase(normal);
-		vec3 normSpaceView = -np3 * basis;
+		vec3 normSpaceView = -localViewDir * basis;
 
 		// roughness stuff
 		#ifdef REFLECTION_ROUGH
@@ -137,7 +195,6 @@ void main() {
 
 			if (hand) H = normalize(vec3(0.0, 0.0, 1.0));
 		#else
-//			vec3 H = normalize(vec3(0.0, 0.0, 1.0));
 			const vec3 H = vec3(0.0, 0.0, 1.0);
 		#endif
 
@@ -150,7 +207,7 @@ void main() {
 //		float F = schlick(dot(-Ln, H), f0, 1.0);
 //		vec3 rayContrib = F;
 
-		float NdotV = saturate(dot(np3, normalize(normal)) * 5000.0);
+		float NdotV = saturate(dot(localViewDir, normalize(normal)) * 5000.0);
 
 		bool hasReflections = (f0 * (1.0 - roughness * Roughness_Threshold)) > 0.02;
 
@@ -161,15 +218,17 @@ void main() {
 
 			RayIterator ray;
 			ray.iterations = PHOTONICS_REFLECT_STEPS;
-			ray_iter_set_position(ray, p3 + rt_camera_position);
+			ray_iter_set_position(ray, localPos + rt_camera_position);
 			ray_iter_set_direction(ray, reflectLocalDir);
-			ray_iter_offset_position(ray, 0.004 * geoLocalNormal);
+			ray_iter_offset_position(ray, 0.02 * geoLocalNormal);
 
 			vec3 radiance = vec3(0.0);
 			vec3 transmittance = vec3(1.0);
+			vec3 localPosLast = localPos;
 
+			int bounce;
 			bool bounce_hit = true;
-			for (int bounce = 0; bounce < PHOTONICS_REFLECT_BOUNCES; bounce++) {
+			for (bounce = 0; bounce < PHOTONICS_REFLECT_BOUNCES; bounce++) {
 				RayResult hit = ray_iter_next(ray);
 				bounce_hit = ray_result_is_hit(hit);
 				if (!bounce_hit || !ray_iter_is_in_bounds(ray)) break;
@@ -184,7 +243,7 @@ void main() {
 				vec3 hit_localNormal = ray_result_normal(hit);
 //				float hitViewDist = length(hitLocalPos);
 
-//				reflectDist += distance(localPos, hitLocalPos);
+				reflectDist += distance(localPosLast, hitLocalPos);
 
 				float hit_sky = ray_result_skylight(hit) / 15.0;
 				vec2 hit_lmcoord = vec2(0.0, hit_sky);
@@ -280,6 +339,7 @@ void main() {
 				#endif
 
 				vec3 hit_reflectLocalDir = normalize(reflect(reflectLocalDir, hit_localNormal));
+				localPosLast = hitLocalPos;
 
 				reflectLocalDir = hit_reflectLocalDir;
 				ray_iter_set_direction(ray, reflectLocalDir);
@@ -290,31 +350,58 @@ void main() {
 				vec3 sky_color = skyCloudsFromTex(reflectLocalDir, colortex4).rgb / 150.0;
 				sky_color = clamp(sky_color * 8.0/3.0, 0.0, 65000.0);
 				radiance += sky_color * transmittance;
+
+				reflectDist = farPlane;
 			}
 
-			reflect_color.rgb = radiance;
+			reflect_color = radiance;
 		}
 
-		// check if the f0 is within the metal ranges, then tint by albedo if it's true.
-		reflect_color.rgb *= mix(vec3(1.0), albedo, f0 > 229.5/255.0);
-
-		// apply all reflections to the lighting
-		reflect_color.rgb *= F; //luma(F);
-
-		#ifndef REFLECTION_ROUGH
-			reflect_color.rgb *= 1.0 - sqrt(roughness);
+		#ifndef REFLECTION_ACCUMULATE
+			// check if the f0 is within the metal ranges, then tint by albedo if it's true.
+			reflect_color *= mix(vec3(1.0), albedo, f0 > 229.5/255.0);
 		#endif
 
-		reflect_color.a = 1.0;
+		// apply all reflections to the lighting
+		reflect_color *= F; //luma(F);
+
+		#ifndef REFLECTION_ROUGH
+			reflect_color *= 1.0 - sqrt(roughness);
+		#endif
 	}
 
-	#ifdef REFLECTION_ROUGH
-		outColor13 = clamp(reflect_color, 0.000001, 65000.0);
+	#ifdef REFLECTION_ACCUMULATE
+//		float alpha = 0.998;// mix(0.0, 0.998, pow(roughness, 0.1));
+
+		vec3 screenPos2 = vec3(texcoord / RENDER_SCALE, z);
+		vec2 tex_last = reproject(screenPos2, reflectDist);
+		vec4 src = textureLod(TEX_REFLECT_HISTORY, tex_last*RENDER_SCALE, 0);
+
+		uint counter;
+		float src_roughness;
+		unpack_8bit_float_and_uint(src.a, src_roughness, counter);
+
+		if (!all(equal(saturate(tex_last), tex_last))) counter = 0;
+
+		float diff = abs(src_roughness - roughness);
+//		if (diff > 0.2) counter = 0;
+
+		float alpha = 1.0 - 1.0 / (1 + counter);
+
+//		alpha *= max(1.0 - 8.0*diff, 0.0);
+
+		reflect_color = mix(reflect_color, src.rgb, alpha);
+
+		int counter_max = int(ceil(sqrt(roughness) * 120.0));
+		counter = min(counter+1, counter_max);
+
+		outColor13.rgb = clamp(reflect_color, 0.000001, 65000.0);
+		outColor13.a = pack_8bit_float_and_uint(roughness, counter);
 	#else
 		ivec2 uv = ivec2(gl_FragCoord.xy);
 		vec3 dest_color = texelFetch(colortex3, uv, 0).rgb;
 
-		dest_color += reflect_color.rgb;
+		dest_color += reflect_color;
 
 		outColor3 = vec4(clamp(dest_color, 0.000001, 65000.0), 1.0);
 	#endif

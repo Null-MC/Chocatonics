@@ -81,14 +81,13 @@ void MaterialReflections(
 	#else
 		vec3 H = normalize(vec3(0.0, 0.0, 1.0));
 	#endif
-	
+
 	vec3 Ln = reflect(-normSpaceView, clamp(H, -1.0, 1.0));
 	vec3 L = basis * Ln;
 
 	// fresnel stuff
 	float fresnel = pow5(saturate(1.0 + dot(-Ln, H)));
-	vec3 F = f0 + (1.0 - f0) * fresnel; 
-	vec3 rayContrib = F;
+	vec3 F = f0 + (1.0 - f0) * fresnel;
 
 	float NdotV = saturate(dot(np3, normalize(normal)) * 5000.0);
 
@@ -139,16 +138,16 @@ void MaterialReflections(
 
 	// darken albedos, and stop darkening where the sky gets occluded indoors
 	#ifdef PHOTONICS_REFLECT_ENABLED
-		Reflections_Final *= 1.0 - luma(rayContrib);
+		Reflections_Final *= 1.0 - luma(F);
 	#else
-		Reflections_Final *= mix(1.0 - (Reflections.a * luma(rayContrib)), 1.0 - luma(rayContrib), Outdoors);
+		Reflections_Final *= mix(1.0 - (Reflections.a * luma(F)), 1.0 - luma(F), Outdoors);
 	#endif
 	
 	// apply all reflections to the lighting
-	Reflections_Final += Reflections.rgb * luma(rayContrib);
+	Reflections_Final += Reflections.rgb * luma(F);
 
 	#ifndef PHOTONICS_REFLECT_ENABLED
-		Reflections_Final += SkyReflection * luma(rayContrib) * (1.0-Reflections.a) * Outdoors;
+		Reflections_Final += SkyReflection * luma(F) * (1.0-Reflections.a) * Outdoors;
 	#endif
 
 	#ifdef REFLECTION_ROUGH

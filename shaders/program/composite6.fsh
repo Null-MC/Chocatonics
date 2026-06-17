@@ -25,15 +25,13 @@ uniform mat4 gbufferProjectionInverse;
 uniform vec2 texelSize;
 uniform vec3 cameraPosition;
 
+uniform mat4 gbufferProjection;
+uniform mat4 shadowModelView;
+uniform mat4 shadowProjection;
+
+#include "/lib/projections.glsl"
 #include "/lib/waterOptions.glsl"
 
-
-vec3 toScreenSpace(vec3 p) {
-	vec4 iProjDiag = vec4(gbufferProjectionInverse[0].x, gbufferProjectionInverse[1].y, gbufferProjectionInverse[2].zw);
-    vec3 p3 = p * 2.0 - 1.0;
-    vec4 fragposition = iProjDiag * p3.xyzz + gbufferProjectionInverse[3];
-    return fragposition.xyz / fragposition.w;
-}
 
 vec4 BilateralUpscale(sampler2D tex, sampler2D depth, vec2 coord, float frDepth) {
     vec4 vl = vec4(0.0);
