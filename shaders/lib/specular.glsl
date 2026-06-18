@@ -1,3 +1,6 @@
+// #define TEX_SKY_LUT colortex4 | gaux1
+
+
 vec3 rayTraceSpeculars(vec3 dir, vec3 position, float dither, float quality, bool hand, float fres) {
 	vec3 clipPosition = toClipSpace3(position);
 
@@ -18,7 +21,7 @@ vec3 rayTraceSpeculars(vec3 dir, vec3 position, float dither, float quality, boo
 	float minZ = spos.z + stepv.z;
 	float maxZ = spos.z + stepv.z;
 
-	spos.xy += vIn.TAA_Offset * texelSize*0.5 / RENDER_SCALE;
+	spos.xy += v_taa_offset * texelSize*0.5 / RENDER_SCALE;
 
 	for (int i = 0; i <= int(quality); i++) {
 		// decode depth buffer
@@ -91,23 +94,21 @@ void MaterialReflections(
 
 	float NdotV = saturate(dot(np3, normalize(normal)) * 5000.0);
 
-	bool hasReflections = (f0.y * (1.0 - roughness * Roughness_Threshold)) > 0.02;
-	if (!hasReflections || NdotV > 0.00001) Outdoors = 0.0;
+//	bool hasReflections = (f0.y * (1.0 - roughness * Roughness_Threshold)) > 0.02;
+//	if (!hasReflections || NdotV > 0.00001) Outdoors = 0.0;
+	bool hasReflections = NdotV < 0.00001;
+	if (!hasReflections) Outdoors = 0.0;
 
 	// SSR, Sky, and Sun reflections
 	vec4 Reflections = vec4(0.0);
 	vec3 SunReflection = diffuse * GGX2(normal, -np3,  sunPos, roughness, f0)/150.0 * 8.0/3.0 * sunCol * Sun_specular_Strength;
 
 	#ifndef PHOTONICS_REFLECT_ENABLED
-		vec3 SkyReflection = skyCloudsFromTex(L, colortex4).rgb * 0.035;
+		vec3 SkyReflection = skyCloudsFromTex(L, TEX_SKY_LUT).rgb * 0.035;
 	#endif
 
-//	#ifndef Sky_reflection
-//		SkyReflection = Reflections_Final;
-//	#endif
-
 	#if defined(REFLECTION_ENABLED) && !defined(PHOTONICS_REFLECT_ENABLED)
-		if (hasReflections && NdotV < 0.00001) { // Skip SSR if ray contribution is low
+		if (hasReflections) { // Skip SSR if ray contribution is low
 			// float rayQuality = REFLECTION_QUALITY;
 			float rayQuality = mix(REFLECTION_QUALITY, 0.0, sqrt(roughness)); // Scale quality with ray contribution
 
@@ -119,7 +120,7 @@ void MaterialReflections(
 				previousPosition.xy = projMAD(gbufferPreviousProjection, previousPosition).xy / -previousPosition.z * 0.5 + 0.5;
 
 				if (all(equal(saturate(previousPosition.xy), previousPosition.xy))) {
-					Reflections.rgb = texture(colortex5, previousPosition.xy).rgb;
+					Reflections.rgb = texture(TEX_FINAL_PREV, previousPosition.xy).rgb;
 					Reflections.a = 1.0;
 				}
 			}

@@ -14,7 +14,7 @@ uniform int framemod8;
 
 
 void main() {
-	vOut.texcoord = (gl_MultiTexCoord0).xy;
+	vOut.texcoord = (gl_TextureMatrix[0] * gl_MultiTexCoord0).xy;
 	vOut.color = gl_Color;
 
 	gl_Position = ftransform();

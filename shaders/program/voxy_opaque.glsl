@@ -33,7 +33,7 @@ void voxy_emitFragment(VoxyFragmentParameters parameters) {
 	// TODO: normalize?
 	vec2 lmcoord = parameters.lightMap;
 
-	const float roughness = 1.0;
+	const float smoothness = 0.0;
 	const float f0 = 0.04;
 	float emission = 0.0;
 	float sss = 0.0;
@@ -59,6 +59,6 @@ void voxy_emitFragment(VoxyFragmentParameters parameters) {
 
 	outColor = color;
 	outNormal = vec4(OctEncode(viewNormal), OctEncode(viewNormal));
-	outSpecular = vec4(roughness, f0, sss, emission);
+	outSpecular = vec4(smoothness, f0, sss, emission);
 	outWorld = vec4(lmcoord, 0.0, 1.0);
 }

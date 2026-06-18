@@ -5,6 +5,9 @@
 #include "/lib/common.glsl"
 #include "/lib/settings.glsl"
 
+#define TEX_SKY_LUT colortex4
+#define TEX_FINAL_PREV colortex5
+
 
 in VertexData {
 	flat vec4 lightCol; // main light source color (rgb), used light source (1=sun, -1=moon)
@@ -26,7 +29,7 @@ uniform sampler2D TEX_GB_SPECULAR;
 uniform sampler2D TEX_GB_WORLD;
 uniform sampler2D colortex0;//clouds
 //uniform sampler2D colortex1;//albedo(rgb),material(alpha) RGBA16
-uniform sampler2D colortex4;//Skybox
+uniform sampler2D TEX_SKY_LUT;//Skybox
 uniform sampler2D colortex3;
 uniform sampler2D colortex5;
 uniform sampler2D colortex7;
@@ -100,6 +103,8 @@ vec3 toScreenSpacePrev(vec3 p) {
 #include "/lib/sky_gradient.glsl"
 #include "/lib/stars.glsl"
 #include "/lib/volumetricClouds.glsl"
+
+vec2 v_taa_offset = vIn.TAA_Offset;
 #include "/lib/specular.glsl"
 
 #if defined(PHOTONICS_BLOCK_LIGHT_ENABLED) || defined(PHOTONICS_HAND_LIGHT_ENABLED) || defined(PHOTONICS_GI_ENABLED)
@@ -341,7 +346,7 @@ vec3 rtGI(vec3 normal, vec4 noise, vec3 fragpos, vec3 ambient, float translucent
 		}
 		else {
 		//	float bounceAmount = float(rayDir.y > 0.0) + clamp(-rayDir.y*0.1+0.1, 0.0,1.0);
-			//vec3 sky_c = skyCloudsFromTex(rayDir,colortex4).rgb * bounceAmount;
+			//vec3 sky_c = skyCloudsFromTex(rayDir,TEX_SKY_LUT).rgb * bounceAmount;
 			intRadiance += ambient;
 		}
 	}
@@ -430,7 +435,7 @@ void main() {
 		}
 
 		vec3 albedo = InputTransform(texture(TEX_GB_COLOR, texcoord).rgb);
-		color += skyFromTex(np3, colortex4)/150.0 + albedo/10.0 * 4.0*ffstep(0.985, -dot(vIn.lightCol.a * vIn.WsunVec, np3));
+		color += skyFromTex(np3, TEX_SKY_LUT)/150.0 + albedo/10.0 * 4.0*ffstep(0.985, -dot(vIn.lightCol.a * vIn.WsunVec, np3));
 		color = color * cloud.a + cloud.rgb;
 
 		outColor3 = clamp(fp10Dither(color * 8.0/3.0, triangularize(noise)), 0.0, 65000.0);
@@ -469,8 +474,10 @@ void main() {
 
 		vec3 normal = mat3(gbufferModelViewInverse) * tex_normal;
 
-		vec4 specularData = texture(TEX_GB_SPECULAR, texcoord);
-		float emissive = specularData.a;
+		#ifdef MAT_SPECULAR_ENABLED
+			vec4 specularData = texture(TEX_GB_SPECULAR, texcoord);
+			float emissive = specularData.a;
+		#endif
 
 		vec4 worldData = texture(TEX_GB_WORLD, texcoord);
 		vec2 lightmap = worldData.xy;

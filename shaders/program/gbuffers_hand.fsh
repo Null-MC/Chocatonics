@@ -46,22 +46,22 @@ void main() {
 		color.a = textureLod(gtexture, vIn.lmtexcoord.xy, 0).a;
 	#endif
 
+	if (color.a < alphaTestRef) discard;
+
 	color.rgb *= vIn.color.rgb;
 
 //	float avgBlockLum = luma(textureLod(gtexture, vIn.lmtexcoord.xy, 128).rgb * vIn.color.rgb);
 //	color.rgb = saturate((1.e-3 + color.rgb) * pow(avgBlockLum, -0.33) * 0.859);
 
-	if (color.a < alphaTestRef) discard;
-
 	#ifdef MC_TEXTURE_FORMAT_LAB_PBR
 		vec4 specularData = texture(specular, vIn.lmtexcoord.xy);
 
-		float roughness = specularData.r;
+		float smoothness = specularData.r;
 		float f0 = specularData.g;
-		float sss = mat_sss_lab(specularData.b);
-		float emission = mat_emission_lab(specularData.a);
+		float sss = mat_sss(specularData.b);
+		float emission = mat_emission(specularData);
 	#else
-		const float roughness = 1.0;
+		const float smoothness = 0.0;
 		const float f0 = 0.04;
 		const float sss = 0.0;
 		const float emission = 0.0;
@@ -69,6 +69,6 @@ void main() {
 
 	outColor = color;
 	outNormal = vec4(OctEncode(vIn.normalMat.xyz), OctEncode(normal));
-	outSpecular = vec4(roughness, f0, sss, emission);
+	outSpecular = vec4(smoothness, f0, sss, emission);
 	outWorld = vec4(vIn.lmtexcoord.zw, 0.0, vIn.normalMat.a);
 }

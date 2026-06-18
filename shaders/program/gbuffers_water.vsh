@@ -14,7 +14,6 @@ out VertexData {
 	vec3 binormal;
 	vec3 tangent;
 	vec3 viewVector;
-//	float dist;
 } vOut;
 
 uniform vec2 texelSize;
@@ -57,8 +56,6 @@ void main() {
 		vOut.tangent.x, vOut.binormal.x, vOut.normalMat.x,
 		vOut.tangent.y, vOut.binormal.y, vOut.normalMat.y,
 		vOut.tangent.z, vOut.binormal.z, vOut.normalMat.z);
-
-//	vOut.dist = length(viewPos);
 
 	vOut.viewVector = normalize(tbnMatrix * viewPos.xyz);
 

@@ -18,6 +18,6 @@ uniform sampler2D gtexture;
 layout(location = 0) out vec4 outColor2;
 
 void main() {
-	vec4 outColor2 = texture(gtexture, vIn.texcoord) * vIn.color;
+	vec4 outColor2 = texture(gtexture, vIn.texcoord, Texture_MipMap_Bias) * vIn.color;
 	outColor2.rgb = InputTransform(outColor2.rgb) * 0.33;
 }

@@ -4,40 +4,43 @@
 #include "/lib/settings.glsl"
 
 
+in vec4 at_tangent;
+
 out VertexData {
 	vec4 lmtexcoord;
 	vec4 color;
-	vec3 normalMat;
+	vec4 normalMat;
 
 	#ifdef MC_NORMAL_MAP
 		vec4 tangent;
 	#endif
 } vOut;
 
-#ifdef MC_NORMAL_MAP
-	attribute vec4 at_tangent;
-#endif
-
-uniform int blockEntityId;
 uniform vec2 texelSize;
 uniform int framemod8;
+uniform mat4 gbufferModelViewInverse;
 
-#include "/lib/blocks.glsl"
+
+vec4 toClipSpace3(vec3 viewSpacePosition) {
+	return vec4(projMAD(gl_ProjectionMatrix, viewSpacePosition), -viewSpacePosition.z);
+}
 
 
 void main() {
 	vOut.lmtexcoord.xy = (gl_TextureMatrix[0] * gl_MultiTexCoord0).xy;
 	vOut.lmtexcoord.zw = gl_MultiTexCoord1.xy / 255.0;
 
+	vec3 viewPos = mul3(gl_ModelViewMatrix, gl_Vertex.xyz);
+	gl_Position = toClipSpace3(viewPos);
 	vOut.color = gl_Color;
 
-	vOut.normalMat = normalize(gl_NormalMatrix * gl_Normal);
+	float mat = 0.0;
 
-	#ifdef MC_NORMAL_MAP
-		vOut.tangent = vec4(normalize(gl_NormalMatrix * at_tangent.rgb), at_tangent.w);
-	#endif
+	vOut.normalMat.xyz = normalize(gl_NormalMatrix * gl_Normal);
+	vOut.normalMat.w = mat;
 
-	gl_Position = ftransform();
+	vOut.tangent.xyz = normalize(gl_NormalMatrix * at_tangent.xyz);
+	vOut.tangent.w = at_tangent.w;
 
 	#ifdef TAA_UPSCALING
 		gl_Position.xy = gl_Position.xy * RENDER_SCALE + RENDER_SCALE * gl_Position.w - gl_Position.w;

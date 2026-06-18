@@ -8,7 +8,15 @@ out VertexData {
 	vec4 lmtexcoord;
 	vec4 color;
 	vec4 normalMat;
+
+	#ifdef MC_NORMAL_MAP
+		vec4 tangent;
+	#endif
 } vOut;
+
+#ifdef MC_NORMAL_MAP
+	attribute vec4 at_tangent;
+#endif
 
 uniform int blockEntityId;
 uniform vec2 texelSize;
@@ -30,8 +38,11 @@ void main() {
 	vOut.normalMat.xyz = normalize(gl_NormalMatrix * gl_Normal);
 	vOut.normalMat.w = blockEntityId == BLOCK_BANNER ? 0.6 : 1.0;
 
-	vec3 position = mul3(gl_ModelViewMatrix, gl_Vertex.xyz);
-	gl_Position = toClipSpace3(position);
+	#ifdef MC_NORMAL_MAP
+		vOut.tangent = vec4(normalize(gl_NormalMatrix * at_tangent.rgb), at_tangent.w);
+	#endif
+
+	gl_Position = toClipSpace3(mul3(gl_ModelViewMatrix, gl_Vertex.xyz));
 
 	#ifdef TAA_UPSCALING
 		gl_Position.xy = gl_Position.xy * RENDER_SCALE + RENDER_SCALE * gl_Position.w - gl_Position.w;

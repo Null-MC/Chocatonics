@@ -2,7 +2,7 @@
 
 // Vignetting, applies bloom, applies exposure and tonemaps the final image
 
-//#define TEX_DEBUG TEX_GB_NORMAL
+//#define TEX_DEBUG TEX_GB_SPECULAR
 
 #include "/lib/common.glsl"
 #include "/lib/settings.glsl"
@@ -112,7 +112,7 @@ void main() {
         vec2 texcoord = (gl_FragCoord.xy - 8.0) / 256.0;
         if (all(equal(saturate(texcoord), texcoord))) {
             col = texture(TEX_DEBUG, texcoord).rgb;
-            col = LinearTosRGB(col);
+            col = linearToSRGB(col);
         }
     #endif
 

@@ -174,7 +174,8 @@ void main() {
 
 		color.rgb *= vIn.color.rgb;
 
-		normal = applyBump(tbnMatrix, textureGrad(normals, adjustedTexCoord.xy, dcdx, dcdy).xyz * 2.0 - 1.0);
+		vec3 tex_normal = mat_normal(textureGrad(normals, adjustedTexCoord.xy, dcdx, dcdy).xyz);
+		normal = applyBump(tbnMatrix, tex_normal);
 
 		#ifdef MC_TEXTURE_FORMAT_LAB_PBR
 			vec4 specularData = textureGrad(specular, adjustedTexCoord.xy, dcdx, dcdy);
@@ -191,7 +192,8 @@ void main() {
 		#endif
 
 		#ifdef MC_NORMAL_MAP
-			normal = applyBump(tbnMatrix, texture(normals, vIn.lmtexcoord.xy).rgb * 2.0 - 1.0);
+			vec3 tex_normal = mat_normal(texture(normals, vIn.lmtexcoord.xy).rgb);
+			normal = applyBump(tbnMatrix, tex_normal);
 		#endif
 
 		#ifdef MC_TEXTURE_FORMAT_LAB_PBR
@@ -202,12 +204,12 @@ void main() {
 	if (color.a < alphaTestRef) discard;
 
 	#ifdef MC_TEXTURE_FORMAT_LAB_PBR
-		float roughness = specularData.r;
+		float smoothness = specularData.r;
 		float f0 = specularData.g;
-		float sss = mat_sss_lab(specularData.b);
-		float emission = mat_emission_lab(specularData.a);
+		float sss = mat_sss(specularData.b);
+		float emission = mat_emission(specularData);
 	#else
-		const float roughness = 1.0;
+		const float smoothness = 0.0;
 		const float f0 = 0.04;
 		float emission = 0.0;
 		float sss = 0.0;
@@ -219,13 +221,12 @@ void main() {
 			sss = 0.2;
 		}
 		else if (vIn.normalMat.a < 0.91) {
-			vec3 albedo = InputTransform(color.rgb);
-			emission = saturate(luma(albedo) * 3.0);
+			emission = saturate(luma(toLinear(color.rgb)) * 3.0);
 		}
 	#endif
 
 	outColor = color;
 	outNormal = vec4(OctEncode(vIn.normalMat.xyz), OctEncode(normal));
-	outSpecular = vec4(roughness, f0, sss, emission);
+	outSpecular = vec4(smoothness, f0, sss, emission);
 	outWorld = vec4(vIn.lmtexcoord.zw, 0.0, vIn.normalMat.a);
 }

@@ -51,7 +51,7 @@ void main() {
 //		float sss = mat_sss_lab(specularData.b);
 //		float emission = mat_emission_lab(specularData.a);
 //	#else
-		const float roughness = 1.0;
+		const float smoothness = 0.0;
 		const float f0 = 0.04;
 		const float sss = 0.0;
 		const float emission = 0.0;
@@ -59,6 +59,6 @@ void main() {
 
 	outColor = color;
 	outNormal = vec4(OctEncode(vIn.normalMat.xyz), OctEncode(normal));
-	outSpecular = vec4(roughness, f0, sss, emission);
+	outSpecular = vec4(smoothness, f0, sss, emission);
 	outWorld = vec4(vIn.lmtexcoord.zw, 0.0, vIn.normalMat.a * 0.5 + 0.5);
 }
