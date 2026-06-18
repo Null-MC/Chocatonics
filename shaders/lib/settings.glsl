@@ -212,5 +212,9 @@ const vec2 RENDER_SCALE_2 = vec2(RENDER_SCALE);
     #undef PHOTONICS_GI_ENABLED
 #endif
 
+#ifndef REFLECTION_ENABLED
+    #undef PHOTONICS_REFLECT_ENABLED
+#endif
+
 #ifdef PHOTONICS_GI_BLOCK
 #endif

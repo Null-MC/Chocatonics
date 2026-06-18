@@ -319,8 +319,6 @@ void main() {
 				hit_color += (hit_sky_NoLm * shadow)/PI * vIn.lightCol.rgb * 8.0/3.0 / 150.0 + ambientLight;
 
 				// TODO: fresnel, probably wrong
-//				float hit_fresnel = pow5(saturate(1.0 + dot(-Ln, H)));
-//				float hit_F = hit_f0 + (1.0 - hit_f0) * hit_fresnel;
 				float hit_NoVm = max(dot(hit_localNormal, -reflectLocalDir), 0.0);
 				float hit_F = schlick(hit_NoVm, hit_f0, 1.0);
 

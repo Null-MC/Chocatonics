@@ -3,6 +3,7 @@
 #include "/lib/common.glsl"
 #include "/lib/settings.glsl"
 
+#define RENDER_GBUFFERS
 #define TEX_SKY_LUT gaux1
 #define TEX_FINAL_PREV gaux2
 
@@ -82,6 +83,12 @@ uniform int framemod8;
 #include "/lib/waterBump.glsl"
 #include "/lib/clouds.glsl"
 #include "/lib/stars.glsl"
+
+#ifdef PHOTONICS_REFLECT_ENABLED
+	#include "/photonics/uniforms.glsl"
+	#include "/photonics/tracing.glsl"
+	#include "/photonics/trace_ray.glsl"
+#endif
 
 #ifdef MC_NORMAL_MAP
 	#include "/lib/normal_map.glsl"

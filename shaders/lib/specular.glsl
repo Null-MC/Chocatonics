@@ -101,34 +101,139 @@ void MaterialReflections(
 
 	// SSR, Sky, and Sun reflections
 	vec4 Reflections = vec4(0.0);
-	vec3 SunReflection = diffuse * GGX2(normal, -np3,  sunPos, roughness, f0)/150.0 * 8.0/3.0 * sunCol * Sun_specular_Strength;
+	vec3 SunReflection = diffuse * GGX2(normal, -np3, sunPos, roughness, f0)/150.0 * 8.0/3.0 * sunCol * Sun_specular_Strength;
 
 	#ifndef PHOTONICS_REFLECT_ENABLED
 		vec3 SkyReflection = skyCloudsFromTex(L, TEX_SKY_LUT).rgb * 0.035;
 	#endif
 
-	#if defined(REFLECTION_ENABLED) && !defined(PHOTONICS_REFLECT_ENABLED)
+	#ifdef REFLECTION_ENABLED
 		if (hasReflections) { // Skip SSR if ray contribution is low
-			// float rayQuality = REFLECTION_QUALITY;
-			float rayQuality = mix(REFLECTION_QUALITY, 0.0, sqrt(roughness)); // Scale quality with ray contribution
+			#if defined(PHOTONICS_REFLECT_ENABLED) && defined(RENDER_GBUFFERS)
+				vec3 localPos = mul3(gbufferModelViewInverse, fragpos);
 
-			vec3 rtPos = rayTraceSpeculars(mat3(gbufferModelView) * L, fragpos.xyz, noise.b, rayQuality, hand, fresnel);
+				RayIterator ray;
+				ray.iterations = PHOTONICS_REFLECT_STEPS;
+				ray_iter_set_position(ray, localPos + rt_camera_position);
+				ray_iter_set_direction(ray, L);
+				ray_iter_offset_position(ray, 0.02 * normal); // TODO: this needs geo normal not tex
 
-			if (rtPos.z < 1.0) { // Reproject on previous frame
-				vec3 previousPosition = mul3(gbufferModelViewInverse, toScreenSpace(rtPos)) + (cameraPosition - previousCameraPosition);
-				previousPosition = mul3(gbufferPreviousModelView, previousPosition);
-				previousPosition.xy = projMAD(gbufferPreviousProjection, previousPosition).xy / -previousPosition.z * 0.5 + 0.5;
+				RayResult hit = ray_iter_next(ray);
+				if (ray_result_is_hit(hit) && ray_iter_is_in_bounds(ray)) {
+					VoxelData voxel_data = ray_result_voxel_data(hit);
+					vec3 hit_albedo = voxel_data_albedo(voxel_data).rgb;
 
-				if (all(equal(saturate(previousPosition.xy), previousPosition.xy))) {
-					Reflections.rgb = texture(TEX_FINAL_PREV, previousPosition.xy).rgb;
-					Reflections.a = 1.0;
+					vec3 hit_position = ray_result_position(hit);
+					vec3 hitLocalPos = hit_position - rt_camera_position;
+					vec3 hit_localNormal = ray_result_normal(hit);
+
+					float hit_sky = ray_result_skylight(hit) / 15.0;
+					vec2 hit_lmcoord = vec2(0.0, hit_sky);
+
+					// shadows
+					vec3 projectedShadowPosition = mul3(shadowModelView, hitLocalPos);
+					projectedShadowPosition = diagonal3(shadowProjection) * projectedShadowPosition + shadowProjection[3].xyz;
+
+					// apply distortion
+					float distortFactor = calcDistort(projectedShadowPosition.xy);
+					projectedShadowPosition.xy *= distortFactor;
+
+					vec3 shadow = vec3(1.0);
+					float hit_sky_NoLm = max(dot(hit_localNormal, sunPos), 0.0);
+
+					// do shadows only if on shadow map
+					if (abs(projectedShadowPosition.x) < 1.0-1.5/shadowMapResolution && abs(projectedShadowPosition.y) < 1.0-1.5/shadowMapResolution && abs(projectedShadowPosition.z) < 6.0) {
+						vec3 filtered = vec3(1.412, 1.0, 0.0);
+
+						float rdMul = filtered.x * distortFactor * shadow_d0 * shadow_k / shadowMapResolution;
+						const float threshMul = max(2048.0 / shadowMapResolution * shadowDistance/128.0, 0.95);
+						float distortThresh = (sqrt(1.0-hit_sky_NoLm*hit_sky_NoLm)/hit_sky_NoLm+0.7)/distortFactor;
+
+						projectedShadowPosition = projectedShadowPosition * vec3(0.5, 0.5, 0.5/6.0) + vec3(0.5, 0.5, 0.5);
+
+						float diffthresh = distortThresh/6000.0 * threshMul;
+
+						const vec2 offsetS = vec2(0.0); // TODO: remove
+						float bias = 1.0 + noise.b * rdMul/SHADOW_FILTER_SAMPLE_COUNT * shadowMapResolution;
+						vec3 samplePos = vec3(projectedShadowPosition + vec3(rdMul * offsetS, -diffthresh * bias));
+
+						shadow = vec3(texture(shadowtex0HW, samplePos));
+
+						// TODO: shadow color
+					}
+
+					// TODO: shadow clouds
+
+					vec3 hit_color = vec3(0.0);
+
+					#if MAT_FORMAT != 0 || defined(MC_TEXTURE_FORMAT_LAB_PBR)
+						vec4 hit_specularData = voxel_data_specular(voxel_data);
+
+//						float hit_roughness = square(1.0 - hit_specularData.r);
+//						float hit_f0 = hit_specularData.g;
+//						if (hit_f0 < EPSILON) hit_f0 = 0.04;
+//
+//						float hit_sss = mat_sss(hit_specularData.b);
+
+						// apply emission
+						float hit_emission = mat_emission(hit_specularData);
+						hit_color += pow(hit_emission, Emission_Curve) * 3.0 * MAT_EMISSION_SCALE;
+					#else
+//						float hit_roughness = 1.0;
+//						float hit_f0 = 0.04;
+//						float hit_sss = 0.0;
+					#endif
+
+					// block and sky lighting
+//					vec3 ambientCoefs = hit_localNormal / dot(abs(hit_localNormal), vec3(1.0));
+//					vec3 ambientLight = vIn.ambientUp * mix(saturate(ambientCoefs.y), 1.0/6.0, hit_sss);
+//					ambientLight += vIn.ambientDown * mix(saturate(-ambientCoefs.y), 1.0/6.0, hit_sss);
+//					ambientLight += vIn.ambientRight * mix(saturate(ambientCoefs.x), 1.0/6.0, hit_sss);
+//					ambientLight += vIn.ambientLeft * mix(saturate(-ambientCoefs.x), 1.0/6.0, hit_sss);
+//					ambientLight += vIn.ambientB * mix(saturate(ambientCoefs.z), 1.0/6.0, hit_sss);
+//					ambientLight += vIn.ambientF * mix(saturate(-ambientCoefs.z), 1.0/6.0, hit_sss);
+//					vec3 ambientLight = vec3(0.0);
+//
+//					vec3 custom_lightmap = texture(TEX_SKY_LUT, (hit_lmcoord * 15.0 + 0.5 + vec2(0.0, 19.0)) * texelSize).rgb / 150.0 * 8.0/3.0;
+//					ambientLight = ambientLight * custom_lightmap.x + custom_lightmap.z * vec3(0.9, 1.0, 1.5) + custom_lightmap.y * TorchColor;
+//					hit_color += (hit_sky_NoLm * shadow)/PI * sunCol * 8.0/3.0 / 150.0 + ambientLight;
+
+					vec3 direct = sunCol * shadow * hit_sky_NoLm;// * hit_sky;
+
+					vec3 diffuseLight = direct + texture(TEX_SKY_LUT, (vIn.lmtexcoord.zw * 15.0 + 0.5) * texelSize).rgb;
+					hit_color += diffuseLight * 8.0 / 150.0 / 3.0;
+
+					// TODO: fresnel, probably wrong
+//					float hit_NoVm = max(dot(hit_localNormal, -reflectLocalDir), 0.0);
+//					float hit_F = schlick(hit_NoVm, hit_f0, 1.0);
+
+					Reflections.rgb = hit_color * hit_albedo;
 				}
-			}
+				else {
+					Reflections.rgb = skyCloudsFromTex(L, TEX_SKY_LUT).rgb * 0.035;
+				}
+				Reflections.a = 1.0;
+			#else
+				float rayQuality = mix(REFLECTION_QUALITY, 0.0, sqrt(roughness)); // Scale quality with ray contribution
+
+				vec3 rtPos = rayTraceSpeculars(mat3(gbufferModelView) * L, fragpos, noise.b, rayQuality, hand, fresnel);
+
+				if (rtPos.z < 1.0) { // Reproject on previous frame
+					vec3 previousPosition = mul3(gbufferModelViewInverse, toScreenSpace(rtPos)) + (cameraPosition - previousCameraPosition);
+					previousPosition = mul3(gbufferPreviousModelView, previousPosition);
+					previousPosition.xy = projMAD(gbufferPreviousProjection, previousPosition).xy / -previousPosition.z * 0.5 + 0.5;
+
+					if (all(equal(saturate(previousPosition.xy), previousPosition.xy))) {
+						Reflections.rgb = texture(TEX_FINAL_PREV, previousPosition.xy).rgb;
+						Reflections.a = 1.0;
+					}
+				}
+			#endif
 		}
 	#endif
 
 	// check if the f0 is within the metal ranges, then tint by albedo if it's true.
-	vec3 Metals = f0.y  >= 230.0/255.0 ? saturate(albedo + fresnel) : vec3(1.0);
+	vec3 Metals = f0.y > 229.5/255.0 ? saturate(albedo + fresnel) : vec3(1.0);
 
 	Reflections.rgb *= Metals;
 	SunReflection *= Metals;
