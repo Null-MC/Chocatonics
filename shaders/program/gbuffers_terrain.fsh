@@ -244,8 +244,9 @@ void main() {
 	#endif
 
 	if (wetness > 0.0) {
-		vec3 albedo = toLinear(color.rgb) * (1.0 - 0.4 * wetness * porosity);
+		vec3 albedo = toLinear(color.rgb) * (1.0 - 0.5 * wetness * porosity);
 		albedo *= exp(-2.0 * wetness * porosity * (1.0 - albedo));
+//		albedo *= (1.0 - 0.4 * wetness * porosity);
 
 		smoothness = mix(smoothness, 1.0, smoothstep(0.0, 1.0, wetness));
 		color.rgb = linearToSRGB(albedo);

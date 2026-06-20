@@ -16,14 +16,6 @@ screen.PHOTONICS=Photonics
     value.PHOTONICS_TINTING.1=Block
     value.PHOTONICS_TINTING.2=Voxel
 
-    screen.PHOTONICS_REFLECTIONS=Reflections
-
-        option.PHOTONICS_REFLECT_ENABLED=Enabled
-
-        option.PHOTONICS_REFLECT_BOUNCES=Bounces
-
-        option.PHOTONICS_REFLECT_STEPS=Trace Steps
-
     screen.PHOTONICS_GI=Global Illumination
 
         option.PHOTONICS_GI_ENABLED=Enabled
@@ -33,6 +25,26 @@ screen.PHOTONICS=Photonics
         option.PHOTONICS_GI_BLOCK=Block Light
 
         option.PHOTONICS_GI_STEPS=Trace Steps
+
+    screen.PHOTONICS_REFLECTIONS=Reflections
+
+        option.PHOTONICS_REFLECT_ENABLED=Enabled
+
+        option.PHOTONICS_REFLECT_BOUNCES=Bounces
+
+        option.PHOTONICS_REFLECT_STEPS=Trace Steps
+
+    screen.PHOTONICS_RESTIR=ReSTIR Options
+
+        option.PHOTONICS_RESTIR_ENABLED=Enabled
+
+        option.PHOTONICS_RESTIR_SOFT_SHADOWS=Soft Shadows
+
+        option.PHOTONICS_RESTIR_DENOISE_PASSES=Denoise Passes
+        option.PHOTONICS_RESTIR_DENOISE_PASSES.comment=The number of denoiser passes. A value of 0 disables denoising.
+
+        option.PHOTONICS_RESTIR_FRAMES=Frame Count
+        option.PHOTONICS_RESTIR_FRAMES.comment=The number of frames used for accumulation.
 
 
 screen.MATERIALS=PBR Materials
