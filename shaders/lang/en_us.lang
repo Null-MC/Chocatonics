@@ -46,6 +46,13 @@ screen.PHOTONICS=Photonics
         option.PHOTONICS_RESTIR_FRAMES=Frame Count
         option.PHOTONICS_RESTIR_FRAMES.comment=The number of frames used for accumulation.
 
+        option.PHOTONICS_RESTIR_INIT_COUNT=Initial Samples
+
+        option.PHOTONICS_RESTIR_REUSE_COUNT=Reuse Samples
+
+        option.PHOTONICS_RESTIR_REUSE_RADIUS=Reuse Radius
+        suffix.PHOTONICS_RESTIR_REUSE_RADIUS=px
+
 
 screen.MATERIALS=PBR Materials
 
