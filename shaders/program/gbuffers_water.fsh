@@ -185,11 +185,11 @@ layout(location = 1) out vec4 outColor7;
 void main() {
 	if (!all(lessThan(gl_FragCoord.xy * texelSize.xy, RENDER_SCALE_2))) return;
 
-	vec2 tempOffset = taa_offsets[framemod8];
+	vec2 taa_offset = taa_offsets[framemod8];
 	float iswater = vIn.normalMat.w;
 
-	vec3 fragC = gl_FragCoord.xyz * vec3(texelSize, 1.0);
-	vec3 fragpos = toScreenSpace(gl_FragCoord.xyz * vec3(texelSize / RENDER_SCALE, 1.0) - vec3(vec2(tempOffset) * texelSize * 0.5, 0.0));
+//	vec3 fragC = gl_FragCoord.xyz * vec3(texelSize, 1.0);
+	vec3 viewPos = toScreenSpace(gl_FragCoord.xyz * vec3(texelSize / RENDER_SCALE, 1.0) - vec3(taa_offset * texelSize * 0.5, 0.0));
 
 	outColor2 = texture(gtexture, vIn.lmtexcoord.xy, Texture_MipMap_Bias) * vIn.color;
 
@@ -226,9 +226,7 @@ void main() {
 
 	vec3 normal = vIn.normalMat.xyz;
 
-	vec3 p3 = mul3(gbufferModelViewInverse, fragpos);
-
-	vec3 np3 = normalize(p3);
+	vec3 localPos = mul3(gbufferModelViewInverse, viewPos);
 
 	mat3 tbnMatrix = mat3(
 		vIn.tangent.x, vIn.binormal.x, normal.x,
@@ -241,12 +239,12 @@ void main() {
 
 		float parallaxMult = bumpmult;
 
-		vec3 posxz = p3 + cameraPosition;
+		vec3 posxz = localPos + cameraPosition;
 		posxz.xz -= posxz.y;
 
 		if (iswater < 0.9) posxz.xz *= 3.0;
 
-		posxz.xyz = getParallaxDisplacement(posxz, iswater, bumpmult, normalize(tbnMatrix * fragpos));
+		posxz.xyz = getParallaxDisplacement(posxz, iswater, bumpmult, normalize(tbnMatrix * viewPos));
 
 		vec3 bump = normalize(getWaveHeight(posxz.xz, iswater));
 
@@ -272,8 +270,7 @@ void main() {
 
 	// compute shadows only if not backface
 	if (diffuseSun > 0.001) {
-//		vec3 p3 = mul3(gbufferModelViewInverse, fragpos);
-		vec3 projectedShadowPosition = mul3(shadowModelView, p3);
+		vec3 projectedShadowPosition = mul3(shadowModelView, localPos);
 		projectedShadowPosition = diagonal3(shadowProjection) * projectedShadowPosition + shadowProjection[3].xyz;
 
 		// apply distortion
@@ -307,7 +304,7 @@ void main() {
 	vec3 diffuseLight = direct + texture(TEX_SKY_LUT, (vIn.lmtexcoord.zw * 15.0 + 0.5) * texelSize).rgb;
 	vec3 color = diffuseLight * albedo * 8.0 / 150.0 / 3.0;
 
-	float normalDotEye = dot(normal, normalize(fragpos));
+	float normalDotEye = dot(normal, normalize(viewPos));
 	float fresnel = pow(clamp(1.0 + normalDotEye, 0.0, 1.0), 5.0);
 	fresnel = mix(f0, 1.0, fresnel);
 
@@ -319,13 +316,15 @@ void main() {
 
 		vec2 noise2 = blueNoise(texBlueNoise, gl_FragCoord.xy).rg;
 		vec3 lightCol2 = texelFetch(TEX_SKY_LUT, ivec2(6, 37), 0).rgb / PI;
+
 		vec3 localNormal = mat3(gbufferModelViewInverse) * normal;
+		vec3 localViewDir = normalize(localPos);
 
 		float lightCol_a = float(sunElevation > 1.e-5) * 2.0 - 1.0;
 		vec3 localSunDir = normalize(mat3(gbufferModelViewInverse) * sunPosition);
 		vec3 WsunVec = lightCol_a * localSunDir;
 
-		MaterialReflections(outColor2.rgb, roughness, vec3(f0), albedo, WsunVec, lightCol2, shading * diffuseSun, vIn.lmtexcoord.w, localNormal, np3, fragpos, vec3(noise2, noise), hand);
+		MaterialReflections(outColor2.rgb, roughness, vec3(f0), albedo, WsunVec, lightCol2, shading * diffuseSun, vIn.lmtexcoord.w, localNormal, localViewDir, viewPos, vec3(noise2, noise), hand);
 	#endif
 
 	outColor2.rgb *= 0.1;

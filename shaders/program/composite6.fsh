@@ -175,7 +175,7 @@ void main() {
         if (!iswater) {
             // multiplicative tinting
             vec3 albedo_translucent = InputTransform(trpData.rgb);
-            albedo_translucent = normalize(albedo_translucent + EPSILON) / sqrt(3.0);
+//            albedo_translucent = normalize(albedo_translucent + EPSILON) / sqrt(3.0);
             color *= mix(vec3(1.0), albedo_translucent, sqrt(transparencies.a));
         }
     #endif

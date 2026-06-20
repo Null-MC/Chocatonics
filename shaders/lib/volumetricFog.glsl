@@ -124,5 +124,6 @@ mat2x3 getVolumetricRays(float dither, vec3 fragpos, vec4 lightCol) {
 		absorbance *= saturate(exp(-(rL+m) * dd * dL));
 	}
 
-	return mat2x3(InputTransformLinear(vL), absorbance);
+	return mat2x3(vL, absorbance);
+//	return mat2x3(InputTransformLinear(vL), InputTransformLinear(absorbance));
 }

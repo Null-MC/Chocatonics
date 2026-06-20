@@ -17,6 +17,14 @@ uniform sampler2D TEX_GB_SPECULAR;
 
 uniform vec2 texelSize;
 
+#include "/lib/color_transforms.glsl"
+
+
+void MinMax(inout vec3 cMin, inout vec3 cMax, const in vec3 color) {
+	cMin = min(cMin, color);
+	cMax = max(cMax, color);
+}
+
 
 /* RENDERTARGETS: 3,14 */
 layout(location = 0) out vec4 outFinal;
@@ -39,6 +47,20 @@ void main() {
 		reflect_color = texelFetch(colortex13, uv, 0);
 
 		vec3 final_color = reflect_color.rgb;
+
+		#ifdef REFLECTION_NEIGHBOR_CLAMP
+			vec3 cMin, cMax;
+			cMin = cMax 	 = texelFetch(colortex13, uv + ivec2(-1,-1), 0).rgb;
+			MinMax(cMin, cMax, texelFetch(colortex13, uv + ivec2( 0,-1), 0).rgb);
+			MinMax(cMin, cMax, texelFetch(colortex13, uv + ivec2( 1,-1), 0).rgb);
+			MinMax(cMin, cMax, texelFetch(colortex13, uv + ivec2(-1, 0), 0).rgb);
+			MinMax(cMin, cMax, texelFetch(colortex13, uv + ivec2( 1, 0), 0).rgb);
+			MinMax(cMin, cMax, texelFetch(colortex13, uv + ivec2(-1, 1), 0).rgb);
+			MinMax(cMin, cMax, texelFetch(colortex13, uv + ivec2( 0, 1), 0).rgb);
+			MinMax(cMin, cMax, texelFetch(colortex13, uv + ivec2( 1, 1), 0).rgb);
+
+			final_color = clamp(final_color, cMin, cMax);
+		#endif
 
 		// check if the f0 is within the metal ranges, then tint by albedo if it's true.
 		final_color *= mix(vec3(1.0), albedo, f0 > 229.5/255.0);

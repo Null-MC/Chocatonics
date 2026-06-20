@@ -136,7 +136,7 @@ void unpack_8bit_float_and_uint(float packedVal, out float floatVal, out uint ui
 }
 
 
-#ifdef REFLECTION_ACCUMULATE
+#if defined(REFLECTION_ROUGH) && (defined(REFLECTION_ACCUMULATE) || defined(REFLECTION_NEIGHBOR_CLAMP))
 	/* RENDERTARGETS: 13 */
 	layout(location = 0) out vec4 outColor13;
 #else
@@ -203,10 +203,7 @@ void main() {
 		vec3 reflectLocalDir = basis * Ln;
 
 		// fresnel stuff
-		float fresnel = pow5(saturate(1.0 + dot(-Ln, H)));
-		float F = f0 + (1.0 - f0) * fresnel;
-//		float F = schlick(dot(-Ln, H), f0, 1.0);
-//		vec3 rayContrib = F;
+		float F = schlick(dot(Ln, H), f0, 1.0);
 
 		float NdotV = saturate(dot(localViewDir, normalize(normal)) * 5000.0);
 
@@ -369,12 +366,14 @@ void main() {
 		#endif
 	}
 
+	vec4 final_color;
+
 	#ifdef REFLECTION_ACCUMULATE
 //		float alpha = 0.998;// mix(0.0, 0.998, pow(roughness, 0.1));
 
 		vec3 screenPos2 = vec3(texcoord / RENDER_SCALE, z);
 		vec2 tex_last = reproject(screenPos2, reflectDist);
-		vec4 src = textureLod(TEX_REFLECT_HISTORY, tex_last*RENDER_SCALE, 0);
+		vec4 src = textureLod(TEX_REFLECT_HISTORY, tex_last * RENDER_SCALE, 0);
 
 		uint counter;
 		float src_roughness;
@@ -382,8 +381,8 @@ void main() {
 
 		if (!all(equal(saturate(tex_last), tex_last))) counter = 0;
 
-		float diff = abs(src_roughness - roughness);
-//		if (diff > 0.2) counter = 0;
+//		float diff = abs(src_roughness - roughness);
+//		if (diff > 0.5) counter = 0;
 
 		float alpha = 1.0 - 1.0 / (1 + counter);
 
@@ -394,14 +393,22 @@ void main() {
 		int counter_max = int(ceil(sqrt(roughness) * 120.0));
 		counter = min(counter+1, counter_max);
 
-		outColor13.rgb = clamp(reflect_color, 0.000001, 65000.0);
-		outColor13.a = pack_8bit_float_and_uint(roughness, counter);
+		final_color.rgb = reflect_color;
+		final_color.a = pack_8bit_float_and_uint(roughness, counter);
+	#else
+		final_color.rgb = reflect_color;
+		final_color.a = 1.0;
+	#endif
+
+	#if defined(REFLECTION_ROUGH) && (defined(REFLECTION_ACCUMULATE) || defined(REFLECTION_NEIGHBOR_CLAMP))
+		final_color.rgb = clamp(final_color.rgb, 0.000001, 65000.0);
+
+		outColor13 = final_color;
 	#else
 		ivec2 uv = ivec2(gl_FragCoord.xy);
 		vec3 dest_color = texelFetch(colortex3, uv, 0).rgb;
 
-		dest_color += reflect_color;
-
-		outColor3 = vec4(clamp(dest_color, 0.000001, 65000.0), 1.0);
+		outColor3.rgb = clamp(dest_color + final_color.rgb, 0.000001, 65000.0);
+		outColor3.a = 1.0;
 	#endif
 }

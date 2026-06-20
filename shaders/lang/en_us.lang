@@ -42,6 +42,9 @@ screen.MATERIALS=PBR Materials
     value.MAT_FORMAT.1=OldPbr
     value.MAT_FORMAT.2=LabPbr
 
+    option.MAT_POROSITY_INTEGRATED=Integrated Porosity
+    option.MAT_POROSITY_INTEGRATED.comment=Use shader-based porosity instead of resource pack values.
+
     screen.MAT_PARALLAX=Parallax
 
         option.MAT_PARALLAX_ENABLED=Enabled

@@ -20,6 +20,7 @@ in VertexData {
 } vIn;
 
 uniform sampler2D gtexture;
+uniform sampler2D noisetex;
 
 #ifdef MC_NORMAL_MAP
 	uniform sampler2D normals;
@@ -30,6 +31,7 @@ uniform sampler2D gtexture;
 #endif
 
 uniform vec2 texelSize;
+uniform float rainStrength;
 uniform float alphaTestRef;
 uniform float frameTimeCounter;
 uniform mat4 gbufferModelViewInverse;
@@ -38,10 +40,7 @@ uniform mat4 gbufferProjection;
 uniform mat4 shadowModelView;
 uniform mat4 shadowProjection;
 uniform vec3 cameraPosition;
-
-#ifdef MAT_PARALLAX_ENABLED
-	uniform int framemod8;
-#endif
+uniform int framemod8;
 
 #ifdef MC_NORMAL_MAP
 	uniform float wetness;
@@ -96,12 +95,15 @@ void main() {
 			vIn.tangent.z, tangent2.z, normal.z);
 	#endif
 
+	vec2 taa_offset = taa_offsets[framemod8];
+	vec3 viewPos = toScreenSpace(gl_FragCoord.xyz * vec3(texelSize / RENDER_SCALE, 1.0) - vec3(taa_offset * texelSize * 0.5, 0.0));
+
 	#ifdef MAT_PARALLAX_ENABLED
-		vec2 tempOffset = taa_offsets[framemod8];
+//		vec2 taa_offset = taa_offsets[framemod8];
 		vec2 adjustedTexCoord = fract(vIn.vtexcoord.st) * vIn.vtexcoordam.pq + vIn.vtexcoordam.st;
-		vec3 fragpos = toScreenSpace(gl_FragCoord.xyz * vec3(texelSize/RENDER_SCALE, 1.0) - vec3(vec2(tempOffset)*texelSize*0.5, 0.0));
-		vec3 viewVector = normalize(tbnMatrix * fragpos);
-		float dist = length(fragpos);
+//		vec3 viewPos = toScreenSpace(gl_FragCoord.xyz * vec3(texelSize/RENDER_SCALE, 1.0) - vec3(taa_offset*texelSize*0.5, 0.0));
+		vec3 viewVector = normalize(tbnMatrix * viewPos);
+		float dist = length(viewPos);
 
 		#ifdef MAT_PARALLAX_DEPTH_WRITE
 			gl_FragDepth = gl_FragCoord.z;
@@ -130,7 +132,7 @@ void main() {
 
 					adjustedTexCoord = mix(fract(coord.st) * vIn.vtexcoordam.pq + vIn.vtexcoordam.st, adjustedTexCoord, max(dist - MIX_OCCLUSION_DISTANCE, 0.0) / (MAT_PARALLAX_MAX_DIST-MIX_OCCLUSION_DISTANCE));
 
-					vec3 truePos = fragpos + sumVec * inverse(tbnMatrix) * interval;
+					vec3 truePos = viewPos + sumVec * inverse(tbnMatrix) * interval;
 
 					#ifdef MAT_PARALLAX_DEPTH_WRITE
 						gl_FragDepth = toClipSpace3(truePos).z;
@@ -158,7 +160,7 @@ void main() {
 
 					adjustedTexCoord = mix(fract(coord.st) * vIn.vtexcoordam.pq + vIn.vtexcoordam.st, adjustedTexCoord, max(dist - MIX_OCCLUSION_DISTANCE, 0.0) / (MAT_PARALLAX_MAX_DIST - MIX_OCCLUSION_DISTANCE));
 
-					vec3 truePos = fragpos + sumVec * inverse(tbnMatrix) * interval;
+					vec3 truePos = viewPos + sumVec * inverse(tbnMatrix) * interval;
 
 					#ifdef MAT_PARALLAX_DEPTH_WRITE
 						gl_FragDepth = toClipSpace3(truePos).z;
@@ -203,15 +205,19 @@ void main() {
 
 	if (color.a < alphaTestRef) discard;
 
-	#ifdef MC_TEXTURE_FORMAT_LAB_PBR
+	#ifdef MAT_SPECULAR_ENABLED
 		float smoothness = specularData.r;
 		float f0 = specularData.g;
 		float sss = mat_sss(specularData.b);
+		float porosity = mat_porosity(specularData.rgb);
 		float emission = mat_emission(specularData);
+
+		if (f0 < EPSILON) f0 = 0.04;
 	#else
 		const float smoothness = 0.0;
 		const float f0 = 0.04;
 		float emission = 0.0;
+		float porosity = 0.85;
 		float sss = 0.0;
 
 		if (vIn.normalMat.a < 0.51) {
@@ -224,6 +230,23 @@ void main() {
 			emission = saturate(luma(toLinear(color.rgb)) * 3.0);
 		}
 	#endif
+
+	if (rainStrength > 0.0) {
+		vec3 localPos = mul3(gbufferModelViewInverse, viewPos);
+
+		vec3 localNormal = mat3(gbufferModelViewInverse) * normal;
+		float skyExposure = smoothstep((13.5/15.0), (14.5/15.0), vIn.lmtexcoord.w);
+		float wetness = rainStrength * skyExposure * saturate(localNormal.y); //saturate(unmix(-0.4, 0.1, localTexNormal.y));
+
+		vec2 texcoord = localPos.xz + cameraPosition.xz;
+		wetness *= smoothstep(0.06, 0.40, texture(noisetex, texcoord*0.05).r);
+
+		vec3 albedo = toLinear(color.rgb) * (1.0 - 0.4 * wetness * porosity);
+		albedo *= exp(-2.0 * wetness * porosity * (1.0 - albedo));
+
+		smoothness = mix(smoothness, 1.0, smoothstep(0.0, 1.0, wetness));
+		color.rgb = linearToSRGB(albedo);
+	}
 
 	outColor = color;
 	outNormal = vec4(OctEncode(vIn.normalMat.xyz), OctEncode(normal));

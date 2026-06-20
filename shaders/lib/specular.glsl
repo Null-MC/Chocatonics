@@ -103,14 +103,15 @@ void MaterialReflections(
 	vec4 Reflections = vec4(0.0);
 	vec3 SunReflection = diffuse * GGX2(normal, -np3, sunPos, roughness, f0)/150.0 * 8.0/3.0 * sunCol * Sun_specular_Strength;
 
-	#ifndef PHOTONICS_REFLECT_ENABLED
+	#if !defined(PHOTONICS_REFLECT_ENABLED) || defined(RENDER_GBUFFERS)
 		vec3 SkyReflection = skyCloudsFromTex(L, TEX_SKY_LUT).rgb * 0.035;
 	#endif
 
-	#ifdef REFLECTION_ENABLED
+	#if defined(REFLECTION_ENABLED) && (!defined(PHOTONICS_REFLECT_ENABLED) || defined(RENDER_GBUFFERS))
 		if (hasReflections) { // Skip SSR if ray contribution is low
-			#if defined(PHOTONICS_REFLECT_ENABLED) && defined(RENDER_GBUFFERS)
+			#ifdef PHOTONICS_REFLECT_ENABLED
 				vec3 localPos = mul3(gbufferModelViewInverse, fragpos);
+				Outdoors = 1.0;
 
 				RayIterator ray;
 				ray.iterations = PHOTONICS_REFLECT_STEPS;
@@ -166,14 +167,14 @@ void MaterialReflections(
 
 					vec3 hit_color = vec3(0.0);
 
-					#if MAT_FORMAT != 0 || defined(MC_TEXTURE_FORMAT_LAB_PBR)
+					#ifdef MAT_SPECULAR_ENABLED
 						vec4 hit_specularData = voxel_data_specular(voxel_data);
 
 //						float hit_roughness = square(1.0 - hit_specularData.r);
 //						float hit_f0 = hit_specularData.g;
 //						if (hit_f0 < EPSILON) hit_f0 = 0.04;
-//
-//						float hit_sss = mat_sss(hit_specularData.b);
+
+						float hit_sss = mat_sss(hit_specularData.b);
 
 						// apply emission
 						float hit_emission = mat_emission(hit_specularData);
@@ -181,31 +182,28 @@ void MaterialReflections(
 					#else
 //						float hit_roughness = 1.0;
 //						float hit_f0 = 0.04;
-//						float hit_sss = 0.0;
+						float hit_sss = 0.0;
 					#endif
 
 					// block and sky lighting
-//					vec3 ambientCoefs = hit_localNormal / dot(abs(hit_localNormal), vec3(1.0));
-//					vec3 ambientLight = vIn.ambientUp * mix(saturate(ambientCoefs.y), 1.0/6.0, hit_sss);
-//					ambientLight += vIn.ambientDown * mix(saturate(-ambientCoefs.y), 1.0/6.0, hit_sss);
-//					ambientLight += vIn.ambientRight * mix(saturate(ambientCoefs.x), 1.0/6.0, hit_sss);
-//					ambientLight += vIn.ambientLeft * mix(saturate(-ambientCoefs.x), 1.0/6.0, hit_sss);
-//					ambientLight += vIn.ambientB * mix(saturate(ambientCoefs.z), 1.0/6.0, hit_sss);
-//					ambientLight += vIn.ambientF * mix(saturate(-ambientCoefs.z), 1.0/6.0, hit_sss);
-//					vec3 ambientLight = vec3(0.0);
-//
-//					vec3 custom_lightmap = texture(TEX_SKY_LUT, (hit_lmcoord * 15.0 + 0.5 + vec2(0.0, 19.0)) * texelSize).rgb / 150.0 * 8.0/3.0;
-//					ambientLight = ambientLight * custom_lightmap.x + custom_lightmap.z * vec3(0.9, 1.0, 1.5) + custom_lightmap.y * TorchColor;
-//					hit_color += (hit_sky_NoLm * shadow)/PI * sunCol * 8.0/3.0 / 150.0 + ambientLight;
+					#ifdef RENDER_GBUFFERS
+						vec3 direct = sunCol * shadow * hit_sky_NoLm;// * hit_sky;
 
-					vec3 direct = sunCol * shadow * hit_sky_NoLm;// * hit_sky;
+						vec3 diffuseLight = direct/PI + texture(TEX_SKY_LUT, (hit_lmcoord * 15.0 + 0.5) * texelSize).rgb;
+						hit_color += diffuseLight * 8.0/3.0 / 150.0;
+					#else
+						vec3 ambientCoefs = hit_localNormal / dot(abs(hit_localNormal), vec3(1.0));
+						vec3 ambientLight = vIn.ambientUp * mix(saturate(ambientCoefs.y), 1.0/6.0, hit_sss);
+						ambientLight += vIn.ambientDown * mix(saturate(-ambientCoefs.y), 1.0/6.0, hit_sss);
+						ambientLight += vIn.ambientRight * mix(saturate(ambientCoefs.x), 1.0/6.0, hit_sss);
+						ambientLight += vIn.ambientLeft * mix(saturate(-ambientCoefs.x), 1.0/6.0, hit_sss);
+						ambientLight += vIn.ambientB * mix(saturate(ambientCoefs.z), 1.0/6.0, hit_sss);
+						ambientLight += vIn.ambientF * mix(saturate(-ambientCoefs.z), 1.0/6.0, hit_sss);
 
-					vec3 diffuseLight = direct + texture(TEX_SKY_LUT, (vIn.lmtexcoord.zw * 15.0 + 0.5) * texelSize).rgb;
-					hit_color += diffuseLight * 8.0 / 150.0 / 3.0;
-
-					// TODO: fresnel, probably wrong
-//					float hit_NoVm = max(dot(hit_localNormal, -reflectLocalDir), 0.0);
-//					float hit_F = schlick(hit_NoVm, hit_f0, 1.0);
+						vec3 custom_lightmap = texture(TEX_SKY_LUT, (hit_lmcoord * 15.0 + 0.5 + vec2(0.0, 19.0)) * texelSize).rgb / 150.0 * 8.0/3.0;
+						ambientLight = ambientLight * custom_lightmap.x + custom_lightmap.z * vec3(0.9, 1.0, 1.5) + custom_lightmap.y * TorchColor;
+						hit_color += (hit_sky_NoLm * shadow)/PI * sunCol * 8.0/3.0 / 150.0 + ambientLight;
+					#endif
 
 					Reflections.rgb = hit_color * hit_albedo;
 				}
@@ -214,7 +212,8 @@ void MaterialReflections(
 				}
 				Reflections.a = 1.0;
 			#else
-				float rayQuality = mix(REFLECTION_QUALITY, 0.0, sqrt(roughness)); // Scale quality with ray contribution
+				// Scale quality with ray contribution
+				float rayQuality = mix(REFLECTION_QUALITY, 0.0, sqrt(roughness));
 
 				vec3 rtPos = rayTraceSpeculars(mat3(gbufferModelView) * L, fragpos, noise.b, rayQuality, hand, fresnel);
 
@@ -238,12 +237,12 @@ void MaterialReflections(
 	Reflections.rgb *= Metals;
 	SunReflection *= Metals;
 
-	#ifndef PHOTONICS_REFLECT_ENABLED
+	#if !defined(PHOTONICS_REFLECT_ENABLED) || defined(RENDER_GBUFFERS)
 		SkyReflection *= Metals;
 	#endif
 
 	// darken albedos, and stop darkening where the sky gets occluded indoors
-	#ifdef PHOTONICS_REFLECT_ENABLED
+	#if defined(PHOTONICS_REFLECT_ENABLED) && !defined(RENDER_GBUFFERS)
 		Reflections_Final *= 1.0 - luma(F);
 	#else
 		Reflections_Final *= mix(1.0 - (Reflections.a * luma(F)), 1.0 - luma(F), Outdoors);
@@ -252,8 +251,8 @@ void MaterialReflections(
 	// apply all reflections to the lighting
 	Reflections_Final += Reflections.rgb * luma(F);
 
-	#ifndef PHOTONICS_REFLECT_ENABLED
-		Reflections_Final += SkyReflection * luma(F) * (1.0-Reflections.a) * Outdoors;
+	#if !defined(PHOTONICS_REFLECT_ENABLED) || defined(RENDER_GBUFFERS)
+		Reflections_Final += SkyReflection * F * (1.0-Reflections.a) * Outdoors;
 	#endif
 
 	#ifdef REFLECTION_ROUGH
