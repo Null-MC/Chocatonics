@@ -1,4 +1,11 @@
+#ifdef CLOUDS_SHADOWS
+    uniform sampler2D noisetex;
+#endif
+
 uniform vec3 shadowLightPosition;
+uniform float frameTimeCounter;
+uniform float rainStrength;
+uniform vec3 sunVec;
 
 #include "/photonics/interface/lighting_interface.glsl"
 #include "/photonics/tracing.glsl"
@@ -6,6 +13,11 @@ uniform vec3 shadowLightPosition;
 
 #include "/photonics/modifiers/indirect_surface_sample_modifier.glsl"
 #include "/photonics/trace_ray.glsl"
+
+#ifdef CLOUDS_SHADOWS
+    #include "/lib/blueNoise.glsl"
+    #include "/lib/volumetricClouds.glsl"
+#endif
 
 
 void sample_indirect(inout vec3 indirect_color, vec3 sample_rt_pos, vec3 geo_normal, vec3 tex_normal, inout uint rnd_state,
@@ -42,6 +54,10 @@ void sample_indirect(inout vec3 indirect_color, vec3 sample_rt_pos, vec3 geo_nor
     else {
         vec3 radiance = vec3(0.0);
         vec3 transmittance = vec3(1.0);
+
+        #ifdef CLOUDS_SHADOWS
+            float noise = blueNoise(gl_FragCoord.xy, frameCounter);
+        #endif
 
         for (int bounce = 0; bounce < PH_MAX_GI_BOUNCES; bounce++) {
             VoxelData voxel_data = ray_result_voxel_data(hit);
@@ -80,12 +96,24 @@ void sample_indirect(inout vec3 indirect_color, vec3 sample_rt_pos, vec3 geo_nor
 
                 if (!is_hit2) {
                     vec3 skyLightColor = get_sun_color(hit_localPos, localSkyLightDir);
-                    sample_color += skyLightColor * tint2 * max(dot(hit_localNormal, localSkyLightDir), 0.0);
+                    float skyShading = max(dot(hit_localNormal, localSkyLightDir), 0.0);
 
-                    // #ifdef CLOUDS_SHADOWS
-                    //     float cloudShadow = SampleCloudShadow(hit_localPos, localSkyLightDir);
-                    //     sample_color *= cloudShadow * 0.5 + 0.5;
-                    // #endif
+                    #ifdef CLOUDS_SHADOWS
+                        vec3 hit_worldPos = hit_localPos + cameraPosition;
+
+                        const int rayMarchSteps = 6;
+                        float cloudShadow = 0.0;
+
+                        for (int i = 0; i < rayMarchSteps; i++) {
+                            vec3 cloudPos = hit_worldPos + localSkyLightDir / abs(localSkyLightDir.y) * (1500 + (noise+i) / rayMarchSteps*1700 - hit_worldPos.y);
+                            cloudShadow += getCloudDensity(cloudPos, 0);
+                        }
+
+                        cloudShadow = mix(1.0, exp(-cloudShadow * cloudDensity * 1700/rayMarchSteps), mix(CLOUDS_SHADOWS_STRENGTH, 1.0, rainStrength));
+                        skyShading *= cloudShadow;
+                    #endif
+
+                    sample_color += skyLightColor * tint2 * skyShading;
                 }
             #endif
 
@@ -93,7 +121,7 @@ void sample_indirect(inout vec3 indirect_color, vec3 sample_rt_pos, vec3 geo_nor
             if (light_is_valid(hit_light) && hit_light.type == LIGHT_TYPE_NOT_TRACED) {
                 vec3 origin = floor(ray_result_position(hit)) + 0.5;
                 vec3 light_color = light_sample_at(hit_light, sample_rt_pos, origin, geo_normal, geo_normal);
-                sample_color += light_color;// * gi_light_multiplier;
+                sample_color += light_color;
             }
 
             transmittance *= hit_albedo;

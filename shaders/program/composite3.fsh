@@ -40,12 +40,12 @@ uniform sampler2D colortex4;
 
 uniform float far;
 uniform float near;
-//uniform vec3 sunVec;
+uniform vec3 sunVec;
 uniform int frameCounter;
-//uniform float rainStrength;
+uniform float rainStrength;
 //uniform float sunElevation;
 //uniform ivec2 eyeBrightnessSmooth;
-//uniform float frameTimeCounter;
+uniform float frameTimeCounter;
 //uniform int isEyeInWater;
 uniform vec2 texelSize;
 uniform mat4 gbufferProjection;
@@ -75,7 +75,10 @@ uniform vec3 shadowLightPosition;
 #include "/lib/projections.glsl"
 #include "/lib/color_transforms.glsl"
 #include "/lib/sky_gradient.glsl"
-//#include "/lib/volumetricClouds.glsl"
+
+#ifdef CLOUDS_SHADOWS
+	#include "/lib/volumetricClouds.glsl"
+#endif
 
 #include "/photonics/tracing.glsl"
 #include "/photonics/trace_ray.glsl"
@@ -237,25 +240,26 @@ void main() {
 				vec3 hit_albedo = voxel_data_albedo(voxel_data).rgb;
 //				hit_albedo = toLinear(hit_albedo);
 
-				vec3 hitLocalPos = hit_position - rt_camera_position;
+				vec3 hit_localPos = hit_position - rt_camera_position;
 				vec3 hit_localNormal = ray_result_normal(hit);
-//				float hitViewDist = length(hitLocalPos);
+//				float hitViewDist = length(hit_localPos);
 
-				reflectDist += distance(localPosLast, hitLocalPos);
+				reflectDist += distance(localPosLast, hit_localPos);
 
 				float hit_sky = ray_result_skylight(hit) / 15.0;
 				vec2 hit_lmcoord = vec2(0.0, hit_sky);
 
 				// shadows
-				vec3 projectedShadowPosition = mul3(shadowModelView, hitLocalPos);
+				vec3 projectedShadowPosition = mul3(shadowModelView, hit_localPos);
 				projectedShadowPosition = diagonal3(shadowProjection) * projectedShadowPosition + shadowProjection[3].xyz;
 
 				// apply distortion
 				float distortFactor = calcDistort(projectedShadowPosition.xy);
 				projectedShadowPosition.xy *= distortFactor;
 
-				vec3 shadow = vec3(1.0);
 				float hit_sky_NoLm = max(dot(hit_localNormal, localSkyLightDir), 0.0);
+				float skyShading = hit_sky_NoLm;
+				vec3 shadow_color = vec3(1.0);
 
 				// do shadows only if on shadow map
 				if (abs(projectedShadowPosition.x) < 1.0-1.5/shadowMapResolution && abs(projectedShadowPosition.y) < 1.0-1.5/shadowMapResolution && abs(projectedShadowPosition.z) < 6.0) {
@@ -273,13 +277,24 @@ void main() {
 					float bias = 1.0 + noise * rdMul/SHADOW_FILTER_SAMPLE_COUNT * shadowMapResolution;
 					vec3 samplePos = vec3(projectedShadowPosition + vec3(rdMul * offsetS, -diffthresh * bias));
 
-					shadow = vec3(texture(shadowtex0HW, samplePos));
+					skyShading *= texture(shadowtex0HW, samplePos);
 
-					// TODO: shadow color
+					// TODO: shadow color?
 				}
 
-				#ifdef SHADOW_CLOUDS
-					shadow *= SampleCloudShadow(hitLocalPos, localSkyLightDir);
+				#ifdef CLOUDS_SHADOWS
+					vec3 hit_worldPos = hit_localPos + cameraPosition;
+
+					const int rayMarchSteps = 6;
+					float cloudShadow = 0.0;
+
+					for (int i = 0; i < rayMarchSteps; i++) {
+						vec3 cloudPos = hit_worldPos + localSkyLightDir / abs(localSkyLightDir.y) * (1500 + (noise+i) / rayMarchSteps*1700 - hit_worldPos.y);
+						cloudShadow += getCloudDensity(cloudPos, 0);
+					}
+
+					cloudShadow = mix(1.0, exp(-cloudShadow * cloudDensity * 1700/rayMarchSteps), mix(CLOUDS_SHADOWS_STRENGTH, 1.0, rainStrength));
+					skyShading *= cloudShadow;
 				#endif
 
 				vec3 hit_color = vec3(0.0);
@@ -313,7 +328,7 @@ void main() {
 
 				vec3 custom_lightmap = texture(colortex4, (hit_lmcoord * 15.0 + 0.5 + vec2(0.0, 19.0)) * texelSize).rgb / 150.0 * 8.0/3.0;
 				ambientLight = ambientLight * custom_lightmap.x + custom_lightmap.z * vec3(0.9, 1.0, 1.5) + custom_lightmap.y * TorchColor;
-				hit_color += (hit_sky_NoLm * shadow)/PI * vIn.lightCol.rgb * 8.0/3.0 / 150.0 + ambientLight;
+				hit_color += (skyShading * shadow_color)/PI * vIn.lightCol.rgb * 8.0/3.0 / 150.0 + ambientLight;
 
 				// TODO: fresnel, probably wrong
 				float hit_NoVm = max(dot(hit_localNormal, -reflectLocalDir), 0.0);
@@ -335,7 +350,7 @@ void main() {
 				#endif
 
 				vec3 hit_reflectLocalDir = normalize(reflect(reflectLocalDir, hit_localNormal));
-				localPosLast = hitLocalPos;
+				localPosLast = hit_localPos;
 
 				reflectLocalDir = hit_reflectLocalDir;
 				ray_iter_set_direction(ray, reflectLocalDir);
