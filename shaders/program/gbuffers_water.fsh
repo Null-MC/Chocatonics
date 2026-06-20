@@ -42,7 +42,7 @@ uniform float waveScale;
 uniform float lightSign;
 uniform float near;
 uniform float far;
-uniform float wetness;
+//uniform float wetness;
 uniform float moonIntensity;
 uniform float sunIntensity;
 uniform vec3 sunColor;
@@ -254,8 +254,9 @@ void main() {
 	}
 	else {
 		#ifdef MC_NORMAL_MAP
+			const float wetness = 0.0; // TODO
 			vec3 tex_normal = mat_normal(texture(normals, vIn.lmtexcoord.xy).rgb);
-			normal = applyBump(tbnMatrix, tex_normal);
+			normal = applyBump(tbnMatrix, tex_normal, wetness);
 		#endif
 	}
 

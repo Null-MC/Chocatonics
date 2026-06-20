@@ -32,6 +32,7 @@ uniform sampler2D noisetex;
 
 uniform vec2 texelSize;
 uniform float rainStrength;
+uniform float rainWetness;
 uniform float alphaTestRef;
 uniform float frameTimeCounter;
 uniform mat4 gbufferModelViewInverse;
@@ -42,9 +43,9 @@ uniform mat4 shadowProjection;
 uniform vec3 cameraPosition;
 uniform int framemod8;
 
-#ifdef MC_NORMAL_MAP
-	uniform float wetness;
-#endif
+//#ifdef MC_NORMAL_MAP
+//	uniform float wetness;
+//#endif
 
 #include "/lib/ign.glsl"
 #include "/lib/material.glsl"
@@ -97,6 +98,20 @@ void main() {
 
 	vec2 taa_offset = taa_offsets[framemod8];
 	vec3 viewPos = toScreenSpace(gl_FragCoord.xyz * vec3(texelSize / RENDER_SCALE, 1.0) - vec3(taa_offset * texelSize * 0.5, 0.0));
+
+	float wetness = 0.0;
+	if (rainStrength > 0.0 || rainWetness > 0.0) {
+		vec3 localPos = mul3(gbufferModelViewInverse, viewPos);
+
+		vec3 localNormal = mat3(gbufferModelViewInverse) * normal;
+		float skyExposure = smoothstep((13.5/15.0), (14.5/15.0), vIn.lmtexcoord.w);
+		float wetnessF = saturate(localNormal.y); //saturate(unmix(-0.4, 0.1, localTexNormal.y));
+
+		vec2 texcoord = localPos.xz + cameraPosition.xz;
+		float puddleF = smoothstep(0.06, 0.24, rainWetness * texture(noisetex, texcoord*0.05).g);
+
+		wetness = skyExposure * max(rainStrength * wetnessF * 0.6, puddleF);
+	}
 
 	#ifdef MAT_PARALLAX_ENABLED
 //		vec2 taa_offset = taa_offsets[framemod8];
@@ -177,7 +192,7 @@ void main() {
 		color.rgb *= vIn.color.rgb;
 
 		vec3 tex_normal = mat_normal(textureGrad(normals, adjustedTexCoord.xy, dcdx, dcdy).xyz);
-		normal = applyBump(tbnMatrix, tex_normal);
+		normal = applyBump(tbnMatrix, tex_normal, wetness);
 
 		#ifdef MC_TEXTURE_FORMAT_LAB_PBR
 			vec4 specularData = textureGrad(specular, adjustedTexCoord.xy, dcdx, dcdy);
@@ -186,16 +201,13 @@ void main() {
 		vec4 color = texture(gtexture, vIn.lmtexcoord.xy, Texture_MipMap_Bias);
 		color.rgb *= vIn.color.rgb;
 
-//		float avgBlockLum = luma(textureLod(gtexture, vIn.lmtexcoord.xy, 128).rgb * vIn.color.rgb);
-//		color.rgb = saturate(color.rgb * pow(avgBlockLum, -0.33) * 0.85);
-
 		#ifdef DISABLE_ALPHA_MIPMAPS
 			color.a = textureLod(gtexture, vIn.lmtexcoord.xy, 0).a;
 		#endif
 
 		#ifdef MC_NORMAL_MAP
 			vec3 tex_normal = mat_normal(texture(normals, vIn.lmtexcoord.xy).rgb);
-			normal = applyBump(tbnMatrix, tex_normal);
+			normal = applyBump(tbnMatrix, tex_normal, wetness);
 		#endif
 
 		#ifdef MC_TEXTURE_FORMAT_LAB_PBR
@@ -231,16 +243,7 @@ void main() {
 		}
 	#endif
 
-	if (rainStrength > 0.0) {
-		vec3 localPos = mul3(gbufferModelViewInverse, viewPos);
-
-		vec3 localNormal = mat3(gbufferModelViewInverse) * normal;
-		float skyExposure = smoothstep((13.5/15.0), (14.5/15.0), vIn.lmtexcoord.w);
-		float wetness = rainStrength * skyExposure * saturate(localNormal.y); //saturate(unmix(-0.4, 0.1, localTexNormal.y));
-
-		vec2 texcoord = localPos.xz + cameraPosition.xz;
-		wetness *= smoothstep(0.06, 0.40, texture(noisetex, texcoord*0.05).r);
-
+	if (wetness > 0.0) {
 		vec3 albedo = toLinear(color.rgb) * (1.0 - 0.4 * wetness * porosity);
 		albedo *= exp(-2.0 * wetness * porosity * (1.0 - albedo));
 

@@ -81,8 +81,6 @@ float mat_porosity_lab(const in float specular_b) {
 }
 
 float mat_porosity_old(const in vec2 specular_rg) {
-    // half metalInv = (half)1.0 - saturate(unmix((half)0.04, (half)(229.0/255.0), f0_metal));
-    // return sqrt(roughness) * metalInv;
     float roughness = mat_roughness(specular_rg.r);
     float metalness = mat_metalness_old(specular_rg.g);
     return pow(roughness, 1.0 + metalness);

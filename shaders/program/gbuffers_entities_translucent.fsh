@@ -41,7 +41,7 @@ uniform float frameTimeCounter;
 uniform float lightSign;
 uniform float near;
 uniform float far;
-uniform float wetness;
+//uniform float wetness;
 uniform float moonIntensity;
 uniform float sunIntensity;
 uniform vec3 sunColor;
@@ -140,7 +140,9 @@ void main() {
 			vIn.tangent.z, binormal.z, normal.z);
 
 		vec3 tex_normal = mat_normal(texture(normals, vIn.lmtexcoord.xy).rgb);
-		normal = applyBump(tbnMatrix, tex_normal);
+
+		const float wetness = 0.0; // TODO
+		normal = applyBump(tbnMatrix, tex_normal, wetness);
 	#endif
 
 	float NdotL = lightSign * dot(normal, sunVec);

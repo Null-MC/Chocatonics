@@ -41,7 +41,7 @@ uniform int entityId;
 #include "/lib/projections.glsl"
 
 #ifdef MC_NORMAL_MAP
-	const float wetness = 0.0;
+//	const float wetness = 0.0;
 	#include "/lib/normal_map.glsl"
 #endif
 
@@ -69,7 +69,9 @@ void main() {
 			vIn.tangent.z, bitangent.z, normal.z);
 
 		vec3 tex_normal = mat_normal(texture(normals, vIn.lmtexcoord.xy).rgb);
-		normal = applyBump(tbnMatrix, tex_normal);
+
+		const float wetness = 0.0; // TODO
+		normal = applyBump(tbnMatrix, tex_normal, wetness);
 	#endif
 
 	const float mat = 0.0;

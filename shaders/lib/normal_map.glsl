@@ -15,7 +15,7 @@ mat3 inverse(mat3 m) {
         b21, (-a21 * a00 + a01 * a20), (a11 * a00 - a01 * a10)) / det;
 }
 
-vec3 applyBump(mat3 tbnMatrix, vec3 bump) {
+vec3 applyBump(const in mat3 tbnMatrix, in vec3 bump, const in float wetness) {
     float bumpmult = 1.0 - wetness * 0.95;
 
     bump = bump * vec3(bumpmult) + vec3(0.0, 0.0, 1.0 - bumpmult);
