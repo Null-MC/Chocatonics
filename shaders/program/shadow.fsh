@@ -26,7 +26,7 @@ uniform float alphaTestRef;
 layout(location = 0) out vec4 outColor;
 
 void main() {
-	outColor = texture(gtexture, vIn.texcoord, Texture_MipMap_Bias);
+	outColor = texture(gtexture, vIn.texcoord);
 
 	#ifdef SHADOW_DISABLE_ALPHA_MIPMAPS
 		outColor.a = textureLod(gtexture, vIn.texcoord, 0).a;

@@ -54,6 +54,20 @@ screen.PHOTONICS=Photonics
         suffix.PHOTONICS_RESTIR_REUSE_RADIUS=px
 
 
+screen.ATMOSPHERE=Atmospherics
+
+    option.SEA_LEVEL=Sea Level
+
+
+screen.WAVING=Wavy Stuff
+
+    option.WAVY_PLANTS=Plants
+
+    option.WAVY_STRENGTH=Strength
+
+    option.WAVY_SPEED=Speed
+
+
 screen.MATERIALS=PBR Materials
 
     option.MAT_FORMAT=Format
@@ -63,6 +77,12 @@ screen.MATERIALS=PBR Materials
 
     option.MAT_POROSITY_INTEGRATED=Integrated Porosity
     option.MAT_POROSITY_INTEGRATED.comment=Use shader-based porosity instead of resource pack values.
+
+    option.Texture_MipMap_Bias=MipMap Bias
+    option.Texture_MipMap_Bias.comment=Uses a another mip level for textures. When reduced will increase texture detail but may induce a lot of shimmering.
+
+    option.DISABLE_ALPHA_MIPMAPS=Disable Alpha MipMap
+    option.DISABLE_ALPHA_MIPMAPS.comment=Disables mipmaps on the transparency of alpha-tested things like foliage, may cost a few fps in some cases
 
     screen.MAT_PARALLAX=Parallax
 
@@ -97,6 +117,41 @@ screen.MATERIALS=PBR Materials
         option.MAT_SPECULAR_ENABLED=Enabled
 
 
+screen.SHADOWS=Shadows
+
+    option.shadowDistance=Distance
+    suffix.shadowDistance=m
+
+    option.shadowMapResolution=Resolution
+    suffix.shadowMapResolution=px
+
+    option.SHADOW_COLORED=Colored
+
+    option.SCREENSPACE_CONTACT_SHADOWS=Contact Shadows
+    option.SCREENSPACE_CONTACT_SHADOWS.comment=Raymarch towards the sun in screen-space, in order to cast shadows outside of the shadow map or at the contact of objects. Can get really expensive at high resolutions.
+
+    option.CLOUDS_SHADOWS=Cloud Shadows
+
+    option.CLOUDS_SHADOWS_STRENGTH=Cloud Shadow Strength
+
+    option.CAVE_LIGHT_LEAK_FIX=Cave Light-Leak Fix
+    option.CAVE_LIGHT_LEAK_FIX.comment=Hackish way to remove sunlight incorrectly leaking into the caves. Can inaccurately create shadows in some places
+
+    screen.SHADOW_FILTERING=Filtering
+
+        option.SHADOW_FILTER_SAMPLE_COUNT=Sample Count
+
+
+screen.WATER=Water
+
+    screen.WATER_ADVANCED=Advanced
+
+
+screen.CAMERA=Camera
+
+    option.EXPOSURE_MULTIPLIER=Exposure Multiplier
+
+
 screen.REFLECTIONS=Reflections
 
     option.REFLECTION_ENABLED=Enabled
@@ -112,6 +167,32 @@ screen.REFLECTIONS=Reflections
     option.REFLECTION_ROUGH.comment=Turns the roughness GGXVNDF ON. sizable performance impact, and introduces alot of noise.
 
     option.REFLECTION_ACCUMULATE=Accumulation
+
+
+screen.POST_PROCESS=Post-Processing
+
+    option.POST_FINAL_R=Final Red
+
+    option.POST_FINAL_G=Final Green
+
+    option.POST_FINAL_B=Final Blue
+
+    option.BICUBIC_UPSCALING=Bicubic Upscaling
+    option.BICUBIC_UPSCALING.comment=Provides a better interpolation when using a render quality different of 1.0, slower
+
+    option.CONTRAST_ADAPTATIVE_SHARPENING=Contrast-Adaptive Sharpening
+
+    option.SHARPENING=Sharpening
+
+    screen.POST_TONEMAP=Tonemapping
+
+        option.TONEMAP=Tonemap
+
+        option.SATURATION=Saturation
+        option.SATURATION.comment=Negative values desaturates colors, Positive values saturates color, 0 is no change
+
+        option.CROSSTALK=CrossTalk
+        option.CROSSTALK.comment=Desaturates bright colors and preserves saturation in darker areas (inverted if negative). Helps avoiding almsost fluorescent colors
 
 
 screen.TAA_OPTIONS=TAA
