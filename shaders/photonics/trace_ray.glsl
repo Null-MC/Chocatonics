@@ -18,9 +18,9 @@ bool trace_ray(inout RayIterator ray, inout RayResult hit, inout vec3 tint) {
             vec4 trace_albedo = voxel_data_albedo(trace_voxel_data);
 //            trace_albedo.rgb = InputTransform(trace_albedo.rgb);
 
-            trace_albedo.rgb = mix(vec3(1.0), trace_albedo.rgb, sqrt(trace_albedo.a));
-//            trace_albedo.rgb = normalize(trace_albedo.rgb + EPSILON) * (1.0 - trace_albedo.a);
-            tint *= trace_albedo.rgb;
+            trace_albedo.rgb = mix(vec3(1.0), trace_albedo.rgb, trace_albedo.a);
+//            trace_albedo.rgb = normalize(trace_albedo.rgb + EPSILON) / sqrt(3.0) * (1.0 - trace_albedo.a);
+//            tint *= trace_albedo.rgb;
 
             ray_iter_skip_block(ray);
         }

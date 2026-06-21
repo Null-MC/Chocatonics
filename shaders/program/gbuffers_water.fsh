@@ -290,13 +290,13 @@ void main() {
 //			float noise = blueNoise(gl_FragCoord.xy, frameCounter);
 			float rdMul = 4.0 / shadowMapResolution;
 
-			for (int i = 0; i < 9; i++) {
-				vec2 offsetS = tapLocation_Shadow(i, 9, 2.0, noise);
-				float weight = 1.0 + (i + noise) * rdMul/9.0 * shadowMapResolution;
-				shading += texture(shadowtex0HW, vec3(projectedShadowPosition + vec3(rdMul*offsetS, -diffthresh*weight))) / 9.0;
+			for (int i = 0; i < SHADOW_FILTER_SAMPLE_COUNT; i++) {
+				vec2 offsetS = tapLocation_Shadow(i, SHADOW_FILTER_SAMPLE_COUNT, 2.0, noise);
+				float bias = 1.0 + (i + noise) * rdMul/SHADOW_FILTER_SAMPLE_COUNT * shadowMapResolution;
+				shading += texture(shadowtex0HW, vec3(projectedShadowPosition + vec3(rdMul*offsetS, -diffthresh*bias)));
 			}
 
-			direct *= shading;
+			direct *= shading / SHADOW_FILTER_SAMPLE_COUNT;
 		}
 	}
 

@@ -28,7 +28,7 @@ in VertexData {
     flat float fogAmount;
     flat float VFAmount;
     flat float avgL2;
-    flat float centerDepth;
+//    flat float centerDepth;
 } vIn;
 
 uniform sampler2D colortex4;
@@ -192,5 +192,5 @@ void main() {
         outColor4 = vec4(vIn.exposure, vIn.avgBrightness, vIn.avgL2, 1.0);
 
     if (gl_FragCoord.x > 14.0 && gl_FragCoord.x < 15.0 && gl_FragCoord.y > 19.0 + 18.0 && gl_FragCoord.y < 19.0 + 18.0 + 1.0)
-        outColor4 = vec4(vIn.rodExposure, vIn.centerDepth, 0.0, 1.0);
+        outColor4 = vec4(vIn.rodExposure, temp.g, 0.0, 1.0);
 }

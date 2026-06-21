@@ -426,10 +426,10 @@ void main() {
 
 	#ifdef DOF
 		float z = texture(depthtex0, vIn.texcoord * RENDER_SCALE).r;
-		z = linZ(z, near, far) * far;
+		z = linZ(z, nearPlane, farPlane) * farPlane;
 
 		#ifdef AUTOFOCUS
-			float focus = vIn.rodExposureDepth.y * far;
+			float focus = vIn.rodExposureDepth.y * farPlane;
 		#else
 			float focus = MANUAL_FOCUS;
 		#endif

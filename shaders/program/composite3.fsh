@@ -263,19 +263,15 @@ void main() {
 
 				// do shadows only if on shadow map
 				if (abs(projectedShadowPosition.x) < 1.0-1.5/shadowMapResolution && abs(projectedShadowPosition.y) < 1.0-1.5/shadowMapResolution && abs(projectedShadowPosition.z) < 6.0) {
-					vec3 filtered = vec3(1.412, 1.0, 0.0);
-
-					float rdMul = filtered.x * distortFactor * shadow_d0 * shadow_k / shadowMapResolution;
 					const float threshMul = max(2048.0 / shadowMapResolution * shadowDistance/128.0, 0.95);
-					float distortThresh = (sqrt(1.0-hit_sky_NoLm*hit_sky_NoLm)/hit_sky_NoLm+0.7)/distortFactor;
+					float distortThresh = (sqrt(1.0 - square(hit_sky_NoLm)) / hit_sky_NoLm + 0.7) / distortFactor;
+					float diffthresh = distortThresh/6000.0 * threshMul;
 
 					projectedShadowPosition = projectedShadowPosition * vec3(0.5, 0.5, 0.5/6.0) + vec3(0.5, 0.5, 0.5);
 
-					float diffthresh = distortThresh/6000.0 * threshMul;
-
-					const vec2 offsetS = vec2(0.0); // TODO: remove
+					float rdMul = 4.0 / shadowMapResolution;
 					float bias = 1.0 + noise * rdMul/SHADOW_FILTER_SAMPLE_COUNT * shadowMapResolution;
-					vec3 samplePos = vec3(projectedShadowPosition + vec3(rdMul * offsetS, -diffthresh * bias));
+					vec3 samplePos = vec3(projectedShadowPosition + vec3(0.0, 0.0, -diffthresh * bias));
 
 					skyShading *= texture(shadowtex0HW, samplePos);
 

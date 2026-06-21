@@ -9,6 +9,14 @@ uniform float sunElevation;
 #include "/lib/sky_gradient.glsl"
 
 
+#define PH_USE_CUSTOM_ALPHA
+#define PH_ALPHA_FUNC(color) apply_tint_impl(color)
+
+vec3 apply_tint_impl(vec4 color) {
+    return vec3(1.0);// color.xyz * (1f - color.a);
+}
+
+
 vec3 get_sun_direction() {
     vec3 localSunDir = normalize(mat3(gbufferModelViewInverse) * sunPosition);
 

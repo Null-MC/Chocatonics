@@ -11,7 +11,6 @@ out VertexData {
 	flat vec3 ambientB;
 	flat vec3 ambientF;
 	flat vec3 ambientDown;
-//    flat vec3 zenithColor;
 	flat vec3 sunColor;
 	flat vec3 sunColorCloud;
 	flat vec3 moonColor;
@@ -20,13 +19,11 @@ out VertexData {
 	flat vec3 avgSky;
 	flat vec2 tempOffsets;
 	flat float exposure;
-//    flat float exposureF;
 	flat float avgBrightness;
 	flat float rodExposure;
 	flat float fogAmount;
 	flat float VFAmount;
 	flat float avgL2;
-	flat float centerDepth;
 } vOut;
 
 uniform sampler2D colortex4;
@@ -103,7 +100,8 @@ void main() {
 	float sunVis = clamp(sunElevation, 0.0, 0.05) / 0.05 * clamp(sunElevation, 0.0, 0.05) / 0.05;
 	float moonVis = clamp(-sunElevation, 0.0, 0.05) / 0.05 * clamp(-sunElevation, 0.0, 0.05) / 0.05;
 
-//	vOut.zenithColor = calculateAtmosphere(vec3(0.0), vec3(0.0, 1.0, 0.0), vec3(0.0, 1.0, 0.0), sunVec, -sunVec, planetSphere, skyAbsorb, 25, vOut.tempOffsets.x);
+	// TODO: unused?
+	vec3 zenithColor = calculateAtmosphere(vec3(0.0), vec3(0.0, 1.0, 0.0), vec3(0.0, 1.0, 0.0), sunVec, -sunVec, planetSphere, skyAbsorb, 25, vOut.tempOffsets.x);
 
 	skyAbsorb = vec3(0.0);
 	vec3 absorb = vec3(0.0);
@@ -195,13 +193,6 @@ void main() {
 	float targetrodExposure = max(0.012 / log2(vOut.avgL2 + 1.002) - 0.1, 0.0) * 1.2;
 
 	vOut.exposure = targetExposure * EXPOSURE_MULTIPLIER;
-
-	float currCenterDepth = texture(depthtex0, vec2(0.5) * RENDER_SCALE).r;
-	currCenterDepth = linZ(currCenterDepth, near, far);
-
-	vOut.centerDepth = mix(sqrt(texelFetch(colortex4, ivec2(14, 37), 0).g / 65000.0), currCenterDepth, saturate(DoF_Adaptation_Speed * exp(-0.016/frameTime+1.0) / (6.0+currCenterDepth*far)));
-	vOut.centerDepth = vOut.centerDepth * vOut.centerDepth * 65000.0;
-
 	vOut.rodExposure = targetrodExposure;
 
 	#ifndef AUTO_EXPOSURE
