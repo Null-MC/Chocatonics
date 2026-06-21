@@ -218,7 +218,7 @@ void waterVolumetrics(inout vec3 inColor, vec3 rayStart, vec3 rayEnd, float estE
 		vec3 pos = vec3(spPos.xy * distortFactor, spPos.z);
 		float sh = 1.0;
 
-		if (abs(pos.x) < 1.0-0.5/2048. && abs(pos.y) < 1.0-0.5/2048){
+		if (IsInShadowMap(pos.xy)) {
 			pos = pos * vec3(0.5, 0.5, 0.5/6.0) + 0.5;
 			sh = texture(shadowtex0HW, pos);
 		}

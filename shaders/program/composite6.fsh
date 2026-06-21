@@ -163,7 +163,7 @@ void main() {
             vec3 fragpos = toScreenSpace(vec3(texcoord, z));
             vec3 np3 = mul3(gbufferModelViewInverse, fragpos) + cameraPosition;
             float norm = getWaterHeightmap(np3.xz + np3.y, 1.0) - 0.5;
-            float displ = norm / (length(fragpos) / far) / 2000.0 * (isEyeInWater*2.0 + 1.0);
+            float displ = norm / (length(fragpos) / farPlane) / 2000.0 * (isEyeInWater*2.0 + 1.0);
             refractedCoord += displ * RENDER_SCALE;
 
             if (texture(colortex7, refractedCoord).a < 0.99)
@@ -180,7 +180,7 @@ void main() {
         }
     #endif
 
-    if (frDepth > 2.5/far || transparencies.a < 0.99)  // Discount fix for transparencies through hand
+    if (frDepth > 2.5/farPlane || transparencies.a < 0.99)  // Discount fix for transparencies through hand
         color = color * (1.0 - transparencies.a) + transparencies.rgb * 10.0;
 
     float dirtAmount = Dirt_Amount;

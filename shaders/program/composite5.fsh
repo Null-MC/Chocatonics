@@ -108,7 +108,7 @@ mat2x3 getVolumetricRays(float dither, vec3 fragpos, vec4 lightCol) {
 	vec3 dV = fragposition - start;
 	vec3 dVWorld = wpos - gbufferModelViewInverse[3].xyz;
 
-	float maxLength = min(length(dVWorld), far) / length(dVWorld);
+	float maxLength = min(length(dVWorld), farPlane) / length(dVWorld);
 	dV *= maxLength;
 	dVWorld *= maxLength;
 
@@ -161,7 +161,7 @@ mat2x3 getVolumetricRays(float dither, vec3 fragpos, vec4 lightCol) {
 		float densityVol = cloudVol(progressW);
 		float sh = 1.0;
 
-		if (abs(pos.x) < 1.0-0.5/2048.0 && abs(pos.y) < 1.0-0.5/2048){
+		if (IsInShadowMap(pos.xy)) {
 			pos = pos * vec3(0.5, 0.5, 0.5/6.0) + 0.5;
 			sh = texture(shadowtex0HW, pos);
 
@@ -231,7 +231,7 @@ void waterVolumetrics(inout vec3 inColor, vec3 rayStart, vec3 rayEnd, float estE
 
 	// limit ray length at 32 blocks for performance and reducing integration error
 	// you can't see above this anyway
-	float maxZ = min(rayLength,32.0)/(1e-8+rayLength);
+	float maxZ = min(rayLength, 32.0) / (1e-8 + rayLength);
 	dV *= maxZ;
 	vec3 dVWorld = mat3(gbufferModelViewInverse) * (rayEnd - rayStart) * maxZ;
 	rayLength *= maxZ;
@@ -240,22 +240,22 @@ void waterVolumetrics(inout vec3 inColor, vec3 rayStart, vec3 rayEnd, float estE
 	vec3 vL = vec3(0.0);
 	float phase = phaseg(VdotL, Dirt_Mie_Phase);
 	float expFactor = 11.0;
-	vec3 progressW = gbufferModelViewInverse[3].xyz+cameraPosition;
+	vec3 progressW = gbufferModelViewInverse[3].xyz + cameraPosition;
 //	vec3 WsunVec = mat3(gbufferModelViewInverse) * sunVec * vIn.lightCol.a;
 
 	for (int i = 0; i < spCount; i++) {
-		float d = (pow(expFactor, float(i+dither)/float(spCount))/expFactor - 1.0/expFactor)/(1-1.0/expFactor);		// exponential step position (0-1)
-		float dd = pow(expFactor, float(i+dither)/float(spCount)) * log(expFactor) / float(spCount)/(expFactor-1.0);	//step length (derivative)
+		float d = (pow(expFactor, float(i+dither)/float(spCount))/expFactor - 1.0/expFactor) / (1.0 - 1.0/expFactor);		// exponential step position (0-1)
+		float dd = pow(expFactor, float(i+dither)/float(spCount)) * log(expFactor) / float(spCount) / (expFactor-1.0);	//step length (derivative)
 		vec3 spPos = start.xyz + dV*d;
-		progressW = gbufferModelViewInverse[3].xyz+cameraPosition + d*dVWorld;
+		progressW = gbufferModelViewInverse[3].xyz + cameraPosition + d*dVWorld;
 
 		// project into biased shadowmap space
 		float distortFactor = calcDistort(spPos.xy);
-		vec3 pos = vec3(spPos.xy*distortFactor, spPos.z);
+		vec3 pos = vec3(spPos.xy * distortFactor, spPos.z);
 		float sh = 1.0;
 
-		if (abs(pos.x) < 1.0-0.5/2048. && abs(pos.y) < 1.0-0.5/2048){
-			pos = pos*vec3(0.5,0.5,0.5/6.0)+0.5;
+		if (IsInShadowMap(pos.xy)) {
+			pos = pos * vec3(0.5, 0.5, 0.5/6.0) + 0.5;
 			sh = texture(shadowtex0HW, pos);
 		}
 
@@ -297,7 +297,7 @@ void main() {
 		vec3 scatterCoef = Dirt_Amount * vec3(Dirt_Scatter_R, Dirt_Scatter_G, Dirt_Scatter_B);
 
 		float estEyeDepth = saturate((14.0 - eyeBrightnessSmooth.y/255.0 * 16.0) / 14.0);
-		estEyeDepth *= estEyeDepth * estEyeDepth * 34.0;
+		estEyeDepth *= square(estEyeDepth) * 34.0;
 		#ifndef lightMapDepthEstimation
 			estEyeDepth = max(Water_Top_Layer - cameraPosition.y, 0.0);
 		#endif

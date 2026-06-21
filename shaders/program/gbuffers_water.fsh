@@ -104,8 +104,8 @@ vec3 rayTrace(vec3 dir, vec3 position, float dither, float fresnel) {
     float quality = mix(15, REFLECTION_QUALITY, fresnel);
     vec3 clipPosition = toClipSpace3(position);
 
-	float rayLength = ((position.z + dir.z * far*sqrt(3.)) > -near) ?
-       (-near -position.z) / dir.z : far*sqrt(3.);
+	float rayLength = ((position.z + dir.z * farPlane*sqrt(3.0)) > -nearPlane) ?
+       (-nearPlane -position.z) / dir.z : farPlane*sqrt(3.0);
 
 	// convert to clip space
     vec3 direction = normalize(toClipSpace3(dir * rayLength + position) - clipPosition);
@@ -143,7 +143,7 @@ vec3 rayTrace(vec3 dir, vec3 position, float dither, float fresnel) {
 		#endif
 
 		// small bias
-		minZ = maxZ - 0.00004 / linZ(spos.z, near, far);
+		minZ = maxZ - 0.00004 / linZ(spos.z, nearPlane, farPlane);
 		maxZ += stepv.z;
     }
 

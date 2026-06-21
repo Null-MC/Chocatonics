@@ -15,3 +15,11 @@ vec4 BiasShadowProjection(in vec4 projectedShadowSpacePosition) {
 float calcDistort(vec2 worldpos) {
     return 1.0 / (log(length(worldpos) * shadow_b + shadow_a) * shadow_k);
 }
+
+bool IsInShadowMap(const in vec2 pos) {
+//    return abs(pos.x) < 1.0 - 0.5/2048.0 && abs(pos.y) < 1.0 - 0.5/2048;
+    const float shadowTexel = 1.0 / shadowMapResolution;
+    const float shadowTexelMax = 1.0 - shadowTexel;
+
+    return all(lessThan(abs(pos), vec2(shadowTexelMax)));
+}

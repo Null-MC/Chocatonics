@@ -39,7 +39,7 @@ mat2x3 getVolumetricRays(float dither, vec3 fragpos, vec4 lightCol) {
 	vec3 dV = fragposition - start;
 	vec3 dVWorld = wpos - gbufferModelViewInverse[3].xyz;
 
-	float maxLength = min(length(dVWorld), far) / length(dVWorld);
+	float maxLength = min(length(dVWorld), farPlane) / length(dVWorld);
 	dV *= maxLength;
 	dVWorld *= maxLength;
 
@@ -86,13 +86,13 @@ mat2x3 getVolumetricRays(float dither, vec3 fragpos, vec4 lightCol) {
 		progress = start.xyz + d*dV;
 		progressW = gbufferModelViewInverse[3].xyz + cameraPosition + d*dVWorld;
 
-		//project into biased shadowmap space
+		// project into biased shadowmap space
 		float distortFactor = calcDistort(progress.xy);
 		vec3 pos = vec3(progress.xy*distortFactor, progress.z);
 		float densityVol = cloudVol(progressW, vIn.VFAmount, vIn.fogAmount);
 		float sh = 1.0;
 
-		if (abs(pos.x) < 1.0-0.5/2048.0 && abs(pos.y) < 1.0-0.5/2048) {
+		if (IsInShadowMap(pos.xy)) {
 			pos = pos * vec3(0.5, 0.5, 0.5/6.0) + 0.5;
 			sh = texture(shadowtex0HW, pos);
 

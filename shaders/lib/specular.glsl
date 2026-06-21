@@ -4,8 +4,8 @@
 vec3 rayTraceSpeculars(vec3 dir, vec3 position, float dither, float quality, bool hand, float fres) {
 	vec3 clipPosition = toClipSpace3(position);
 
-	float rayLength = ((position.z + dir.z * far*sqrt(3.0)) > -near) ?
-	                   (-near -position.z) / dir.z : far*sqrt(3.0);
+	float rayLength = ((position.z + dir.z * farPlane*sqrt(3.0)) > -near) ?
+	                   (-near -position.z) / dir.z : farPlane*sqrt(3.0);
 
 	vec3 direction = normalize(toClipSpace3(dir*rayLength + position) - clipPosition);  // convert to clip space
 	direction.xy = normalize(direction.xy);

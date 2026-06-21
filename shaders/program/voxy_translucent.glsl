@@ -65,7 +65,7 @@ vec3 rayTrace(vec3 dir, vec3 position, float dither, float fresnel) {
 		spos += stepv;
 
 		// small bias
-		minZ = maxZ - 0.00004 / linZ(spos.z, near, far);
+		minZ = maxZ - 0.00004 / linZ(spos.z, nearPlane, farPlane);
 		maxZ += stepv.z;
     }
 
