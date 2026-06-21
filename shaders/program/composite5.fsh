@@ -96,11 +96,10 @@ float cloudVol(in vec3 pos) {
 mat2x3 getVolumetricRays(float dither, vec3 fragpos, vec4 lightCol) {
 	// project pixel position into projected shadowmap space
 	vec3 wpos = toWorldSpace(fragpos);
-	vec3 fragposition = mul3(shadowModelView, wpos);
-	fragposition = diagonal3(shadowProjection) * fragposition + shadowProjection[3].xyz;
+	vec3 fragposition = worldToShadowSpaceProjected(wpos);
 
 	// project view origin into projected shadowmap space
-	vec3 start = toShadowSpaceProjected(vec3(0.0));
+	vec3 start = worldToShadowSpaceProjected(toWorldSpace(vec3(0.0)));
 
 	// rayvector into projected shadow map space
 	// we can use a projected vector because its orthographic projection
@@ -225,19 +224,22 @@ float waterCaustics(vec3 wPos, vec3 lightSource) {
 void waterVolumetrics(inout vec3 inColor, vec3 rayStart, vec3 rayEnd, float estEyeDepth, float estSunDepth, float rayLength, float dither, vec3 waterCoefs, vec3 scatterCoef, vec3 ambient, vec3 lightSource, float VdotL){
 	int spCount = 16;
 
-	vec3 start = toShadowSpaceProjected(rayStart);
-	vec3 end = toShadowSpaceProjected(rayEnd);
-	vec3 dV = (end-start);
+	vec3 start = worldToShadowSpaceProjected(toWorldSpace(rayStart));
+	vec3 end = worldToShadowSpaceProjected(toWorldSpace(rayEnd));
+	vec3 dV = end - start;
 
 	// limit ray length at 32 blocks for performance and reducing integration error
 	// you can't see above this anyway
 	float maxZ = min(rayLength, 32.0) / (1e-8 + rayLength);
 	dV *= maxZ;
+
 	vec3 dVWorld = mat3(gbufferModelViewInverse) * (rayEnd - rayStart) * maxZ;
 	rayLength *= maxZ;
+
 	float dY = normalize(mat3(gbufferModelViewInverse) * rayEnd).y * rayLength;
 	vec3 absorbance = vec3(1.0);
 	vec3 vL = vec3(0.0);
+
 	float phase = phaseg(VdotL, Dirt_Mie_Phase);
 	float expFactor = 11.0;
 	vec3 progressW = gbufferModelViewInverse[3].xyz + cameraPosition;

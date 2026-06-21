@@ -62,20 +62,19 @@ void main() {
 
 	// compute shadows only if not backface
 	if (diffuseSun > 0.001) {
-		vec3 projectedShadowPosition = mul3(shadowModelView, mul3(gbufferModelViewInverse, fragpos));
-		projectedShadowPosition = diagonal3(shadowProjection) * projectedShadowPosition + shadowProjection[3].xyz;
+		vec3 projectedShadowPosition = worldToShadowSpaceProjected(toWorldSpace(fragpos));
 
 		// apply distortion
 		float distortFactor = calcDistort(projectedShadowPosition.xy);
 		projectedShadowPosition.xy *= distortFactor;
 
 		// do shadows only if on shadow map
-		if (abs(projectedShadowPosition.x) < 1.0 - 1.5 / shadowMapResolution && abs(projectedShadowPosition.y) < 1.0 - 1.5 / shadowMapResolution) {
-			const float threshMul = sqrt(2048.0/shadowMapResolution*shadowDistance/128.0);
-			float distortThresh = 1.0 / (distortFactor * distortFactor);
+		if (IsInShadowMap(projectedShadowPosition)) {
+			const float threshMul = sqrt(2048.0/shadowMapResolution * shadowDistance/128.0);
+			float distortThresh = 1.0 / square(distortFactor);
 			float diffthresh = 0.0002;
 
-			projectedShadowPosition = projectedShadowPosition * vec3(0.5,0.5,0.5/6.0) + vec3(0.5,0.5,0.5);
+			projectedShadowPosition = projectedShadowPosition * vec3(0.5, 0.5, 0.5/6.0) + vec3(0.5, 0.5, 0.5);
 
 			float noise = IGN(taa_offset.x * 0.5 + 0.5);
 
@@ -95,5 +94,5 @@ void main() {
 
 	vec3 diffuseLight = direct * vIn.lmtexcoord.w + ambient;
 
-	outColor2.rgb = diffuseLight * albedo * 8.0 / 3.0 / 150.0 * 0.1;
+	outColor2.rgb = diffuseLight * albedo * 8.0/3.0 / 150.0 * 0.1;
 }

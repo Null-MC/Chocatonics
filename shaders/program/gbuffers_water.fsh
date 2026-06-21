@@ -222,8 +222,7 @@ void main() {
 
 	// compute shadows only if not backface
 	if (diffuseSun > 0.001) {
-		vec3 projectedShadowPosition = mul3(shadowModelView, localPos);
-		projectedShadowPosition = diagonal3(shadowProjection) * projectedShadowPosition + shadowProjection[3].xyz;
+		vec3 projectedShadowPosition = worldToShadowSpaceProjected(localPos);
 
 		// apply distortion
 		float distortFactor = calcDistort(projectedShadowPosition.xy);

@@ -58,18 +58,19 @@ void main() {
 	float diffuseSun = saturate(NdotL);
 	vec3 direct = texelFetch(gaux1, ivec2(6, 37), 0).rgb / PI;
 
-	//compute shadows only if not backface
+	// compute shadows only if not backface
 	if (diffuseSun > 0.001) {
-		vec3 p3 = mul3(gbufferModelViewInverse, fragpos);
-		vec3 projectedShadowPosition = mul3(shadowModelView, p3);
-		projectedShadowPosition = diagonal3(shadowProjection) * projectedShadowPosition + shadowProjection[3].xyz;
+//		vec3 p3 = mul3(gbufferModelViewInverse, fragpos);
+//		vec3 projectedShadowPosition = mul3(shadowModelView, p3);
+		//		projectedShadowPosition = diagonal3(shadowProjection) * projectedShadowPosition + shadowProjection[3].xyz;
+		vec3 projectedShadowPosition = worldToShadowSpaceProjected(toWorldSpace(fragpos));
 
-		//apply distortion
+		// apply distortion
 		float distortFactor = calcDistort(projectedShadowPosition.xy);
 		projectedShadowPosition.xy *= distortFactor;
 
-		//do shadows only if on shadow map
-		if (abs(projectedShadowPosition.x) < 1.0-1.5/shadowMapResolution && abs(projectedShadowPosition.y) < 1.0-1.5/shadowMapResolution){
+		// do shadows only if on shadow map
+		if (IsInShadowMap(projectedShadowPosition)) {
 			const float threshMul = sqrt(2048.0 / shadowMapResolution * shadowDistance/128.0);
 			float distortThresh = 1.0 / (distortFactor * distortFactor);
 			float diffthresh = facos(diffuseSun) * distortThresh/800.0 * threshMul;

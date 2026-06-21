@@ -24,14 +24,13 @@ float cloudVol(in vec3 pos, in float VFAmount, in float fogAmount) {
 	return pow(saturate(coverage - noise - 0.76), 2.0) * 1200.0/0.23 / (coverage + 0.01) * VFAmount * 600.0 + unifCov * 60.0 * fogAmount + rainStrength*2.0;
 }
 
-mat2x3 getVolumetricRays(float dither, vec3 fragpos, vec4 lightCol) {
+mat2x3 getVolumetricRays(float dither, vec3 viewPos, vec4 lightCol) {
 	// project pixel position into projected shadowmap space
-	vec3 wpos = mul3(gbufferModelViewInverse, fragpos);
-	vec3 fragposition = mul3(shadowModelView, wpos);
-	fragposition = diagonal3(shadowProjection) * fragposition + shadowProjection[3].xyz;
+	vec3 wpos = toWorldSpace(viewPos);
+	vec3 fragposition = worldToShadowSpaceProjected(wpos);
 
 	// project view origin into projected shadowmap space
-	vec3 start = toShadowSpaceProjected(vec3(0.0));
+	vec3 start = worldToShadowSpaceProjected(toWorldSpace(vec3(0.0)));
 
 	// rayvector into projected shadow map space
 	// we can use a projected vector because its orthographic projection
@@ -48,7 +47,7 @@ mat2x3 getVolumetricRays(float dither, vec3 fragpos, vec4 lightCol) {
 	vec3 progressW = gbufferModelViewInverse[3].xyz + cameraPosition;
 	vec3 vL = vec3(0.0);
 
-	float SdotV = dot(sunVec, normalize(fragpos)) * lightCol.a;
+	float SdotV = dot(sunVec, normalize(viewPos)) * lightCol.a;
 	float dL = length(dVWorld);
 	// Mie phase + somewhat simulates multiple scattering (Horizon zero down cloud approx)
 	float mie = mix(phaseg(SdotV, fog_mieg1), phaseg(SdotV, fog_mieg2), 0.5);

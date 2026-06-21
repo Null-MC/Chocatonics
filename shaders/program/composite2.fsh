@@ -186,8 +186,8 @@ float waterCaustics(vec3 wPos, vec3 lightSource) {
 void waterVolumetrics(inout vec3 inColor, vec3 rayStart, vec3 rayEnd, float estEndDepth, float estSunDepth, float rayLength, float dither, vec3 waterCoefs, vec3 scatterCoef, vec3 ambient, vec3 lightSource, float VdotL){
 	inColor *= exp(-rayLength * waterCoefs); // No need to take the integrated value
 	int spCount = rayMarchSampleCount;
-	vec3 start = toShadowSpaceProjected(rayStart);
-	vec3 end = toShadowSpaceProjected(rayEnd);
+	vec3 start = worldToShadowSpaceProjected(toWorldSpace(rayStart));
+	vec3 end = worldToShadowSpaceProjected(toWorldSpace(rayEnd));
 	vec3 dV = end - start;
 
 	// limit ray length at 32 blocks for performance and reducing integration error
@@ -524,18 +524,17 @@ void main() {
 			if (diffuseSun > 0.000)
 		#endif
 		{
-			vec3 projectedShadowPosition = mul3(shadowModelView, p3);
-			projectedShadowPosition = diagonal3(shadowProjection) * projectedShadowPosition + shadowProjection[3].xyz;
+			vec3 projectedShadowPosition = worldToShadowSpaceProjected(p3);
 
 			// apply distortion
 			float distortFactor = calcDistort(projectedShadowPosition.xy);
 			projectedShadowPosition.xy *= distortFactor;
 
 			// do shadows only if on shadow map
-			if (abs(projectedShadowPosition.x) < 1.0-1.5/shadowMapResolution && abs(projectedShadowPosition.y) < 1.0-1.5/shadowMapResolution && abs(projectedShadowPosition.z) < 6.0){
+			if (IsInShadowMap(projectedShadowPosition)) {
 				float rdMul = filtered.x * distortFactor * shadow_d0 * shadow_k / shadowMapResolution;
-				const float threshMul = max(2048.0 / shadowMapResolution * shadowDistance/128.0, 0.95);
-				float distortThresh = (sqrt(1.0-NdotLGeom*NdotLGeom)/NdotLGeom+0.7)/distortFactor;
+				const float threshMul = max(2048.0/shadowMapResolution * shadowDistance/128.0, 0.95);
+				float distortThresh = (sqrt(1.0 - square(NdotLGeom)) / NdotLGeom + 0.7) / distortFactor;
 
 				#ifdef Variable_Penumbra_Shadows
 					float diffthresh = distortThresh/6000.0 * threshMul;

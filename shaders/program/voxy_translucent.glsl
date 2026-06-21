@@ -40,6 +40,10 @@ vec3 toClipSpace3(const in vec3 viewSpacePosition) {
 	return projMAD(gbufferProjection, viewSpacePosition) / -viewSpacePosition.z * 0.5 + 0.5;
 }
 
+#define toShadowSpace(p) mul3(shadowModelView, p)
+#define toShadowSpaceProjected(p) (diagonal3(shadowProjection) * (p) + shadowProjection[3].xyz)
+#define worldToShadowSpaceProjected(p) toShadowSpaceProjected(toShadowSpace(p))
+
 #ifdef MAT_SPECULAR_ENABLED
 	const vec2 v_taa_offset = vec2(0.0);
 	#include "/lib/specular.glsl"
@@ -136,9 +140,7 @@ void voxy_emitFragment(VoxyFragmentParameters parameters) {
 
 	// compute shadows only if not backface
 	if (diffuseSun > 0.001) {
-//		vec3 localPos = mul3(vxModelViewInv, viewPos);
-		vec3 projectedShadowPosition = mul3(shadowModelView, localPos);
-		projectedShadowPosition = diagonal3(shadowProjection) * projectedShadowPosition + shadowProjection[3].xyz;
+		vec3 projectedShadowPosition = worldToShadowSpaceProjected(localPos);
 
 		// apply distortion
 		float distortFactor = calcDistort(projectedShadowPosition.xy);
@@ -147,7 +149,7 @@ void voxy_emitFragment(VoxyFragmentParameters parameters) {
 		// do shadows only if on shadow map
 		if (abs(projectedShadowPosition.x) < 1.0-1.5/shadowMapResolution && abs(projectedShadowPosition.y) < 1.0-1.5/shadowMapResolution) {
 			const float threshMul = max(2048.0/shadowMapResolution * shadowDistance/128.0, 0.95);
-			float distortThresh = (sqrt(1.0 - diffuseSun * diffuseSun) / diffuseSun + 0.7) / distortFactor;
+			float distortThresh = (sqrt(1.0 - square(diffuseSun)) / diffuseSun + 0.7) / distortFactor;
 			float diffthresh = distortThresh/6000.0 * threshMul;
 
 			projectedShadowPosition = projectedShadowPosition * vec3(0.5, 0.5, 0.5/6.0) + vec3(0.5, 0.5, 0.5);

@@ -250,8 +250,7 @@ void main() {
 				vec2 hit_lmcoord = vec2(0.0, hit_sky);
 
 				// shadows
-				vec3 projectedShadowPosition = mul3(shadowModelView, hit_localPos);
-				projectedShadowPosition = diagonal3(shadowProjection) * projectedShadowPosition + shadowProjection[3].xyz;
+				vec3 projectedShadowPosition = worldToShadowSpaceProjected(hit_localPos);
 
 				// apply distortion
 				float distortFactor = calcDistort(projectedShadowPosition.xy);
@@ -265,11 +264,11 @@ void main() {
 				if (IsInShadowMap(projectedShadowPosition)) {
 					const float threshMul = max(2048.0 / shadowMapResolution * shadowDistance/128.0, 0.95);
 					float distortThresh = (sqrt(1.0 - square(hit_sky_NoLm)) / hit_sky_NoLm + 0.7) / distortFactor;
-					float diffthresh = distortThresh/6000.0 * threshMul;
 
 					projectedShadowPosition = projectedShadowPosition * vec3(0.5, 0.5, 0.5/6.0) + vec3(0.5, 0.5, 0.5);
 
 					float rdMul = 4.0 / shadowMapResolution;
+					float diffthresh = distortThresh/6000.0 * threshMul;
 					float bias = 1.0 + noise * rdMul/SHADOW_FILTER_SAMPLE_COUNT * shadowMapResolution;
 					vec3 samplePos = vec3(projectedShadowPosition + vec3(0.0, 0.0, -diffthresh * bias));
 

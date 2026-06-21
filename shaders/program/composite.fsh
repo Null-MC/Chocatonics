@@ -75,8 +75,7 @@ void main() {
 			#ifdef Variable_Penumbra_Shadows
 				if (NdotL > 0.001 || sss > 0.001) {
 					vec3 p3 = toWorldSpace(fragpos);
-					vec3 projectedShadowPosition = mul3(shadowModelView, p3);
-					projectedShadowPosition = diagonal3(shadowProjection) * projectedShadowPosition + shadowProjection[3].xyz;
+					vec3 projectedShadowPosition = worldToShadowSpaceProjected(p3);
 
 					// apply distortion
 					float distortFactor = calcDistort(projectedShadowPosition.xy);

@@ -16,18 +16,9 @@ vec3 toScreenSpaceVector(const in vec3 p) {
     return normalize(fragposition.xyz);
 }
 
-vec3 toWorldSpace(const in vec3 p3) {
-    return mul3(gbufferModelViewInverse, p3);
-}
+#define toWorldSpace(p) mul3(gbufferModelViewInverse, p)
+#define toWorldSpaceCamera(p) (toWorldSpace(p) + cameraPosition)
 
-vec3 toWorldSpaceCamera(const in vec3 p3) {
-    return toWorldSpace(p3) + cameraPosition;
-}
-
-vec3 toShadowSpace(const in vec3 p3) {
-    return mul3(shadowModelView, toWorldSpace(p3));
-}
-
-vec3 toShadowSpaceProjected(const in vec3 p3) {
-    return diagonal3(shadowProjection) * toShadowSpace(p3) + shadowProjection[3].xyz;
-}
+#define toShadowSpace(p) mul3(shadowModelView, p)
+#define toShadowSpaceProjected(p) (diagonal3(shadowProjection) * (p) + shadowProjection[3].xyz)
+#define worldToShadowSpaceProjected(p) toShadowSpaceProjected(toShadowSpace(p))

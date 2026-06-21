@@ -104,7 +104,6 @@ void main() {
 
 	vec2 taa_offset = taa_offsets[framemod8];
 
-	vec3 fragC = gl_FragCoord.xyz * vec3(texelSize, 1.0);
 	vec3 fragpos = toScreenSpace(gl_FragCoord.xyz * vec3(texelSize / RENDER_SCALE, 1.0) - vec3(taa_offset * texelSize * 0.5, 0.0));
 
 	outColor2 = texture(gtexture, vIn.lmtexcoord.xy, Texture_MipMap_Bias) * vIn.color;
@@ -127,7 +126,7 @@ void main() {
 		float f0 = 0.04;
 	#endif
 
-	vec3 p3 = mul3(gbufferModelViewInverse, fragpos);
+	vec3 p3 = toWorldSpace(fragpos);
 
 	vec3 np3 = normalize(p3);
 
@@ -158,17 +157,16 @@ void main() {
 
 	// compute shadows only if not backface
 	if (diffuseSun > 0.001) {
-		vec3 projectedShadowPosition = mul3(shadowModelView, p3);
-		projectedShadowPosition = diagonal3(shadowProjection) * projectedShadowPosition + shadowProjection[3].xyz;
+		vec3 projectedShadowPosition = worldToShadowSpaceProjected(p3);
 
 		// apply distortion
 		float distortFactor = calcDistort(projectedShadowPosition.xy);
 		projectedShadowPosition.xy *= distortFactor;
 
 		// do shadows only if on shadow map
-		if (abs(projectedShadowPosition.x) < 1.0-1.5/shadowMapResolution && abs(projectedShadowPosition.y) < 1.0-1.5/shadowMapResolution) {
+		if (IsInShadowMap(projectedShadowPosition)) {
 			const float threshMul = max(2048.0/shadowMapResolution * shadowDistance/128.0, 0.95);
-			float distortThresh = (sqrt(1.0 - diffuseSun * diffuseSun) / diffuseSun + 0.7) / distortFactor;
+			float distortThresh = (sqrt(1.0 - square(diffuseSun)) / diffuseSun + 0.7) / distortFactor;
 			float diffthresh = distortThresh/6000.0 * threshMul;
 
 			projectedShadowPosition = projectedShadowPosition * vec3(0.5, 0.5, 0.5/6.0) + vec3(0.5, 0.5, 0.5);
