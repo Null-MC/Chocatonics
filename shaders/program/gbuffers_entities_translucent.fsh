@@ -5,6 +5,7 @@
 
 #define TEX_SKY_LUT gaux1
 #define TEX_FINAL_PREV gaux2
+#define TEX_DEPTH depthtex1
 
 
 in VertexData {
@@ -72,6 +73,7 @@ uniform int framemod8;
 #include "/lib/r2.glsl"
 #include "/lib/ign.glsl"
 #include "/lib/ggx.glsl"
+#include "/lib/fresnel.glsl"
 #include "/lib/bicubic.glsl"
 #include "/lib/material.glsl"
 #include "/lib/blueNoise.glsl"
@@ -193,27 +195,28 @@ void main() {
 
 	vec3 color = diffuseLight * albedo * 8.0/3.0;
 
-	float normalDotEye = dot(normal, normalize(fragpos));
-	float fresnel = pow(clamp(1.0 + normalDotEye, 0.0, 1.0), 5.0);
-	fresnel = mix(f0, 1.0, fresnel);
+//	float normalDotEye = dot(normal, normalize(fragpos));
+//	float fresnel = pow(clamp(1.0 + normalDotEye, 0.0, 1.0), 5.0);
+//	fresnel = mix(f0, 1.0, fresnel);
+	float F = schlick(dot(normal, -normalize(fragpos)), f0, 1.0);
 
 	// premultiply alpha
 	outColor2.rgb = color * outColor2.a;
+
+	outColor2.a = max(outColor2.a, F);
 
 	#ifdef MAT_SPECULAR_ENABLED
 		const bool hand = false;
 
 		vec2 noise2 = blueNoise(texBlueNoise, gl_FragCoord.xy).rg;
-		vec3 lightCol2 = texelFetch(TEX_SKY_LUT, ivec2(6, 37), 0).rgb / PI;
+		vec3 lightCol2 = texelFetch(TEX_SKY_LUT, ivec2(6, 37), 0).rgb;// / PI;
 		vec3 localNormal = mat3(gbufferModelViewInverse) * normal;
 
 		float lightCol_a = float(sunElevation > 1.e-5) * 2.0 - 1.0;
 		vec3 localSunDir = normalize(mat3(gbufferModelViewInverse) * sunPosition);
 		vec3 WsunVec = lightCol_a * localSunDir;
 
-		f0 = 0.02;
-		roughness = 0.02;
-		MaterialReflections(outColor2.rgb, roughness, vec3(f0), albedo, WsunVec, lightCol2, shading * diffuseSun, vIn.lmtexcoord.w, localNormal, np3, fragpos, vec3(noise2, noise), hand);
+		MaterialReflections(outColor2.rgb, roughness, f0, albedo, WsunVec, lightCol2, vec3(shading * diffuseSun), vIn.lmtexcoord.w, localNormal, np3, fragpos, vec3(noise2, noise), hand);
 	#endif
 
 	outColor2.rgb *= 0.1;

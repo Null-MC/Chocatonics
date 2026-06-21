@@ -92,7 +92,7 @@ mat2x3 getVolumetricRays(float dither, vec3 fragpos, vec4 lightCol) {
 		float densityVol = cloudVol(progressW, vIn.VFAmount, vIn.fogAmount);
 		float sh = 1.0;
 
-		if (IsInShadowMap(pos.xy)) {
+		if (IsInShadowMap(pos)) {
 			pos = pos * vec3(0.5, 0.5, 0.5/6.0) + 0.5;
 			sh = texture(shadowtex0HW, pos);
 

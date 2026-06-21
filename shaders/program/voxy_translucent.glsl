@@ -1,6 +1,12 @@
 #include "/lib/common.glsl"
 #include "/lib/settings.glsl"
 
+#define RENDER_VOXY
+#define RENDER_GBUFFERS
+#define TEX_SKY_LUT gaux1
+#define TEX_FINAL_PREV gaux2
+#define TEX_DEPTH depthtex1
+
 
 // TODO: UNDEFINED!
 const float skyIntensity = 0.0;
@@ -9,8 +15,10 @@ const vec3 nsunColor = vec3(0.0);
 
 #include "/lib/blocks.glsl"
 
+#include "/lib/r2.glsl"
 #include "/lib/ign.glsl"
 #include "/lib/ggx.glsl"
+#include "/lib/fresnel.glsl"
 #include "/lib/bicubic.glsl"
 #include "/lib/blueNoise.glsl"
 #include "/lib/color_transforms.glsl"
@@ -20,7 +28,6 @@ const vec3 nsunColor = vec3(0.0);
 #include "/lib/waterBump.glsl"
 #include "/lib/clouds.glsl"
 #include "/lib/stars.glsl"
-
 
 vec3 toScreenSpace(const in vec3 p) {
 	vec4 iProjDiag = vec4(vxProjInv[0].x, vxProjInv[1].y, vxProjInv[2].zw);
@@ -33,44 +40,11 @@ vec3 toClipSpace3(const in vec3 viewSpacePosition) {
 	return projMAD(gbufferProjection, viewSpacePosition) / -viewSpacePosition.z * 0.5 + 0.5;
 }
 
-vec3 rayTrace(vec3 dir, vec3 position, float dither, float fresnel) {
-    float quality = mix(15, REFLECTION_QUALITY, fresnel);
-    vec3 clipPosition = toClipSpace3(position);
+#ifdef MAT_SPECULAR_ENABLED
+	const vec2 v_taa_offset = vec2(0.0);
+	#include "/lib/specular.glsl"
+#endif
 
-	float rayLength = ((position.z + dir.z * farPlane*sqrt(3.0)) > -nearPlane) ?
-       (-nearPlane -position.z) / dir.z : farPlane*sqrt(3.0);
-
-    vec3 direction = normalize(toClipSpace3(dir*rayLength + position) - clipPosition);  //convert to clip space
-    	direction.xy = normalize(direction.xy);
-
-    // get at which length the ray intersects with the edge of the screen
-    vec3 maxLengths = (step(0.0, direction) - clipPosition) / direction;
-    float mult = minOf(maxLengths);
-
-    vec3 stepv = direction * mult / quality * vec3(RENDER_SCALE_2, 1.0);
-
-	vec3 spos = clipPosition * vec3(RENDER_SCALE_2, 1.0) + stepv*dither;
-	float minZ = clipPosition.z;
-	float maxZ = spos.z + stepv.z * 0.5;
-
-	spos.xy += taa_offsets[framemod8] * texelSize * 0.5 / RENDER_SCALE;
-
-    for (int i = 0; i <= int(quality); i++) {
-		// voxy runs too early for 1/4 depth buffer, use full-res depth
-		float sp = texelFetch(depthtex1, ivec2(spos.xy / texelSize), 0).r;
-		if (sp <= max(maxZ, minZ) && sp >= min(maxZ, minZ)) {
-			return vec3(spos.xy / RENDER_SCALE, sp);
-		}
-
-		spos += stepv;
-
-		// small bias
-		minZ = maxZ - 0.00004 / linZ(spos.z, nearPlane, farPlane);
-		maxZ += stepv.z;
-    }
-
-    return vec3(1.1);
-}
 
 vec3 TangentToWorld(vec3 N, vec3 H) {
     vec3 UpVector = abs(N.z) < 0.999 ? vec3(0.0, 0.0, 1.0) : vec3(1.0, 0.0, 0.0);
@@ -88,26 +62,36 @@ layout(location = 1) out vec4 outColor7;
 void voxy_emitFragment(VoxyFragmentParameters parameters) {
 	if (!all(lessThan(gl_FragCoord.xy * texelSize.xy, RENDER_SCALE_2))) return;
 
-	vec2 tempOffset = taa_offsets[framemod8];
+	vec2 taa_offset = taa_offsets[framemod8];
 
 	float iswater = 0.0;
 	if (parameters.customId == BLOCK_ICE) iswater = 0.50;
 	if (parameters.customId == BLOCK_WATER) iswater = 1.00;
 	if (parameters.customId == BLOCK_REFLECTIVE) iswater = 0.01;
 
-	vec3 fragC = gl_FragCoord.xyz * vec3(texelSize, 1.0);
-	vec3 fragpos = toScreenSpace(gl_FragCoord.xyz * vec3(texelSize / RENDER_SCALE, 1.0) - vec3(vec2(tempOffset) * texelSize * 0.5, 0.0));
+	vec3 viewPos = toScreenSpace(gl_FragCoord.xyz * vec3(texelSize / RENDER_SCALE, 1.0) - vec3(taa_offset * texelSize * 0.5, 0.0));
 
 	outColor2 = parameters.sampledColour * parameters.tinting;
 	vec3 albedo = InputTransform(outColor2.rgb);
 
+	float roughness = 1.0;
+	float emissive = 0.0;
+	float f0 = 0.04;
+
+	if (iswater > 0.0) {
+		f0 = 0.02; //iswater > 0.1 ? 0.02 : 0.05 * (1.0 - outColor2.a);
+		roughness = 0.02;
+	}
+
 	if (iswater > 0.4) {
 		albedo = vec3(0.42, 0.6, 0.7);
-		outColor2 = vec4(0.42, 0.6, 0.7, 0.7);
+		outColor2 = vec4(albedo, 0.7);
+		roughness = 0.1;
 	}
 
 	if (iswater > 0.9) {
 		outColor2 = vec4(0.0);
+		roughness = 0.0;
 	}
 
 	// TODO: normalize?
@@ -119,7 +103,7 @@ void voxy_emitFragment(VoxyFragmentParameters parameters) {
 		uint((parameters.face >> 1) == 1)
 	) * (float(int(parameters.face) & 1) * 2.0 - 1.0);
 
-	vec3 p3 = mul3(vxModelViewInv, fragpos);
+	vec3 localPos = mul3(vxModelViewInv, viewPos);
 
 	if (iswater > 0.4) {
 		float bumpmult = 1.0;
@@ -127,7 +111,7 @@ void voxy_emitFragment(VoxyFragmentParameters parameters) {
 
 		float parallaxMult = bumpmult;
 
-		vec3 posxz = p3 + cameraPosition;
+		vec3 posxz = localPos + cameraPosition;
 		posxz.xz -= posxz.y;
 
 		if (iswater < 0.9) posxz.xz *= 3.0;
@@ -145,14 +129,15 @@ void voxy_emitFragment(VoxyFragmentParameters parameters) {
 	float NdotU = dot(upVec, viewNormal);
 	float diffuseSun = saturate(NdotL);
 
-	vec3 direct = texelFetch(gaux1, ivec2(6, 37), 0).rgb / PI;
+	float noise = blueNoise(gl_FragCoord.xy, frameCounter);
 
+	vec3 direct = texelFetch(gaux1, ivec2(6, 37), 0).rgb / PI;
 	float shading = 1.0;
 
 	// compute shadows only if not backface
 	if (diffuseSun > 0.001) {
-		vec3 p3 = mul3(vxModelViewInv, fragpos);
-		vec3 projectedShadowPosition = mul3(shadowModelView, p3);
+//		vec3 localPos = mul3(vxModelViewInv, viewPos);
+		vec3 projectedShadowPosition = mul3(shadowModelView, localPos);
 		projectedShadowPosition = diagonal3(shadowProjection) * projectedShadowPosition + shadowProjection[3].xyz;
 
 		// apply distortion
@@ -168,7 +153,7 @@ void voxy_emitFragment(VoxyFragmentParameters parameters) {
 			projectedShadowPosition = projectedShadowPosition * vec3(0.5, 0.5, 0.5/6.0) + vec3(0.5, 0.5, 0.5);
 
 			shading = 0.0;
-			float noise = blueNoise(gl_FragCoord.xy, frameCounter);
+//			float noise = blueNoise(gl_FragCoord.xy, frameCounter);
 			float rdMul = 4.0 / shadowMapResolution;
 
 			for (int i = 0; i < 9; i++) {
@@ -184,65 +169,98 @@ void voxy_emitFragment(VoxyFragmentParameters parameters) {
 	direct *= (iswater > 0.9 ? 0.2 : 1.0) * diffuseSun * lmcoord.y;
 
 	vec3 diffuseLight = direct + texture(gaux1, (lmcoord * 15.0 + 0.5) * texelSize).rgb;
-	vec3 color = diffuseLight * albedo * 8.0 / 150.0 / 3.0;
+	vec3 color = diffuseLight * albedo * 8.0/3.0 / 150.0;
 
-	if (iswater > 0.0) {
-		float f0 = iswater > 0.1 ? 0.02 : 0.05 * (1.0 - outColor2.a);
+//	if (iswater > 0.0) {
+//		float f0 = iswater > 0.1 ? 0.02 : 0.05 * (1.0 - outColor2.a);
+//
+//		float roughness = 0.02;
+//		float emissive = 0.0;
+////		float F0 = f0;
+//
+//		vec3 reflectedVector = reflect(normalize(viewPos), viewNormal);
+//		float normalDotEye = dot(viewNormal, -normalize(viewPos));
+//		float fresnel = schlick(normalDotEye, f0, 1.0);
+////		float fresnel = pow5(saturate(1.0 + normalDotEye));
+////		fresnel = mix(f0, 1.0, fresnel);
+//
+//		if (iswater > 0.4) {
+//			roughness = 0.1;
+//		}
+//
+//		if (iswater > 0.9) {
+//			roughness = 0.0;
+//		}
+//
+//
+//		vec3 wrefl = mat3(vxModelViewInv) * reflectedVector;
+//		vec3 sky_c = mix(skyCloudsFromTex(wrefl, gaux1).rgb, texture(gaux1, (lmcoord * 15.0 + 0.5) * texelSize).rgb * 0.5, isEyeInWater);
+//		sky_c.rgb *= square(lmcoord.y * 255.0/240.0) / 150.0 * 8.0/3.0;
+//
+//		vec4 reflection = vec4(sky_c.rgb, 0.0);
+//		#ifdef REFLECTION_ENABLED
+//			vec3 rtPos = rayTrace(reflectedVector, viewPos.xyz, blueNoise(gl_FragCoord.xy, frameCounter), fresnel);
+//
+//			if (rtPos.z < 1.0) {
+//				vec3 previousPosition = mul3(vxModelViewInv, toScreenSpace(rtPos));
+//				previousPosition += cameraPosition - previousCameraPosition;
+//				previousPosition = mul3(gbufferPreviousModelView, previousPosition);
+//
+//				previousPosition.xy = projMAD(vxProjPrev, previousPosition).xy / -previousPosition.z * 0.5 + 0.5;
+//
+////				if (previousPosition.x > 0.0 && previousPosition.y > 0.0 && previousPosition.x < 1.0 && previousPosition.x < 1.0) {
+//				if (all(equal(saturate(previousPosition.xy), previousPosition.xy))) {
+//					reflection.rgb = texture(gaux2, previousPosition.xy).rgb;
+//					reflection.a = 1.0;
+//				}
+//			}
+//		#endif
+//
+//		reflection.rgb = mix(sky_c.rgb, reflection.rgb, reflection.a);
+//
+//		vec3 lightCol = texelFetch(gaux1, ivec2(6, 37), 0).rgb / PI;
+//		vec3 sunSpec = GGX(viewNormal, -normalize(viewPos), lightSign*sunVec, rainStrength*0.2 + roughness + 0.05+saturate(lightSign * -0.15), f0) * lightCol * 8.0/3.0 / 150.0;
+//		sunSpec *= 1.0 - 0.9*rainStrength;
+//
+////		vec3 reflected = reflection.rgb + shading * sunSpec;
+//
+////		float alpha0 = outColor2.a;
+//
+//		// correct alpha channel with fresnel
+////		outColor2.a = -outColor2.a * fresnel + outColor2.a + fresnel;
+////		outColor2.rgb = clamp(color/outColor2.a * alpha0 * (1.0 - fresnel) * 0.1+reflected/outColor2.a * 0.1, 0.0, 65100.0);
+//		outColor2.rgb = mix(color * outColor2.a, reflection.rgb, fresnel) + shading * sunSpec;
+//		outColor2.rgb = clamp(outColor2.rgb * 0.1, 0.0, 65100.0);
+//
+//		if (outColor2.r > 65000.0) outColor2.rgba = vec4(0.0);
+//	}
+//	else {
+//		outColor2.rgb = color * 0.1;
+//	}
 
-		float roughness = 0.02;
-		float emissive = 0.0;
-		float F0 = f0;
+	vec3 localViewDir = normalize(localPos);
+	float F = schlick(dot(localNormal, -localViewDir), f0, 1.0);
 
-		vec3 reflectedVector = reflect(normalize(fragpos), viewNormal);
-		float normalDotEye = dot(viewNormal, normalize(fragpos));
-		float fresnel = pow(clamp(1.0 + normalDotEye, 0.0, 1.0), 5.0);
-		fresnel = mix(F0, 1.0, fresnel);
+	// premultiply alpha
+	outColor2.rgb = color * outColor2.a;
+	outColor2.a = max(outColor2.a, F);
 
-		if (iswater > 0.4) {
-			roughness = 0.1;
-		}
+	#ifdef MAT_SPECULAR_ENABLED
+		const bool hand = false;
 
-		vec3 wrefl = mat3(vxModelViewInv) * reflectedVector;
-		vec3 sky_c = mix(skyCloudsFromTex(wrefl, gaux1).rgb, texture(gaux1, (lmcoord * 15.0 + 0.5) * texelSize).rgb * 0.5, isEyeInWater);
-		sky_c.rgb *= lmcoord.y * lmcoord.y * 255.0*255.0/240.0/240.0 / 150.0*8.0/3.0;
+		vec2 noise2 = blueNoise(texBlueNoise, gl_FragCoord.xy).rg;
+		vec3 lightCol2 = texelFetch(TEX_SKY_LUT, ivec2(6, 37), 0).rgb;// / PI;
 
-		vec4 reflection = vec4(sky_c.rgb, 0.0);
-		#ifdef REFLECTION_ENABLED
-			vec3 rtPos = rayTrace(reflectedVector, fragpos.xyz, blueNoise(gl_FragCoord.xy, frameCounter), fresnel);
+//		vec3 localNormal = mat3(gbufferModelViewInverse) * normal;
+//		vec3 localViewDir = normalize(localPos);
 
-			if (rtPos.z < 1.0) {
-				vec3 previousPosition = mul3(vxModelViewInv, toScreenSpace(rtPos));
-				previousPosition += cameraPosition - previousCameraPosition;
-				previousPosition = mul3(gbufferPreviousModelView, previousPosition);
+		float lightCol_a = float(sunElevation > 1.e-5) * 2.0 - 1.0;
+		vec3 localSunDir = normalize(mat3(gbufferModelViewInverse) * sunPosition);
+		vec3 WsunVec = lightCol_a * localSunDir;
 
-				previousPosition.xy = projMAD(vxProjPrev, previousPosition).xy / -previousPosition.z * 0.5 + 0.5;
+		MaterialReflections(outColor2.rgb, roughness, f0, albedo, WsunVec, lightCol2, vec3(shading * diffuseSun), lmcoord.y, localNormal, localViewDir, viewPos, vec3(noise2, noise), hand);
+	#endif
 
-				if (previousPosition.x > 0.0 && previousPosition.y > 0.0 && previousPosition.x < 1.0 && previousPosition.x < 1.0) {
-					reflection.rgb = texture(gaux2, previousPosition.xy).rgb;
-					reflection.a = 1.0;
-				}
-			}
-		#endif
-
-		reflection.rgb = mix(sky_c.rgb, reflection.rgb, reflection.a);
-
-		vec3 lightCol = texelFetch(gaux1, ivec2(6, 37), 0).rgb / PI;
-		vec3 sunSpec = GGX(viewNormal, -normalize(fragpos), lightSign*sunVec, rainStrength*0.2 + roughness + 0.05+saturate(lightSign * -0.15), f0) * lightCol * 8.0/3.0/150.0;
-		sunSpec *= 1.0 - 0.9*rainStrength;
-
-		vec3 reflected = reflection.rgb * fresnel + shading * sunSpec;
-
-		float alpha0 = outColor2.a;
-
-		// correct alpha channel with fresnel
-		outColor2.a = -outColor2.a * fresnel + outColor2.a + fresnel;
-		outColor2.rgb = clamp(color/outColor2.a * alpha0 * (1.0 - fresnel) * 0.1+reflected/outColor2.a * 0.1, 0.0, 65100.0);
-
-		if (outColor2.r > 65000.0) outColor2.rgba = vec4(0.0);
-	}
-	else {
-		outColor2.rgb = color * 0.1;
-	}
-
+	outColor2.rgb = clamp(outColor2.rgb * 0.1, 0.0, 65100.0);
 	outColor7 = vec4(albedo, iswater);
 }

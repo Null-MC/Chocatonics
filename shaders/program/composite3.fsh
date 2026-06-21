@@ -213,7 +213,7 @@ void main() {
 		bool hasReflections = (f0 * (1.0 - roughness * Roughness_Threshold)) > 0.02;
 
 //		bool is_hit = false;
-		if (hasReflections && NdotV < 0.00001) { // Skip SSR if ray contribution is low
+		if (hasReflections) { // Skip SSR if ray contribution is low
 			vec3 localSkyLightDir = normalize(mat3(gbufferModelViewInverse) * shadowLightPosition);
 			float noise = blueNoise(gl_FragCoord.xy, frameCounter);
 
@@ -262,7 +262,7 @@ void main() {
 				vec3 shadow_color = vec3(1.0);
 
 				// do shadows only if on shadow map
-				if (abs(projectedShadowPosition.x) < 1.0-1.5/shadowMapResolution && abs(projectedShadowPosition.y) < 1.0-1.5/shadowMapResolution && abs(projectedShadowPosition.z) < 6.0) {
+				if (IsInShadowMap(projectedShadowPosition)) {
 					const float threshMul = max(2048.0 / shadowMapResolution * shadowDistance/128.0, 0.95);
 					float distortThresh = (sqrt(1.0 - square(hit_sky_NoLm)) / hit_sky_NoLm + 0.7) / distortFactor;
 					float diffthresh = distortThresh/6000.0 * threshMul;

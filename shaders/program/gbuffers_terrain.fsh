@@ -206,12 +206,12 @@ void main() {
 		#endif
 
 		#ifdef MC_NORMAL_MAP
-			vec3 tex_normal = mat_normal(texture(normals, vIn.lmtexcoord.xy).rgb);
+			vec3 tex_normal = mat_normal(texture(normals, vIn.lmtexcoord.xy, Texture_MipMap_Bias).rgb);
 			normal = applyBump(tbnMatrix, tex_normal, wetness);
 		#endif
 
 		#ifdef MC_TEXTURE_FORMAT_LAB_PBR
-			vec4 specularData = texture(specular, vIn.lmtexcoord.xy);
+			vec4 specularData = texture(specular, vIn.lmtexcoord.xy, Texture_MipMap_Bias);
 		#endif
 	#endif
 

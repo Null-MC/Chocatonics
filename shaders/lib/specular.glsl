@@ -25,13 +25,13 @@ vec3 rayTraceSpeculars(vec3 dir, vec3 position, float dither, float quality, boo
 
 	for (int i = 0; i <= int(quality); i++) {
 		// decode depth buffer
-		#ifdef REFLECTION_QUARTER_RES_DEPTH
+		#if defined(REFLECTION_QUARTER_RES_DEPTH) && !defined(RENDER_VOXY)
 			vec2 testthing = hand ? spos.xy*texelSize : spos.xy/texelSize/4.0; // fix for ssr on hand
 
 			float sp = sqrt(texelFetch(texDepthQ, ivec2(testthing), 0).r / 65000.0);
 			sp = invLinZ(sp, nearPlane, farPlane);
 		#else
-			float sp = texelFetch(depthtex1, ivec2(spos.xy / texelSize), 0).r;
+			float sp = texelFetch(TEX_DEPTH, ivec2(spos.xy / texelSize), 0).r;
 		#endif
 
 		if (sp <= max(maxZ, minZ) && sp >= min(maxZ, minZ)) {
@@ -55,11 +55,11 @@ vec3 rayTraceSpeculars(vec3 dir, vec3 position, float dither, float quality, boo
 void MaterialReflections(
 	inout vec3 Output,
 	float roughness,
-	vec3 f0,
+	float f0,
 	vec3 albedo,
 	vec3 sunPos,
 	vec3 sunCol,
-	float diffuse,
+	vec3 skyShading,
 	float lightmap,
 	vec3 normal,
 	vec3 np3,
@@ -67,11 +67,13 @@ void MaterialReflections(
 	vec3 noise,
 	bool hand)
 {
-	vec3 Reflections_Final = Output;
+	vec3 Reflections_Final = vec3(0.0);
 	float Outdoors = saturate(sqrt(lightmap - sky_occlusion_threshold)	* (sky_occlusion_threshold * 5.0 + 1.0));
 
 	mat3 basis = CoordBase(normal);
 	vec3 normSpaceView = -np3 * basis;
+
+//	roughness = square(roughness);
 
 	// roughness stuff
 	#ifdef REFLECTION_ROUGH
@@ -90,26 +92,27 @@ void MaterialReflections(
 
 	// fresnel stuff
 	float fresnel = pow5(saturate(1.0 + dot(-Ln, H)));
-	vec3 F = f0 + (1.0 - f0) * fresnel;
+	vec3 F = vec3(f0 + (1.0 - f0) * fresnel);
+//	vec3 F = vec3(schlick(dot(Ln, H), f0, 1.0));
 
 	float NdotV = saturate(dot(np3, normalize(normal)) * 5000.0);
 
-//	bool hasReflections = (f0.y * (1.0 - roughness * Roughness_Threshold)) > 0.02;
-//	if (!hasReflections || NdotV > 0.00001) Outdoors = 0.0;
-	bool hasReflections = NdotV < 0.00001;
-	if (!hasReflections) Outdoors = 0.0;
+	bool hasReflections = true;//(f0 * (1.0 - roughness * Roughness_Threshold)) > 0.02;
+//	bool hasReflections = true;
+	if (!hasReflections || NdotV > 0.00001) Outdoors = 0.0;
 
 	// SSR, Sky, and Sun reflections
 	vec4 Reflections = vec4(0.0);
-	vec3 SunReflection = diffuse * GGX2(normal, -np3, sunPos, roughness, f0)/150.0 * 8.0/3.0 * sunCol * Sun_specular_Strength;
+	vec3 SunReflection = skyShading * GGX2(normal, -np3, sunPos, roughness, vec3(f0)) * sunCol * Sun_specular_Strength / 150.0 * 8.0/3.0;
 
-	#if !defined(PHOTONICS_REFLECT_ENABLED) || defined(RENDER_GBUFFERS)
+//	#if !defined(PHOTONICS_REFLECT_ENABLED) || (defined(RENDER_GBUFFERS) && !defined(RENDER_VOXY))
+	#if !defined(PHOTONICS_REFLECT_ENABLED) || defined(RENDER_VOXY)
 		vec3 SkyReflection = skyCloudsFromTex(L, TEX_SKY_LUT).rgb * 0.035;
 	#endif
 
-	#if defined(REFLECTION_ENABLED) && (!defined(PHOTONICS_REFLECT_ENABLED) || defined(RENDER_GBUFFERS))
+	#if defined(REFLECTION_ENABLED) && (defined(RENDER_GBUFFERS) || defined(RENDER_VOXY) || !defined(PHOTONICS_REFLECT_ENABLED))
 		if (hasReflections) { // Skip SSR if ray contribution is low
-			#ifdef PHOTONICS_REFLECT_ENABLED
+			#if defined(PHOTONICS_REFLECT_ENABLED) && !defined(RENDER_VOXY)
 				vec3 localPos = mul3(gbufferModelViewInverse, fragpos);
 				Outdoors = 1.0;
 
@@ -213,7 +216,7 @@ void MaterialReflections(
 				Reflections.a = 1.0;
 			#else
 				// Scale quality with ray contribution
-				float rayQuality = mix(REFLECTION_QUALITY, 0.0, sqrt(roughness));
+				float rayQuality = mix(float(REFLECTION_QUALITY), 0.0, sqrt(roughness));
 
 				vec3 rtPos = rayTraceSpeculars(mat3(gbufferModelView) * L, fragpos, noise.b, rayQuality, hand, fresnel);
 
@@ -232,34 +235,37 @@ void MaterialReflections(
 	#endif
 
 	// check if the f0 is within the metal ranges, then tint by albedo if it's true.
-	vec3 Metals = f0.y > 229.5/255.0 ? saturate(albedo + fresnel) : vec3(1.0);
+//	vec3 metal_tint = f0 > 229.5/255.0 ? albedo : vec3(1.0);
+	vec3 metal_tint = mix(vec3(1.0), albedo, f0 > 229.5/255.0);
 
-	Reflections.rgb *= Metals;
-	SunReflection *= Metals;
+	Reflections.rgb *= metal_tint;
+	SunReflection *= metal_tint;
 
-	#if !defined(PHOTONICS_REFLECT_ENABLED) || defined(RENDER_GBUFFERS)
-		SkyReflection *= Metals;
+//	#if !defined(PHOTONICS_REFLECT_ENABLED) || (defined(RENDER_GBUFFERS) && !defined(RENDER_VOXY))
+	#if !defined(PHOTONICS_REFLECT_ENABLED) || defined(RENDER_VOXY)
+		SkyReflection *= metal_tint;
 	#endif
 
 	// darken albedos, and stop darkening where the sky gets occluded indoors
-	#if defined(PHOTONICS_REFLECT_ENABLED) && !defined(RENDER_GBUFFERS)
-		Reflections_Final *= 1.0 - luma(F);
+	#if defined(PHOTONICS_REFLECT_ENABLED) && !defined(RENDER_VOXY)
+		Output *= 1.0 - F;
 	#else
-		Reflections_Final *= mix(1.0 - (Reflections.a * luma(F)), 1.0 - luma(F), Outdoors);
+		Output *= mix(1.0 - (Reflections.a * F), 1.0 - F, Outdoors);
 	#endif
 	
 	// apply all reflections to the lighting
-	Reflections_Final += Reflections.rgb * luma(F);
+	Reflections_Final += Reflections.rgb * F;
 
-	#if !defined(PHOTONICS_REFLECT_ENABLED) || defined(RENDER_GBUFFERS)
+	#if !defined(PHOTONICS_REFLECT_ENABLED) || defined(RENDER_VOXY)
+//	#if !defined(PHOTONICS_REFLECT_ENABLED) || (defined(RENDER_GBUFFERS) && !defined(RENDER_VOXY))
 		Reflections_Final += SkyReflection * F * (1.0-Reflections.a) * Outdoors;
 	#endif
 
 	#ifdef REFLECTION_ROUGH
-		Output = Reflections_Final;
+		Output += Reflections_Final * (1.0 - sqrt(roughness));
 	#else
 		// interpolate between the albedos and reflections using the roughness value instead of the sampling.
-		Output = mix(Reflections_Final, Output, vec3(sqrt(roughness)));
+		Output = mix(Output + Reflections_Final, Output, vec3(sqrt(roughness)));
 	#endif
 
 	Output += SunReflection;

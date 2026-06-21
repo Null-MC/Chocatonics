@@ -54,7 +54,7 @@ void main() {
 
 	if (z < 1.0) {
 		vec4 normalData = texture(TEX_GB_NORMAL, texcoord);
-		vec3 normal = mat3(gbufferModelViewInverse) * OctDecode(normalData.xy);
+		vec3 localNormal = mat3(gbufferModelViewInverse) * OctDecode(normalData.xy);
 
 		vec4 specularData = texture(TEX_GB_SPECULAR, texcoord);
 		float sss = specularData.b;
@@ -67,7 +67,7 @@ void main() {
 //		bool hand = false;
 
 		if (!hand) {
-			float NdotL = saturate(dot(normal, vIn.sunVecW));
+			float NdotL = saturate(dot(localNormal, vIn.sunVecW));
 			float bn = blueNoise(gl_FragCoord.xy).a;
 			float noise = fract(bn + frameCounter/1.6180339887);
 			vec3 fragpos = toScreenSpace(vec3(texcoord/RENDER_SCALE - vIn.taa_offset*texelSize*0.5, z));
@@ -83,18 +83,18 @@ void main() {
 					projectedShadowPosition.xy *= distortFactor;
 
 					// do shadows only if on shadow map
-					if (abs(projectedShadowPosition.x) < 1.0-1.5/shadowMapResolution && abs(projectedShadowPosition.y) < 1.0-1.5/shadowMapResolution && abs(projectedShadowPosition.z) < 6.0){
-						const float threshMul = max(2048.0/shadowMapResolution*shadowDistance/128.0,0.95);
-						float distortThresh = (sqrt(1.0-NdotL*NdotL)/NdotL+0.7)/distortFactor;
-						float diffthresh = distortThresh/6000.0*threshMul;
-						projectedShadowPosition = projectedShadowPosition * vec3(0.5,0.5,0.5/6.0) + vec3(0.5,0.5,0.5);
+					if (IsInShadowMap(projectedShadowPosition)) {
+						const float threshMul = max(2048.0/shadowMapResolution * shadowDistance/128.0, 0.95);
+						float distortThresh = (sqrt(1.0 - square(NdotL)) / NdotL + 0.7) / distortFactor;
+						float diffthresh = distortThresh/6000.0 * threshMul;
+						projectedShadowPosition = projectedShadowPosition * vec3(0.5, 0.5, 0.5/6.0) + vec3(0.5, 0.5, 0.5);
 
 						const float mult = Max_Shadow_Filter_Radius;
 						float avgBlockerDepth = 0.0;
-						vec2 scales = vec2(0.0,Max_Filter_Depth);
+						vec2 scales = vec2(0.0, Max_Filter_Depth);
 						float blockerCount = 0.0;
-						float rdMul = distortFactor * (1.0+mult)*shadow_d0*shadow_k/shadowMapResolution;
-						float diffthreshM = diffthresh*mult*shadow_d0*shadow_k/20.0;
+						float rdMul = distortFactor * (1.0 + mult) * shadow_d0 * shadow_k / shadowMapResolution;
+						float diffthreshM = diffthresh * mult * shadow_d0 * shadow_k/20.0;
 						float avgDepth = 0.0;
 
 						for (int i = 0; i < VPS_Search_Samples; i++) {

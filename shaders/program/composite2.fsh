@@ -7,6 +7,7 @@
 
 #define TEX_SKY_LUT colortex4
 #define TEX_FINAL_PREV colortex5
+#define TEX_DEPTH depthtex1
 
 
 in VertexData {
@@ -218,7 +219,7 @@ void waterVolumetrics(inout vec3 inColor, vec3 rayStart, vec3 rayEnd, float estE
 		vec3 pos = vec3(spPos.xy * distortFactor, spPos.z);
 		float sh = 1.0;
 
-		if (IsInShadowMap(pos.xy)) {
+		if (IsInShadowMap(pos)) {
 			pos = pos * vec3(0.5, 0.5, 0.5/6.0) + 0.5;
 			sh = texture(shadowtex0HW, pos);
 		}
@@ -606,15 +607,15 @@ void main() {
 			}
 		#endif
 
-		if ((diffuseSun * shading > 0.001 || abs(filtered.y-0.1) < 0.0004) && !hand) {
+		bool apply_sss = true;//abs(filtered.y-0.1) < 0.0004;
+		if ((diffuseSun * shading > 0.001 || apply_sss) && !hand) {
 			#ifdef SCREENSPACE_CONTACT_SHADOWS
 				vec3 vec = vIn.lightCol.a * sunVec;
 				float screenShadow = rayTraceShadow(vec, fragpos, noise);
 				shading = min(screenShadow, shading);
 
 				// Out of shadow map
-				if (abs(filtered.y - 0.1) < 0.0004)
-					SSS *= screenShadow;
+				if (apply_sss) SSS *= screenShadow;
 			#endif
 
 			#ifdef CAVE_LIGHT_LEAK_FIX
@@ -750,26 +751,26 @@ void main() {
 			skyDiffuse *= shadowColor;
 		#endif
 
-		skyDiffuse += SSS;
+//		skyDiffuse += SSS;
 
 		#ifdef DEBUG_WHITEWORLD
 			albedo = vec3(1.0);
 		#endif
 
-		outColor3 = (skyDiffuse/PI * skyDirectLight * 8.0/3.0 / 150.0 + ambientLight + directLighting + emitting) * albedo;
+		outColor3 = ((skyDiffuse + SSS)/PI * skyDirectLight * 8.0/3.0 / 150.0 + ambientLight + directLighting + emitting) * albedo;
 
 		#ifdef MAT_SPECULAR_ENABLED
-			#ifdef MC_TEXTURE_FORMAT_LAB_PBR
+//			#ifdef MC_TEXTURE_FORMAT_LAB_PBR
 				float roughness = square(1.0 - specularData.r);
 				float f0 = specularData.g;
 				if (f0 < EPSILON) f0 = 0.04;
-			#else
-				float roughness = 1.0;
-				float f0 = 0.04;
-			#endif
+//			#else
+//				float roughness = 1.0;
+//				float f0 = 0.04;
+//			#endif
 
 			vec2 noise2 = blueNoise(texBlueNoise, gl_FragCoord.xy).rg;
-			MaterialReflections(outColor3, roughness, vec3(f0), albedo, vIn.WsunVec, vIn.lightCol.rgb, shading * diffuseSun, lightmap.y, normal, np3, fragpos, vec3(noise2, noise), hand);
+			MaterialReflections(outColor3, roughness, f0, albedo, vIn.WsunVec, vIn.lightCol.rgb, skyDiffuse, lightmap.y, normal, np3, fragpos, vec3(noise2, noise), hand);
 		#endif
 
 		if (iswater && isEyeInWater == 0) {

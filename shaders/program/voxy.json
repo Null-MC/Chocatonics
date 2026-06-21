@@ -9,7 +9,7 @@
   "translucentDrawBuffers": [2,7],
   "blending": {
     -1: "off",
-    0: "SRC_ALPHA ONE_MINUS_SRC_ALPHA ONE_MINUS_DST_ALPHA ONE"
+    0: "ONE ONE_MINUS_SRC_ALPHA ONE ONE"
   },
   "useViewportDims": true,
   #if   TAA_RENDER_SCALE == 90
@@ -30,6 +30,7 @@
     "framemod8",
     "frameTimeCounter",
     "gbufferModelView",
+    "gbufferModelViewInverse",
     "gbufferPreviousModelView",
     "gbufferPreviousProjection",
     "gbufferProjection",
@@ -43,6 +44,8 @@
     "shadowProjection",
     "skyIntensity",
     "skyIntensityNight",
+    "sunElevation",
+    "sunPosition",
     "sunVec",
     "texelSize",
     "upVec",
@@ -59,6 +62,7 @@
     "noisetex": "sampler2D",
     "depthtex1": "sampler2D",
     "shadowtex0HW": "sampler2DShadow",
+    "texBlueNoise": "sampler2D",
     "texWave": "sampler2D"
   }
 }

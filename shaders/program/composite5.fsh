@@ -161,7 +161,7 @@ mat2x3 getVolumetricRays(float dither, vec3 fragpos, vec4 lightCol) {
 		float densityVol = cloudVol(progressW);
 		float sh = 1.0;
 
-		if (IsInShadowMap(pos.xy)) {
+		if (IsInShadowMap(pos)) {
 			pos = pos * vec3(0.5, 0.5, 0.5/6.0) + 0.5;
 			sh = texture(shadowtex0HW, pos);
 
@@ -254,7 +254,7 @@ void waterVolumetrics(inout vec3 inColor, vec3 rayStart, vec3 rayEnd, float estE
 		vec3 pos = vec3(spPos.xy * distortFactor, spPos.z);
 		float sh = 1.0;
 
-		if (IsInShadowMap(pos.xy)) {
+		if (IsInShadowMap(pos)) {
 			pos = pos * vec3(0.5, 0.5, 0.5/6.0) + 0.5;
 			sh = texture(shadowtex0HW, pos);
 		}
