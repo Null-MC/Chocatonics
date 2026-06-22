@@ -1,4 +1,10 @@
-#ifdef CLOUDS_SHADOWS
+#define PH_GI_SHADOW_MAP
+
+#ifdef PH_GI_SHADOW_MAP
+    uniform sampler2DShadow shadowtex0HW;
+#endif
+
+#if defined(PH_GI_SHADOW_MAP) || defined(CLOUDS_SHADOWS)
     uniform sampler2D noisetex;
 #endif
 
@@ -14,8 +20,15 @@ uniform vec3 sunVec;
 #include "/photonics/modifiers/indirect_surface_sample_modifier.glsl"
 #include "/photonics/trace_ray.glsl"
 
-#ifdef CLOUDS_SHADOWS
+#if defined(PH_GI_SHADOW_MAP) || defined(CLOUDS_SHADOWS)
     #include "/lib/blueNoise.glsl"
+#endif
+
+#ifdef PH_GI_SHADOW_MAP
+    #include "/lib/Shadow_Params.glsl"
+#endif
+
+#ifdef CLOUDS_SHADOWS
     #include "/lib/volumetricClouds.glsl"
 #endif
 
@@ -77,24 +90,58 @@ void sample_indirect(inout vec3 indirect_color, vec3 sample_rt_pos, vec3 geo_nor
 
             #ifdef PHOTONICS_GI_ENABLED
                 vec3 localSkyLightDir = normalize(mat3(gbufferModelViewInverse) * shadowLightPosition);
+                vec3 shadow_color = vec3(1.0);
 
-                // trace sun
-                RayIterator ray_sun;
-                ray_sun.iterations = 100; // TODO: setting?
-                ray_iter_set_position(ray_sun, hit_position);
-                ray_iter_set_direction(ray_sun, localSkyLightDir);
-                ray_iter_offset_position(ray_sun, 0.1 * hit_localNormal);
+                #ifdef PH_GI_SHADOW_MAP
+                    // shadows
+                    vec3 projectedShadowPosition = worldToShadowSpaceProjected(hit_localPos);
 
-                RayResult hit2;
-                vec3 tint2 = vec3(1.0);
+                    // apply distortion
+                    float distortFactor = calcDistort(projectedShadowPosition.xy);
+                    projectedShadowPosition.xy *= distortFactor;
 
-                #if PHOTONICS_TINTING > 0
-                    bool is_hit2 = trace_ray(ray_sun, hit2, tint2);
+                    float hit_sky_NoLm = max(dot(hit_localNormal, localSkyLightDir), 0.0);
+
+                    // do shadows only if on shadow map
+                    if (IsInShadowMap(projectedShadowPosition)) {
+                        float noise = blueNoise(gl_FragCoord.xy, frameCounter);
+
+                        //    float rdMul = filtered.x * distortFactor * shadow_d0 * shadow_k / shadowMapResolution;
+                        const float threshMul = max(2048.0 / shadowMapResolution * shadowDistance/128.0, 0.95);
+                        float distortThresh = (sqrt(1.0 - square(hit_sky_NoLm)) / hit_sky_NoLm + 0.7) / distortFactor;
+
+                        projectedShadowPosition = projectedShadowPosition * vec3(0.5, 0.5, 0.5/6.0) + vec3(0.5, 0.5, 0.5);
+
+                        float rdMul = 4.0 / shadowMapResolution;
+                        float diffthresh = distortThresh/6000.0 * threshMul;
+                        float bias = 1.0 + noise * rdMul/SHADOW_FILTER_SAMPLE_COUNT * shadowMapResolution;
+                        vec3 samplePos = vec3(projectedShadowPosition + vec3(0.0, 0.0, -diffthresh * bias));
+
+                        shadow_color = vec3(texture(shadowtex0HW, samplePos));
+
+                        // TODO: shadow color
+                    }
                 #else
-                    bool is_hit2 = trace_ray(ray_sun, hit2);
+                    // trace sun
+                    RayIterator ray_sun;
+                    ray_sun.iterations = 100; // TODO: setting?
+                    ray_iter_set_position(ray_sun, hit_position);
+                    ray_iter_set_direction(ray_sun, localSkyLightDir);
+                    ray_iter_offset_position(ray_sun, 0.1 * hit_localNormal);
+
+                    RayResult hit2;
+//                    vec3 tint2 = vec3(1.0);
+
+                    #if PHOTONICS_TINTING > 0
+                        bool is_hit2 = trace_ray(ray_sun, hit2, shadow_color);
+                    #else
+                        bool is_hit2 = trace_ray(ray_sun, hit2);
+                    #endif
+
+                    if (is_hit2) shadow_color = vec3(0.0);
                 #endif
 
-                if (!is_hit2) {
+//                if (!is_hit2) {
                     vec3 skyLightColor = get_sun_color(hit_localPos, localSkyLightDir);
                     float skyShading = max(dot(hit_localNormal, localSkyLightDir), 0.0);
 
@@ -113,8 +160,8 @@ void sample_indirect(inout vec3 indirect_color, vec3 sample_rt_pos, vec3 geo_nor
                         skyShading *= cloudShadow;
                     #endif
 
-                    sample_color += skyLightColor * tint2 * skyShading;
-                }
+                    sample_color += skyLightColor * shadow_color * skyShading;
+//                }
             #endif
 
             Light hit_light = ray_result_light_data(hit);
