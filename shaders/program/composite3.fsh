@@ -88,11 +88,11 @@ vec3 toClipSpacePrev3(const in vec3 viewSpacePosition) {
 	return projMAD(gbufferPreviousProjection, viewSpacePosition) / -viewSpacePosition.z * 0.5 + 0.5;
 }
 
-vec2 reproject(const in vec3 screenPos, const in float reflectDist) {
+vec2 reproject(const in vec3 screenPos, const in float reflectDist, const in float smoothness) {
 	vec3 viewPos = toScreenSpace(screenPos);
 
 	// parallax offset
-	viewPos += reflectDist * normalize(viewPos);
+	viewPos += normalize(viewPos) * (reflectDist * smoothness);
 
     vec3 localPos = mul3(gbufferModelViewInverse, viewPos);
 
@@ -142,6 +142,7 @@ void unpack_8bit_float_and_uint(float packedVal, out float floatVal, out uint ui
 #if defined(REFLECTION_ROUGH) && (defined(REFLECTION_ACCUMULATE) || defined(REFLECTION_NEIGHBOR_CLAMP))
 	/* RENDERTARGETS: 13 */
 	layout(location = 0) out vec4 outColor13;
+//	layout(location = 1) out vec4 outColor15;
 #else
 	/* RENDERTARGETS: 3 */
 	layout(location = 0) out vec4 outColor3;
@@ -156,6 +157,7 @@ void main() {
 	vec3 reflect_color = vec3(0.0);
 	float reflectDist = 0.0;
 	float roughness = 1.0;
+	float smoothness = 0.0;
 
 	if (z < 1.0) {
 		vec3 viewPos = toScreenSpace(screenPos);
@@ -182,7 +184,10 @@ void main() {
 
 		bool hand = abs(mat-0.75) < 0.01;
 
+//		smoothness = specularData.r;
 		roughness = square(1.0 - specularData.r);
+		smoothness = 1.0 - sqrt(specularData.r);
+
 		float f0 = specularData.g;
 
 		mat3 basis = CoordBase(normal);
@@ -372,7 +377,7 @@ void main() {
 		reflect_color *= F; //luma(F);
 
 		#ifndef REFLECTION_ROUGH
-			reflect_color *= 1.0 - sqrt(roughness);
+			reflect_color *= smoothness;
 		#endif
 	}
 
@@ -382,7 +387,10 @@ void main() {
 //		float alpha = 0.998;// mix(0.0, 0.998, pow(roughness, 0.1));
 
 		vec3 screenPos2 = vec3(texcoord / RENDER_SCALE, z);
-		vec2 tex_last = reproject(screenPos2, reflectDist);
+		vec2 tex_last = reproject(screenPos2, reflectDist, smoothness);
+
+		vec2 tex_flip = tex_last;
+
 		vec4 src = textureLod(TEX_REFLECT_HISTORY, tex_last * RENDER_SCALE, 0);
 
 		uint counter;
@@ -411,9 +419,10 @@ void main() {
 	#endif
 
 	#if defined(REFLECTION_ROUGH) && (defined(REFLECTION_ACCUMULATE) || defined(REFLECTION_NEIGHBOR_CLAMP))
-		final_color.rgb = clamp(final_color.rgb, 0.000001, 65000.0);
+		outColor13.rgb = clamp(final_color.rgb, 0.000001, 65000.0);
+		outColor13.a = final_color.a; //reflectDist;
 
-		outColor13 = final_color;
+//		outColor15 = packUnorm4x8(roughness, counter/255.0, 0.0, 0.0);
 	#else
 		ivec2 uv = ivec2(gl_FragCoord.xy);
 		vec3 dest_color = texelFetch(colortex3, uv, 0).rgb;

@@ -26,6 +26,9 @@ screen.PHOTONICS=Photonics
 
         option.PHOTONICS_GI_STEPS=Trace Steps
 
+        option.PHOTONICS_GI_SHADOWMAP=Use ShadowMap
+        option.PHOTONICS_GI_SHADOWMAP.comment=Improves GI performance by using the shadow-map for sunlight occlusion, rather than a secondary ray-trace.
+
     screen.PHOTONICS_REFLECTIONS=Reflections
 
         option.PHOTONICS_REFLECT_ENABLED=Enabled

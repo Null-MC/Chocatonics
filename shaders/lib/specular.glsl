@@ -1,6 +1,5 @@
 // #define TEX_SKY_LUT colortex4 | gaux1
 
-
 vec3 rayTraceSpeculars(vec3 dir, vec3 position, float dither, float quality, bool hand, float fres) {
 	vec3 clipPosition = toClipSpace3(position);
 
@@ -205,11 +204,37 @@ void MaterialReflections(
 					#endif
 
 					Reflections.rgb = hit_color * hit_albedo;
+					Reflections.a = 1.0;
 				}
 				else {
-					Reflections.rgb = skyCloudsFromTex(L, TEX_SKY_LUT).rgb * 0.035;
+					#ifdef PHOTONICS_REFLECT_SS_FALLBACK
+						vec3 endViewPos = worldToViewSpace(ray.position - rt_camera_position);
+						vec3 endScreenPos = toClipSpace3(endViewPos);
+
+						if (all(equal(saturate(endScreenPos.xy), endScreenPos.xy))) {
+							// Scale quality with ray contribution
+							float rayQuality = mix(float(REFLECTION_QUALITY), 0.0, sqrt(roughness));
+
+							vec3 rtPos = rayTraceSpeculars(mat3(gbufferModelView) * L, endViewPos, noise.b, rayQuality, hand, fresnel);
+
+							if (rtPos.z < 1.0) { // Reproject on previous frame
+								vec3 previousPosition = mul3(gbufferModelViewInverse, toScreenSpace(rtPos)) + (cameraPosition - previousCameraPosition);
+								previousPosition = mul3(gbufferPreviousModelView, previousPosition);
+								previousPosition.xy = projMAD(gbufferPreviousProjection, previousPosition).xy / -previousPosition.z * 0.5 + 0.5;
+
+								if (all(equal(saturate(previousPosition.xy), previousPosition.xy))) {
+									Reflections.rgb = texture(TEX_FINAL_PREV, previousPosition.xy).rgb;
+									Reflections.a = 1.0;
+								}
+							}
+						}
+						else {
+							Reflections.rgb = skyCloudsFromTex(L, TEX_SKY_LUT).rgb * 0.035;
+						}
+					#else
+						Reflections.rgb = skyCloudsFromTex(L, TEX_SKY_LUT).rgb * 0.035;
+					#endif
 				}
-				Reflections.a = 1.0;
 			#else
 				// Scale quality with ray contribution
 				float rayQuality = mix(float(REFLECTION_QUALITY), 0.0, sqrt(roughness));

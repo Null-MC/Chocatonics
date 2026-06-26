@@ -1,10 +1,4 @@
-#define PH_GI_SHADOW_MAP
-
-#ifdef PH_GI_SHADOW_MAP
-    uniform sampler2DShadow shadowtex0HW;
-#endif
-
-#if defined(PH_GI_SHADOW_MAP) || defined(CLOUDS_SHADOWS)
+#if defined(CLOUDS_SHADOWS) && !defined(PHOTONICS_GI_SHADOWMAP)
     uniform sampler2D noisetex;
 #endif
 
@@ -20,12 +14,8 @@ uniform vec3 sunVec;
 #include "/photonics/modifiers/indirect_surface_sample_modifier.glsl"
 #include "/photonics/trace_ray.glsl"
 
-#if defined(PH_GI_SHADOW_MAP) || defined(CLOUDS_SHADOWS)
+#if defined(CLOUDS_SHADOWS) && !defined(PHOTONICS_GI_SHADOWMAP)
     #include "/lib/blueNoise.glsl"
-#endif
-
-#ifdef PH_GI_SHADOW_MAP
-    #include "/lib/Shadow_Params.glsl"
 #endif
 
 #ifdef CLOUDS_SHADOWS
@@ -90,36 +80,12 @@ void sample_indirect(inout vec3 indirect_color, vec3 sample_rt_pos, vec3 geo_nor
 
             #ifdef PHOTONICS_GI_ENABLED
                 vec3 localSkyLightDir = normalize(mat3(gbufferModelViewInverse) * shadowLightPosition);
-                vec3 shadow_color = vec3(1.0);
+                vec3 skyLightColor = get_sun_color(hit_localPos, localSkyLightDir);
 
-                #ifdef PH_GI_SHADOW_MAP
-                    // shadows
-                    vec3 projectedShadowPosition = worldToShadowSpaceProjected(hit_localPos);
-
-                    // apply distortion
-                    float distortFactor = calcDistort(projectedShadowPosition.xy);
-                    projectedShadowPosition.xy *= distortFactor;
-
-                    float hit_sky_NoLm = max(dot(hit_localNormal, localSkyLightDir), 0.0);
-
-                    // do shadows only if on shadow map
-                    if (IsInShadowMap(projectedShadowPosition)) {
-                        float noise = blueNoise(gl_FragCoord.xy, frameCounter);
-
-                        //    float rdMul = filtered.x * distortFactor * shadow_d0 * shadow_k / shadowMapResolution;
-                        const float threshMul = max(2048.0 / shadowMapResolution * shadowDistance/128.0, 0.95);
-                        float distortThresh = (sqrt(1.0 - square(hit_sky_NoLm)) / hit_sky_NoLm + 0.7) / distortFactor;
-
-                        projectedShadowPosition = projectedShadowPosition * vec3(0.5, 0.5, 0.5/6.0) + vec3(0.5, 0.5, 0.5);
-
-                        float rdMul = 4.0 / shadowMapResolution;
-                        float diffthresh = distortThresh/6000.0 * threshMul;
-                        float bias = 1.0 + noise * rdMul/SHADOW_FILTER_SAMPLE_COUNT * shadowMapResolution;
-                        vec3 samplePos = vec3(projectedShadowPosition + vec3(0.0, 0.0, -diffthresh * bias));
-
-                        shadow_color = vec3(texture(shadowtex0HW, samplePos));
-
-                        // TODO: shadow color
+                #ifdef PHOTONICS_GI_SHADOWMAP
+                    vec3 sun_radiance;
+                    if (sample_sun_color(hit_localPos, hit_localNormal, sun_radiance)) {
+                        skyLightColor = sun_radiance;
                     }
                 #else
                     // trace sun
@@ -130,38 +96,36 @@ void sample_indirect(inout vec3 indirect_color, vec3 sample_rt_pos, vec3 geo_nor
                     ray_iter_offset_position(ray_sun, 0.1 * hit_localNormal);
 
                     RayResult hit2;
-//                    vec3 tint2 = vec3(1.0);
 
                     #if PHOTONICS_TINTING > 0
-                        bool is_hit2 = trace_ray(ray_sun, hit2, shadow_color);
+                        vec3 shadowTint = vec3(1.0);
+                        bool is_hit2 = trace_ray(ray_sun, hit2, shadowTint);
+                        skyLightColor *= shadowTint;
                     #else
                         bool is_hit2 = trace_ray(ray_sun, hit2);
                     #endif
 
-                    if (is_hit2) shadow_color = vec3(0.0);
+                    if (is_hit2) skyLightColor = vec3(0.0);
                 #endif
 
-//                if (!is_hit2) {
-                    vec3 skyLightColor = get_sun_color(hit_localPos, localSkyLightDir);
-                    float skyShading = max(dot(hit_localNormal, localSkyLightDir), 0.0);
+                float skyShading = max(dot(hit_localNormal, localSkyLightDir), 0.0);
 
-                    #ifdef CLOUDS_SHADOWS
-                        vec3 hit_worldPos = hit_localPos + cameraPosition;
+                #ifdef CLOUDS_SHADOWS
+                    vec3 hit_worldPos = hit_localPos + cameraPosition;
 
-                        const int rayMarchSteps = 6;
-                        float cloudShadow = 0.0;
+                    const int rayMarchSteps = 6;
+                    float cloudShadow = 0.0;
 
-                        for (int i = 0; i < rayMarchSteps; i++) {
-                            vec3 cloudPos = hit_worldPos + localSkyLightDir / abs(localSkyLightDir.y) * (1500 + (noise+i) / rayMarchSteps*1700 - hit_worldPos.y);
-                            cloudShadow += getCloudDensity(cloudPos, 0);
-                        }
+                    for (int i = 0; i < rayMarchSteps; i++) {
+                        vec3 cloudPos = hit_worldPos + localSkyLightDir / abs(localSkyLightDir.y) * (1500 + (noise+i) / rayMarchSteps*1700 - hit_worldPos.y);
+                        cloudShadow += getCloudDensity(cloudPos, 0);
+                    }
 
-                        cloudShadow = mix(1.0, exp(-cloudShadow * cloudDensity * 1700/rayMarchSteps), mix(CLOUDS_SHADOWS_STRENGTH, 1.0, rainStrength));
-                        skyShading *= cloudShadow;
-                    #endif
+                    cloudShadow = mix(1.0, exp(-cloudShadow * cloudDensity * 1700/rayMarchSteps), mix(CLOUDS_SHADOWS_STRENGTH, 1.0, rainStrength));
+                    skyShading *= cloudShadow;
+                #endif
 
-                    sample_color += skyLightColor * shadow_color * skyShading;
-//                }
+                sample_color += skyLightColor * skyShading;
             #endif
 
             Light hit_light = ray_result_light_data(hit);
@@ -171,12 +135,13 @@ void sample_indirect(inout vec3 indirect_color, vec3 sample_rt_pos, vec3 geo_nor
                 sample_color += light_color;
             }
 
-            transmittance *= hit_albedo;
+            float hit_NoVm = max(dot(hit_localNormal, -trace_localDir), 0.0);
+            transmittance *= hit_albedo * hit_NoVm;
             radiance += transmittance * sample_color;
 
-            vec3 hit_randomDir = ph_rand_direction(rnd_state, hit_localNormal);
+            trace_localDir = ph_rand_direction(rnd_state, hit_localNormal);
 
-            ray_iter_set_direction(ray, hit_randomDir);
+            ray_iter_set_direction(ray, trace_localDir);
             ray_iter_offset_position(ray, 0.1 * hit_localNormal);
         }
 

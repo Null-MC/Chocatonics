@@ -16,6 +16,8 @@ vec3 toScreenSpaceVector(const in vec3 p) {
     return normalize(fragposition.xyz);
 }
 
+#define worldToViewSpace(p) mul3(gbufferModelView, p)
+
 #define toWorldSpace(p) mul3(gbufferModelViewInverse, p)
 #define toWorldSpaceCamera(p) (toWorldSpace(p) + cameraPosition)
 
