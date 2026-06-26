@@ -130,7 +130,7 @@ void main() {
         float eta = ; // TODO
         vec3 refractViewDir = refract(viewDir, tex_normal, eta);
 
-        vec3 localPos = mul3(gbufferModelViewInverse, viewPos);
+        vec3 localPos = toWorldSpace(viewPos);
         vec3 refractLocalDir = mat3(gbufferModelViewInverse) * refractViewDir;
 
         RayIterator ray;
@@ -161,7 +161,8 @@ void main() {
         if (iswater) {
     //        vec3 fragpos = toScreenSpace(vec3(texcoord-vec2(0.0)*texelSize*0.5,z));
             vec3 fragpos = toScreenSpace(vec3(texcoord, z));
-            vec3 np3 = mul3(gbufferModelViewInverse, fragpos) + cameraPosition;
+            vec3 np3 = toWorldSpaceCamera(fragpos);
+
             float norm = getWaterHeightmap(np3.xz + np3.y, 1.0) - 0.5;
             float displ = norm / (length(fragpos) / far) / 2000.0 * (isEyeInWater*2.0 + 1.0);
             refractedCoord += displ * RENDER_SCALE;
