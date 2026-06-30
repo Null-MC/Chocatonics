@@ -7,14 +7,15 @@
 in VertexData {
 	vec4 lmtexcoord;
 	vec4 color;
-	vec4 normalMat;
+	vec3 normalMat;
+	flat int blockId;
 
 	#ifdef MAT_PARALLAX_ENABLED
 		vec4 vtexcoordam; // .st for add, .pq for mul
 		vec4 vtexcoord;
 	#endif
 
-	#ifdef MC_NORMAL_MAP
+	#ifdef MAT_PBR_ENABLED
 		vec4 tangent;
 	#endif
 } vIn;
@@ -22,11 +23,8 @@ in VertexData {
 uniform sampler2D gtexture;
 uniform sampler2D noisetex;
 
-#ifdef MC_NORMAL_MAP
+#ifdef MAT_PBR_ENABLED
 	uniform sampler2D normals;
-#endif
-
-#ifdef MC_TEXTURE_FORMAT_LAB_PBR
 	uniform sampler2D specular;
 #endif
 
@@ -43,9 +41,11 @@ uniform mat4 shadowProjection;
 uniform vec3 cameraPosition;
 uniform int framemod8;
 
-//#ifdef MC_NORMAL_MAP
+//#ifdef MAT_PBR_ENABLED
 //	uniform float wetness;
 //#endif
+
+#include "/lib/blocks.glsl"
 
 #include "/lib/ign.glsl"
 #include "/lib/material.glsl"
@@ -53,7 +53,7 @@ uniform int framemod8;
 #include "/lib/projections.glsl"
 #include "/lib/color_transforms.glsl"
 
-#ifdef MC_NORMAL_MAP
+#ifdef MAT_PBR_ENABLED
 	#include "/lib/normal_map.glsl"
 #endif
 
@@ -85,9 +85,9 @@ layout(location = 3) out vec4 outWorld;
 
 void main() {
 	float noise = IGN_time(frameTimeCounter);
-	vec3 normal = vIn.normalMat.xyz;
+	vec3 normal = vIn.normalMat;
 
-	#ifdef MC_NORMAL_MAP
+	#ifdef MAT_PBR_ENABLED
 		vec3 tangent2 = normalize(cross(vIn.tangent.rgb, normal) * vIn.tangent.w);
 
 		mat3 tbnMatrix = mat3(
@@ -191,10 +191,8 @@ void main() {
 
 		color.rgb *= vIn.color.rgb;
 
-		vec3 tex_normal = mat_normal(textureGrad(normals, adjustedTexCoord.xy, dcdx, dcdy).xyz);
-		normal = applyBump(tbnMatrix, tex_normal, wetness);
-
-		#ifdef MC_TEXTURE_FORMAT_LAB_PBR
+		vec4 normalData = textureGrad(normals, adjustedTexCoord.xy, dcdx, dcdy);
+		#ifdef MAT_PBR_ENABLED
 			vec4 specularData = textureGrad(specular, adjustedTexCoord.xy, dcdx, dcdy);
 		#endif
 	#else
@@ -205,17 +203,18 @@ void main() {
 			color.a = textureLod(gtexture, vIn.lmtexcoord.xy, 0).a;
 		#endif
 
-		#ifdef MC_NORMAL_MAP
-			vec3 tex_normal = mat_normal(texture(normals, vIn.lmtexcoord.xy, Texture_MipMap_Bias).rgb);
-			normal = applyBump(tbnMatrix, tex_normal, wetness);
-		#endif
-
-		#ifdef MC_TEXTURE_FORMAT_LAB_PBR
+		#ifdef MAT_PBR_ENABLED
+			vec4 normalData = texture(normals, vIn.lmtexcoord.xy, Texture_MipMap_Bias);
 			vec4 specularData = texture(specular, vIn.lmtexcoord.xy, Texture_MipMap_Bias);
 		#endif
 	#endif
 
 	if (color.a < alphaTestRef) discard;
+
+	#ifdef MAT_PBR_ENABLED
+		vec3 tex_normal = mat_normal(normalData.rgb);
+		normal = applyBump(tbnMatrix, tex_normal, wetness);
+	#endif
 
 	#ifdef MAT_SPECULAR_ENABLED
 		float smoothness = specularData.r;
@@ -226,20 +225,22 @@ void main() {
 
 		if (f0 < EPSILON) f0 = 0.04;
 	#else
-		const float smoothness = 0.0;
+		float smoothness = 0.0;
 		const float f0 = 0.04;
 		float emission = 0.0;
 		float porosity = 0.85;
 		float sss = 0.0;
 
-		if (vIn.normalMat.a < 0.51) {
+		if (vIn.blockId == BLOCK_SSS || vIn.blockId == BLOCK_PLANT_WAVING_FULL || vIn.blockId == BLOCK_PLANT_WAVING_TOP) {
 			sss = 0.5;
 		}
-		else if (vIn.normalMat.a < 0.61) {
-			sss = 0.2;
-		}
-		else if (vIn.normalMat.a < 0.91) {
-			emission = saturate(luma(toLinear(color.rgb)) * 3.0);
+
+		if (vIn.blockId == BLOCK_IDK) sss = 0.2;
+
+		if (vIn.blockId == BLOCK_EMISSIVE) {
+			emission = saturate(luma(toLinear(color.rgb)));
+			emission = pow(emission, 1.4);
+//			vOut.color.rgb = normalize(vOut.color.rgb) * sqrt(3.0);
 		}
 	#endif
 
@@ -252,8 +253,10 @@ void main() {
 		color.rgb = linearToSRGB(albedo);
 	}
 
+	const float mat = 0.0;
+
 	outColor = color;
 	outNormal = vec4(OctEncode(vIn.normalMat.xyz), OctEncode(normal));
 	outSpecular = vec4(smoothness, f0, sss, emission);
-	outWorld = vec4(vIn.lmtexcoord.zw, 0.0, vIn.normalMat.a);
+	outWorld = vec4(vIn.lmtexcoord.zw, 0.0, mat);
 }

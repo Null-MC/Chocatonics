@@ -18,10 +18,6 @@ uniform vec3 sunVec;
     #include "/lib/blueNoise.glsl"
 #endif
 
-#ifdef CLOUDS_SHADOWS
-    #include "/lib/volumetricClouds.glsl"
-#endif
-
 
 void sample_indirect(inout vec3 indirect_color, vec3 sample_rt_pos, vec3 geo_normal, vec3 tex_normal, inout uint rnd_state,
     out vec3 first_hit, out vec3 first_normal) {
@@ -110,20 +106,20 @@ void sample_indirect(inout vec3 indirect_color, vec3 sample_rt_pos, vec3 geo_nor
 
                 float skyShading = max(dot(hit_localNormal, localSkyLightDir), 0.0);
 
-                #ifdef CLOUDS_SHADOWS
-                    vec3 hit_worldPos = hit_localPos + cameraPosition;
-
-                    const int rayMarchSteps = 6;
-                    float cloudShadow = 0.0;
-
-                    for (int i = 0; i < rayMarchSteps; i++) {
-                        vec3 cloudPos = hit_worldPos + localSkyLightDir / abs(localSkyLightDir.y) * (1500 + (noise+i) / rayMarchSteps*1700 - hit_worldPos.y);
-                        cloudShadow += getCloudDensity(cloudPos, 0);
-                    }
-
-                    cloudShadow = mix(1.0, exp(-cloudShadow * cloudDensity * 1700/rayMarchSteps), mix(CLOUDS_SHADOWS_STRENGTH, 1.0, rainStrength));
-                    skyShading *= cloudShadow;
-                #endif
+//                #ifdef CLOUDS_SHADOWS
+//                    vec3 hit_worldPos = hit_localPos + cameraPosition;
+//
+//                    const int rayMarchSteps = 6;
+//                    float cloudShadow = 0.0;
+//
+//                    for (int i = 0; i < rayMarchSteps; i++) {
+//                        vec3 cloudPos = hit_worldPos + localSkyLightDir / abs(localSkyLightDir.y) * (1500 + (noise+i) / rayMarchSteps*1700 - hit_worldPos.y);
+//                        cloudShadow += getCloudDensity(cloudPos, 0);
+//                    }
+//
+//                    cloudShadow = mix(1.0, exp(-cloudShadow * cloudDensity * 1700/rayMarchSteps), mix(CLOUDS_SHADOWS_STRENGTH, 1.0, rainStrength));
+//                    skyShading *= cloudShadow;
+//                #endif
 
                 sample_color += skyLightColor * skyShading;
             #endif

@@ -5,6 +5,8 @@
 #include "/lib/common.glsl"
 #include "/lib/settings.glsl"
 
+#define TEX_SKY_LUT colortex4
+
 
 in VertexData {
 	flat vec3 sunColor;
@@ -28,6 +30,7 @@ uniform mat4 gbufferProjectionInverse;
 uniform mat4 gbufferModelViewInverse;
 uniform vec3 cameraPosition;
 
+uniform float near;
 uniform mat4 gbufferProjection;
 uniform mat4 shadowModelView;
 uniform mat4 shadowProjection;

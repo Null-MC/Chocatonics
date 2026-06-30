@@ -71,12 +71,20 @@ float facos(const in float sx) {
     return sx > 0.0 ? a : PI - a;
 }
 
-float linZ(float depth, float near, float far) {
-    return (2.0 * near) / (far + near - depth * (far - near));
+float depthNdcToLinear(float depth, float near, float far) {
+    return (2.0 * near * far) / (far + near - depth * (far - near));
 }
 
-float invLinZ(float depth, float near, float far) {
-    return -((2.0*near / depth) - far - near) / (far - near);
+float depthScreenToLinear(float depth, float near, float far) {
+    return depthNdcToLinear(depth * 2.0 - 1.0, near, far);
+}
+
+float depthLinearToNdc(float depth, float near, float far) {
+    return (far + near - 2.0 * near * far / depth) / (far - near);
+}
+
+float depthLinearToScreen(float depth, float near, float far) {
+    return depthLinearToNdc(depth, near, far) * 0.5 + 0.5;
 }
 
 float ld_reverse(float depth, float y, float z) {

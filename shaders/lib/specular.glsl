@@ -1,12 +1,12 @@
 // #define TEX_SKY_LUT colortex4 | gaux1
 
 vec3 rayTraceSpeculars(vec3 dir, vec3 position, float dither, float quality, bool hand, float fres) {
-	vec3 clipPosition = toClipSpace3(position);
+	vec3 clipPosition = toClipSpace3_lod(position);
 
 	float rayLength = ((position.z + dir.z * farPlane*sqrt(3.0)) > -near) ?
 	                   (-near -position.z) / dir.z : farPlane*sqrt(3.0);
 
-	vec3 direction = normalize(toClipSpace3(dir*rayLength + position) - clipPosition);  // convert to clip space
+	vec3 direction = normalize(toClipSpace3_lod(dir*rayLength + position) - clipPosition);  // convert to clip space
 	direction.xy = normalize(direction.xy);
 
 	// get at which length the ray intersects with the edge of the screen
@@ -25,12 +25,13 @@ vec3 rayTraceSpeculars(vec3 dir, vec3 position, float dither, float quality, boo
 	for (int i = 0; i <= int(quality); i++) {
 		// decode depth buffer
 		#if defined(REFLECTION_QUARTER_RES_DEPTH) && !defined(RENDER_VOXY)
-			vec2 testthing = hand ? spos.xy*texelSize : spos.xy/texelSize/4.0; // fix for ssr on hand
+//			vec2 testthing = hand ? spos.xy/texelSize : spos.xy/texelSize/4.0; // fix for ssr on hand
+			vec2 testthing = spos.xy/texelSize/4.0;
 
 			float sp = sqrt(texelFetch(texDepthQ, ivec2(testthing), 0).r / 65000.0);
-			sp = invLinZ(sp, nearPlane, farPlane);
+			sp = depthLinearToScreen(sp * farPlane, nearPlane, farPlane);
 		#else
-			float sp = texelFetch(TEX_DEPTH, ivec2(spos.xy / texelSize), 0).r;
+			float sp = texelFetch(TEX_DEPTH_REFLECT, ivec2(spos.xy / texelSize), 0).r;
 		#endif
 
 		if (sp <= max(maxZ, minZ) && sp >= min(maxZ, minZ)) {
@@ -39,10 +40,23 @@ vec3 rayTraceSpeculars(vec3 dir, vec3 position, float dither, float quality, boo
 
 		spos += stepv;
 
-		// small bias
-		float biasamount = 0.0002;
-		if (hand) biasamount = 0.01;
-		minZ = maxZ-biasamount / linZ(spos.z, nearPlane, farPlane);
+		#ifdef VOXY
+			float zL = near / spos.z;
+
+			// small bias
+			float biasamount = 0.0000004;//0.0002;
+			if (hand) biasamount = 0.01;
+
+//			minZ = maxZ - biasamount / (zL);
+			minZ = maxZ;// - biasamount * zL;
+		#else
+			// small bias
+			float biasamount = 0.00004;//0.0002;
+			if (hand) biasamount = 0.01;
+
+			float zL = depthScreenToLinear(spos.z, nearPlane, farPlane);
+			minZ = maxZ - biasamount / (zL / farPlane);
+		#endif
 
 		maxZ += stepv.z;
 	}
@@ -112,7 +126,8 @@ void MaterialReflections(
 	#if defined(REFLECTION_ENABLED) && (defined(RENDER_GBUFFERS) || defined(RENDER_VOXY) || !defined(PHOTONICS_REFLECT_ENABLED))
 		if (hasReflections) { // Skip SSR if ray contribution is low
 			#if defined(PHOTONICS_REFLECT_ENABLED) && !defined(RENDER_VOXY)
-				vec3 localPos = mul3(gbufferModelViewInverse, fragpos);
+//				vec3 localPos = mul3(gbufferModelViewInverse, fragpos);
+				vec3 localPos = toWorldSpace(fragpos);
 				Outdoors = 1.0;
 
 				RayIterator ray;
@@ -203,13 +218,17 @@ void MaterialReflections(
 						hit_color += (hit_sky_NoLm * shadow)/PI * sunCol * 8.0/3.0 / 150.0 + ambientLight;
 					#endif
 
+					#ifdef DEBUG_WHITEWORLD
+						hit_albedo = vec3(1.0);
+					#endif
+
 					Reflections.rgb = hit_color * hit_albedo;
 					Reflections.a = 1.0;
 				}
 				else {
 					#ifdef PHOTONICS_REFLECT_SS_FALLBACK
 						vec3 endViewPos = worldToViewSpace(ray.position - rt_camera_position);
-						vec3 endScreenPos = toClipSpace3(endViewPos);
+						vec3 endScreenPos = toClipSpace3_lod(endViewPos);
 
 						if (all(equal(saturate(endScreenPos.xy), endScreenPos.xy))) {
 							// Scale quality with ray contribution
@@ -217,10 +236,11 @@ void MaterialReflections(
 
 							vec3 rtPos = rayTraceSpeculars(mat3(gbufferModelView) * L, endViewPos, noise.b, rayQuality, hand, fresnel);
 
-							if (rtPos.z < 1.0) { // Reproject on previous frame
-								vec3 previousPosition = mul3(gbufferModelViewInverse, toScreenSpace(rtPos)) + (cameraPosition - previousCameraPosition);
-								previousPosition = mul3(gbufferPreviousModelView, previousPosition);
-								previousPosition.xy = projMAD(gbufferPreviousProjection, previousPosition).xy / -previousPosition.z * 0.5 + 0.5;
+							if (rtPos.z < 1.0) {
+								// Reproject on previous frame
+								vec3 previousPosition = toWorldSpaceCamera(toScreenSpace_lod(rtPos)) - previousCameraPosition;
+								previousPosition = worldToViewSpace_prev(previousPosition);
+								previousPosition = toClipSpace3_lodPrev(previousPosition);
 
 								if (all(equal(saturate(previousPosition.xy), previousPosition.xy))) {
 									Reflections.rgb = texture(TEX_FINAL_PREV, previousPosition.xy).rgb;
@@ -237,17 +257,18 @@ void MaterialReflections(
 				}
 			#else
 				// Scale quality with ray contribution
-				float rayQuality = mix(float(REFLECTION_QUALITY), 0.0, sqrt(roughness));
-
+				float rayQuality = mix(float(REFLECTION_QUALITY), 2.0, sqrt(roughness));
 				vec3 rtPos = rayTraceSpeculars(mat3(gbufferModelView) * L, fragpos, noise.b, rayQuality, hand, fresnel);
 
-				if (rtPos.z < 1.0) { // Reproject on previous frame
-					vec3 previousPosition = mul3(gbufferModelViewInverse, toScreenSpace(rtPos)) + (cameraPosition - previousCameraPosition);
-					previousPosition = mul3(gbufferPreviousModelView, previousPosition);
-					previousPosition.xy = projMAD(gbufferPreviousProjection, previousPosition).xy / -previousPosition.z * 0.5 + 0.5;
+				if (!isDepthSky(rtPos.z)) {
+					// Reproject on previous frame
+					vec3 previousPosition = toScreenSpace_lod(rtPos);
+					previousPosition = toWorldSpaceCamera(previousPosition) - previousCameraPosition;
+					previousPosition = worldToViewSpace_prev(previousPosition);
+					previousPosition = toClipSpace3_lodPrev(previousPosition);
 
 					if (all(equal(saturate(previousPosition.xy), previousPosition.xy))) {
-						Reflections.rgb = texture(TEX_FINAL_PREV, previousPosition.xy).rgb;
+						Reflections.rgb = textureLod(TEX_FINAL_PREV, previousPosition.xy, 0).rgb;
 						Reflections.a = 1.0;
 					}
 				}

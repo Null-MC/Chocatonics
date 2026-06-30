@@ -4,14 +4,16 @@
 #define RENDER_VOXY
 #define RENDER_GBUFFERS
 #define TEX_SKY_LUT gaux1
-#define TEX_FINAL_PREV gaux2
-#define TEX_DEPTH depthtex1
+#define TEX_FINAL_PREV colortex5
+#define TEX_DEPTH_REFLECT texVoxyDepthOpaque
 
 
 // TODO: UNDEFINED!
 const float skyIntensity = 0.0;
 const float skyIntensityNight = 0.0;
 const vec3 nsunColor = vec3(0.0);
+
+uniform mat4 gbufferProjectionInverse;
 
 #include "/lib/blocks.glsl"
 
@@ -29,20 +31,17 @@ const vec3 nsunColor = vec3(0.0);
 #include "/lib/clouds.glsl"
 #include "/lib/stars.glsl"
 
-vec3 toScreenSpace(const in vec3 p) {
-	vec4 iProjDiag = vec4(vxProjInv[0].x, vxProjInv[1].y, vxProjInv[2].zw);
-	vec3 p3 = p * 2.0 - 1.0;
-	vec4 fragposition = iProjDiag * p3.xyzz + vxProjInv[3];
-	return fragposition.xyz / fragposition.w;
+#include "/lib/projections.glsl"
+#include "/lib/lod_projections.glsl"
+
+
+vec3 toScreenSpace_vx(const in vec3 screenPos) {
+	return screenToViewSpace(vxProjInv, screenPos);
 }
 
-vec3 toClipSpace3(const in vec3 viewSpacePosition) {
-	return projMAD(gbufferProjection, viewSpacePosition) / -viewSpacePosition.z * 0.5 + 0.5;
-}
-
-#define toShadowSpace(p) mul3(shadowModelView, p)
-#define toShadowSpaceProjected(p) (diagonal3(shadowProjection) * (p) + shadowProjection[3].xyz)
-#define worldToShadowSpaceProjected(p) toShadowSpaceProjected(toShadowSpace(p))
+//vec3 toClipSpace3_vx(const in vec3 viewSpacePosition) {
+//	return projMAD(gbufferProjection, viewSpacePosition) / -viewSpacePosition.z * 0.5 + 0.5;
+//}
 
 #ifdef MAT_SPECULAR_ENABLED
 	const vec2 v_taa_offset = vec2(0.0);
@@ -51,9 +50,12 @@ vec3 toClipSpace3(const in vec3 viewSpacePosition) {
 
 
 vec3 TangentToWorld(vec3 N, vec3 H) {
-    vec3 UpVector = abs(N.z) < 0.999 ? vec3(0.0, 0.0, 1.0) : vec3(1.0, 0.0, 0.0);
-    vec3 T = normalize(cross(UpVector, N));
-    vec3 B = cross(N, T);
+//    vec3 UpVector = abs(N.z) < 0.999 ? vec3(0.0, 0.0, 1.0) : vec3(-1.0, 0.0, 0.0);
+//    vec3 T = normalize(cross(UpVector, N));
+//    vec3 B = cross(N, T);
+	vec3 UpVector = abs(N.y) < 0.999 ? vec3(0.0, 1.0, 0.0) : vec3(0.0, 0.0, -1.0);
+	vec3 T = normalize(cross(UpVector, N));
+	vec3 B = cross(T, N);
 
     return vec3((T * H.x) + (B * H.y) + (N * H.z));
 }
@@ -66,14 +68,14 @@ layout(location = 1) out vec4 outColor7;
 void voxy_emitFragment(VoxyFragmentParameters parameters) {
 	if (!all(lessThan(gl_FragCoord.xy * texelSize.xy, RENDER_SCALE_2))) return;
 
-	vec2 taa_offset = taa_offsets[framemod8];
-
 	float iswater = 0.0;
+	if (parameters.customId == BLOCK_REFLECTIVE) iswater = 0.01;
 	if (parameters.customId == BLOCK_ICE) iswater = 0.50;
 	if (parameters.customId == BLOCK_WATER) iswater = 1.00;
-	if (parameters.customId == BLOCK_REFLECTIVE) iswater = 0.01;
 
-	vec3 viewPos = toScreenSpace(gl_FragCoord.xyz * vec3(texelSize / RENDER_SCALE, 1.0) - vec3(taa_offset * texelSize * 0.5, 0.0));
+	vec3 screenPos = gl_FragCoord.xyz;
+	screenPos.xy = screenPos.xy * texelSize / RENDER_SCALE - taa_offsets[framemod8] * texelSize * 0.5;
+	vec3 viewPos = toScreenSpace_vx(screenPos);
 
 	outColor2 = parameters.sampledColour * parameters.tinting;
 	vec3 albedo = InputTransform(outColor2.rgb);
@@ -83,17 +85,19 @@ void voxy_emitFragment(VoxyFragmentParameters parameters) {
 	float f0 = 0.04;
 
 	if (iswater > 0.0) {
-		f0 = 0.02; //iswater > 0.1 ? 0.02 : 0.05 * (1.0 - outColor2.a);
-		roughness = 0.02;
+//		f0 = 0.02; //iswater > 0.1 ? 0.02 : 0.05 * (1.0 - outColor2.a);
+//		roughness = 0.02;
 	}
 
 	if (iswater > 0.4) {
+		f0 = 0.018;
 		albedo = vec3(0.42, 0.6, 0.7);
 		outColor2 = vec4(albedo, 0.7);
 		roughness = 0.1;
 	}
 
 	if (iswater > 0.9) {
+		f0 = 0.020;
 		outColor2 = vec4(0.0);
 		roughness = 0.0;
 	}
@@ -116,7 +120,7 @@ void voxy_emitFragment(VoxyFragmentParameters parameters) {
 		float parallaxMult = bumpmult;
 
 		vec3 posxz = localPos + cameraPosition;
-		posxz.xz -= posxz.y;
+		posxz.xz -= posxz.y;// - (2.0/16.0);
 
 		if (iswater < 0.9) posxz.xz *= 3.0;
 
@@ -124,7 +128,7 @@ void voxy_emitFragment(VoxyFragmentParameters parameters) {
 
 		bump = bump * vec3(bumpmult) + vec3(0.0, 0.0, 1.0 - bumpmult);
 
-		localNormal = TangentToWorld(localNormal, bump);
+		localNormal = TangentToWorld(localNormal, normalize(bump));
 	}
 
 	vec3 viewNormal = mat3(vxModelView) * localNormal;
@@ -173,73 +177,6 @@ void voxy_emitFragment(VoxyFragmentParameters parameters) {
 	vec3 diffuseLight = direct + texture(gaux1, (lmcoord * 15.0 + 0.5) * texelSize).rgb;
 	vec3 color = diffuseLight * albedo * 8.0/3.0 / 150.0;
 
-//	if (iswater > 0.0) {
-//		float f0 = iswater > 0.1 ? 0.02 : 0.05 * (1.0 - outColor2.a);
-//
-//		float roughness = 0.02;
-//		float emissive = 0.0;
-////		float F0 = f0;
-//
-//		vec3 reflectedVector = reflect(normalize(viewPos), viewNormal);
-//		float normalDotEye = dot(viewNormal, -normalize(viewPos));
-//		float fresnel = schlick(normalDotEye, f0, 1.0);
-////		float fresnel = pow5(saturate(1.0 + normalDotEye));
-////		fresnel = mix(f0, 1.0, fresnel);
-//
-//		if (iswater > 0.4) {
-//			roughness = 0.1;
-//		}
-//
-//		if (iswater > 0.9) {
-//			roughness = 0.0;
-//		}
-//
-//
-//		vec3 wrefl = mat3(vxModelViewInv) * reflectedVector;
-//		vec3 sky_c = mix(skyCloudsFromTex(wrefl, gaux1).rgb, texture(gaux1, (lmcoord * 15.0 + 0.5) * texelSize).rgb * 0.5, isEyeInWater);
-//		sky_c.rgb *= square(lmcoord.y * 255.0/240.0) / 150.0 * 8.0/3.0;
-//
-//		vec4 reflection = vec4(sky_c.rgb, 0.0);
-//		#ifdef REFLECTION_ENABLED
-//			vec3 rtPos = rayTrace(reflectedVector, viewPos.xyz, blueNoise(gl_FragCoord.xy, frameCounter), fresnel);
-//
-//			if (rtPos.z < 1.0) {
-//				vec3 previousPosition = mul3(vxModelViewInv, toScreenSpace(rtPos));
-//				previousPosition += cameraPosition - previousCameraPosition;
-//				previousPosition = mul3(gbufferPreviousModelView, previousPosition);
-//
-//				previousPosition.xy = projMAD(vxProjPrev, previousPosition).xy / -previousPosition.z * 0.5 + 0.5;
-//
-////				if (previousPosition.x > 0.0 && previousPosition.y > 0.0 && previousPosition.x < 1.0 && previousPosition.x < 1.0) {
-//				if (all(equal(saturate(previousPosition.xy), previousPosition.xy))) {
-//					reflection.rgb = texture(gaux2, previousPosition.xy).rgb;
-//					reflection.a = 1.0;
-//				}
-//			}
-//		#endif
-//
-//		reflection.rgb = mix(sky_c.rgb, reflection.rgb, reflection.a);
-//
-//		vec3 lightCol = texelFetch(gaux1, ivec2(6, 37), 0).rgb / PI;
-//		vec3 sunSpec = GGX(viewNormal, -normalize(viewPos), lightSign*sunVec, rainStrength*0.2 + roughness + 0.05+saturate(lightSign * -0.15), f0) * lightCol * 8.0/3.0 / 150.0;
-//		sunSpec *= 1.0 - 0.9*rainStrength;
-//
-////		vec3 reflected = reflection.rgb + shading * sunSpec;
-//
-////		float alpha0 = outColor2.a;
-//
-//		// correct alpha channel with fresnel
-////		outColor2.a = -outColor2.a * fresnel + outColor2.a + fresnel;
-////		outColor2.rgb = clamp(color/outColor2.a * alpha0 * (1.0 - fresnel) * 0.1+reflected/outColor2.a * 0.1, 0.0, 65100.0);
-//		outColor2.rgb = mix(color * outColor2.a, reflection.rgb, fresnel) + shading * sunSpec;
-//		outColor2.rgb = clamp(outColor2.rgb * 0.1, 0.0, 65100.0);
-//
-//		if (outColor2.r > 65000.0) outColor2.rgba = vec4(0.0);
-//	}
-//	else {
-//		outColor2.rgb = color * 0.1;
-//	}
-
 	vec3 localViewDir = normalize(localPos);
 	float F = schlick(dot(localNormal, -localViewDir), f0, 1.0);
 
@@ -252,9 +189,6 @@ void voxy_emitFragment(VoxyFragmentParameters parameters) {
 
 		vec2 noise2 = blueNoise(texBlueNoise, gl_FragCoord.xy).rg;
 		vec3 lightCol2 = texelFetch(TEX_SKY_LUT, ivec2(6, 37), 0).rgb;// / PI;
-
-//		vec3 localNormal = mat3(gbufferModelViewInverse) * normal;
-//		vec3 localViewDir = normalize(localPos);
 
 		float lightCol_a = float(sunElevation > 1.e-5) * 2.0 - 1.0;
 		vec3 localSunDir = normalize(mat3(gbufferModelViewInverse) * sunPosition);

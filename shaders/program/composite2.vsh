@@ -5,37 +5,24 @@
 
 
 out VertexData {
-	flat vec4 lightCol;
-	flat vec3 WsunVec;
-	flat vec3 ambientUp;
-	flat vec3 ambientLeft;
-	flat vec3 ambientRight;
-	flat vec3 ambientB;
-	flat vec3 ambientF;
-	flat vec3 ambientDown;
-//	flat float tempOffsets;
-	flat vec2 TAA_Offset;
-//	flat vec3 zMults;
-	flat vec3 refractedSunVec;
+	flat vec3 sunVecW;
+	flat vec2 taa_offset;
 } vOut;
 
-uniform sampler2D colortex4;
-
-uniform float far;
-uniform float near;
-uniform mat4 gbufferModelViewInverse;
-uniform vec3 sunPosition;
-uniform float sunElevation;
 uniform int frameCounter;
-
-#include "/lib/util.glsl"
+uniform float sunElevation;
+uniform vec3 sunPosition;
+uniform mat4 gbufferModelViewInverse;
 
 
 void main() {
+	vec3 localSunDir = normalize(mat3(gbufferModelViewInverse) * sunPosition);
+	vOut.sunVecW = (float(sunElevation > 1.e-5) * 2.0 - 1.0) * localSunDir;
+
 	#ifdef TAA_ENABLED
-		vOut.TAA_Offset = taa_offsets[frameCounter % 8];
+		vOut.taa_offset = taa_offsets[frameCounter % 8];
 	#else
-		vOut.TAA_Offset = vec2(0.0);
+		vOut.taa_offset = vec2(0.0);
 	#endif
 
 	gl_Position = ftransform();
@@ -43,22 +30,4 @@ void main() {
 	#ifdef TAA_UPSCALING
 		gl_Position.xy = (gl_Position.xy * 0.5 + 0.5) * RENDER_SCALE * 2.0 - 1.0;
 	#endif
-
-//	vOut.tempOffsets = HaltonSeq2(frameCounter % 10000);
-
-	vOut.lightCol.a = float(sunElevation > 1.e-5) * 2.0 - 1.0;
-	vOut.lightCol.rgb = texelFetch(colortex4, ivec2(6, 37), 0).rgb;
-
-	vOut.ambientUp = texelFetch(colortex4, ivec2(0, 37), 0).rgb;
-	vOut.ambientDown = texelFetch(colortex4, ivec2(1, 37), 0).rgb;
-	vOut.ambientLeft = texelFetch(colortex4, ivec2(2, 37), 0).rgb;
-	vOut.ambientRight = texelFetch(colortex4, ivec2(3, 37), 0).rgb;
-	vOut.ambientB = texelFetch(colortex4, ivec2(4, 37), 0).rgb;
-	vOut.ambientF = texelFetch(colortex4, ivec2(5, 37), 0).rgb;
-
-	vec3 localSunDir = normalize(mat3(gbufferModelViewInverse) * sunPosition);
-
-	vOut.WsunVec = vOut.lightCol.a * localSunDir;
-//	vOut.zMults = vec3((far * near) * 2.0, far+near, far-near);
-	vOut.refractedSunVec = refract(vOut.WsunVec, -vec3(0.0, 1.0, 0.0), 1.0/1.33333);
 }

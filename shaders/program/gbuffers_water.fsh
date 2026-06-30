@@ -6,7 +6,12 @@
 #define RENDER_GBUFFERS
 #define TEX_SKY_LUT gaux1
 #define TEX_FINAL_PREV gaux2
-#define TEX_DEPTH depthtex1
+
+#ifdef VOXY
+	#define TEX_DEPTH_REFLECT texVoxyDepthOpaque
+#else
+	#define TEX_DEPTH_REFLECT depthtex1
+#endif
 
 
 in VertexData {
@@ -26,13 +31,10 @@ uniform sampler2D TEX_SKY_LUT;
 uniform sampler2D gaux2;
 uniform sampler2D texWave;
 uniform sampler2D texDepthQ;
-uniform sampler2D depthtex1;
+uniform sampler2D TEX_DEPTH_REFLECT;
 
-#ifdef MC_NORMAL_MAP
+#ifdef MAT_PBR_ENABLED
 	uniform sampler2D normals;
-#endif
-
-#ifdef MAT_SPECULAR_ENABLED
 	uniform sampler2D specular;
 #endif
 
@@ -78,6 +80,7 @@ uniform int framemod8;
 #include "/lib/material.glsl"
 #include "/lib/blueNoise.glsl"
 #include "/lib/projections.glsl"
+#include "/lib/lod_projections.glsl"
 #include "/lib/Shadow_Params.glsl"
 #include "/lib/shadowSampling.glsl"
 #include "/lib/color_transforms.glsl"
@@ -92,14 +95,18 @@ uniform int framemod8;
 	#include "/photonics/trace_ray.glsl"
 #endif
 
-#ifdef MC_NORMAL_MAP
+#ifdef MAT_PBR_ENABLED
 	#include "/lib/normal_map.glsl"
 #endif
 
-#ifdef MAT_SPECULAR_ENABLED
+#ifdef CLOUDS_SHADOWS
+	#include "/lib/volumetricClouds.glsl"
+#endif
+
+//#ifdef MAT_SPECULAR_ENABLED
 	const vec2 v_taa_offset = vec2(0.0);
 	#include "/lib/specular.glsl"
-#endif
+//#endif
 
 
 float cdist(vec2 coord) {
@@ -160,24 +167,26 @@ void main() {
 	#endif
 
 	if (iswater > 0.0) {
-		f0 = 0.02;//iswater > 0.1 ? 0.02 : 0.05 * (1.0 - outColor2.a);
-		roughness = 0.02;
+//		f0 = 0.02;//iswater > 0.1 ? 0.02 : 0.05 * (1.0 - outColor2.a);
+//		roughness = 0.02;
 	}
 
 	if (iswater > 0.4) {
+		f0 = 0.018;
 		albedo = vec3(0.42, 0.6, 0.7);
 		outColor2 = vec4(albedo, 0.7);
 		roughness = 0.1;
 	}
 
 	if (iswater > 0.9) {
+		f0 = 0.020;
 		outColor2 = vec4(0.0);
 		roughness = 0.0;
 	}
 
 	vec3 normal = vIn.normalMat.xyz;
 
-	vec3 localPos = mul3(gbufferModelViewInverse, viewPos);
+	vec3 localPos = toWorldSpace(viewPos);
 
 	mat3 tbnMatrix = mat3(
 		vIn.tangent.x, vIn.binormal.x, normal.x,
@@ -204,7 +213,7 @@ void main() {
 		normal = normalize(bump * tbnMatrix);
 	}
 	else {
-		#ifdef MC_NORMAL_MAP
+		#ifdef MAT_PBR_ENABLED
 			const float wetness = 0.0; // TODO
 			vec3 tex_normal = mat_normal(texture(normals, vIn.lmtexcoord.xy).rgb);
 			normal = applyBump(tbnMatrix, tex_normal, wetness);
@@ -248,6 +257,21 @@ void main() {
 
 			direct *= shading / SHADOW_FILTER_SAMPLE_COUNT;
 		}
+
+		#ifdef CLOUDS_SHADOWS
+			vec3 world_pos = localPos + cameraPosition;
+			vec3 localSkyLightDir = mat3(gbufferModelViewInverse) * sunVec;
+
+			const int rayMarchSteps = 6;
+			float cloudShadow = 0.0;
+
+			for (int i = 0; i < rayMarchSteps; i++) {
+				vec3 cloudPos = world_pos + localSkyLightDir / abs(localSkyLightDir.y) * (1500 + (noise+i) / rayMarchSteps*1700 - world_pos.y);
+				cloudShadow += getCloudDensity(cloudPos, 0);
+			}
+
+			shading *= mix(1.0, exp(-cloudShadow * cloudDensity * 1700/rayMarchSteps), mix(CLOUDS_SHADOWS_STRENGTH, 1.0, rainStrength));
+		#endif
 	}
 
 	direct *= (iswater > 0.9 ? 0.2 : 1.0) * diffuseSun * vIn.lmtexcoord.w;
@@ -264,7 +288,7 @@ void main() {
 	outColor2.rgb = color * outColor2.a;
 	outColor2.a = max(outColor2.a, F);
 
-	#ifdef MAT_SPECULAR_ENABLED
+//	#ifdef MAT_SPECULAR_ENABLED
 		const bool hand = false;
 
 		vec2 noise2 = blueNoise(texBlueNoise, gl_FragCoord.xy).rg;
@@ -278,7 +302,7 @@ void main() {
 		vec3 WsunVec = lightCol_a * localSunDir;
 
 		MaterialReflections(outColor2.rgb, roughness, f0, albedo, WsunVec, lightCol2, vec3(shading * diffuseSun), vIn.lmtexcoord.w, localNormal, localViewDir, viewPos, vec3(noise2, noise), hand);
-	#endif
+//	#endif
 
 	outColor2.rgb = clamp(outColor2.rgb * 0.1, 0.0, 65100.0);
 	outColor7 = vec4(albedo, iswater);

@@ -37,15 +37,15 @@ float maxHeight = 3200.0;
 	const int cloudShadowLoD = cloud_ShadowLevelOfDetailLQ;
 #endif
 
-vec4 smoothfilter(in sampler2D tex, in vec2 uv) {
-	uv = uv*512.0 + 0.5;
-	vec2 iuv = floor(uv);
-	vec2 fuv = fract(uv);
-
-	uv = iuv + (fuv*fuv)*(3.0-2.0*fuv);
-	uv = uv/512.0 - 0.5/512.0;
-	return texture(tex, uv);
-}
+//vec4 smoothfilter(in sampler2D tex, in vec2 uv) {
+//	uv = uv*512.0 + 0.5;
+//	vec2 iuv = floor(uv);
+//	vec2 fuv = fract(uv);
+//
+//	uv = iuv + (fuv*fuv)*(3.0-2.0*fuv);
+//	uv = uv/512.0 - 0.5/512.0;
+//	return texture(tex, uv);
+//}
 
 // 3D noise from 2d texture
 float densityAtPos(in vec3 pos) {
@@ -269,7 +269,7 @@ vec4 renderClouds(vec3 viewPos, vec3 color, float dither, vec3 sunColor, vec3 mo
 		vec3 normView = normalize(dV_view);
 
 		// Assume fog color = sky gradient at long distance
-		vec3 fogColor = skyFromTex(normView, colortex4)/150.0;
+		vec3 fogColor = skyFromTex(normView, TEX_SKY_LUT)/150.0;
 		float dist = (cloud_height - cameraPosition.y)/normalize(dV_view).y;
 		float fog = exp(-dist/40000.0 * (1.0 + rainStrength*2.0));
 

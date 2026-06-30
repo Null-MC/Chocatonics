@@ -23,7 +23,7 @@ void main() {
     vec4 data = imageLoad(colorimg4, uv);
 
     float currCenterDepth = texture(depthtex0, vec2(0.5) * RENDER_SCALE).r;
-    currCenterDepth = linZ(currCenterDepth, nearPlane, farPlane) * farPlane;
+    currCenterDepth = depthScreenToLinear(currCenterDepth, nearPlane, farPlane);// * farPlane;
 
     float prevCenterDepth = sqrt(data.g / 65000.0) * farPlane;
     float mixF = DoF_Adaptation_Speed * exp(-0.016/frameTime + 1.0) / (6.0 + currCenterDepth);

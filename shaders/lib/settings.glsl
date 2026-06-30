@@ -173,20 +173,23 @@ const vec3 TorchColor = vec3(TORCH_R, TORCH_G, TORCH_B);
 
 // AUTOMATION
 
+#define MAT_PBR_ENABLED
+
 #if MAT_FORMAT == 0 && !defined(MC_TEXTURE_FORMAT_LAB_PBR)
+    #undef MAT_PBR_ENABLED
     #undef MAT_SPECULAR_ENABLED
 #endif
 
-#if !defined(MAT_PARALLAX_GENERATED) && !defined(MC_NORMAL_MAP)
+#if !defined(MAT_PARALLAX_GENERATED) && !defined(MAT_PBR_ENABLED)
     #undef MAT_PARALLAX_ENABLED
 #endif
 
 #ifdef MAT_POROSITY_INTEGRATED
 #endif
 
-#ifdef MAT_PARALLAX_ENABLED
-    #define MC_NORMAL_MAP
-#endif
+//#ifdef MAT_PARALLAX_ENABLED
+//    #define MC_NORMAL_MAP
+//#endif
 
 //#if MAT_FORMAT != 0 || defined(MC_TEXTURE_FORMAT_LAB_PBR)
 //    #define MC_SPECULAR_MAP

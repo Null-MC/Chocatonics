@@ -28,7 +28,7 @@ void main() {
     float depthL;
 
     if (depth < 1.0) {
-        float z = linZ(depth, nearPlane, farPlane);
+        float z = depthScreenToLinear(depth, nearPlane, farPlane) / farPlane;
         depthL = z*z * 65000.0;
     }
     else {

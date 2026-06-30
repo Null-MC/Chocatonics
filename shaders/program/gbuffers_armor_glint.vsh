@@ -4,7 +4,7 @@
 #include "/lib/settings.glsl"
 
 
-//#ifdef MC_NORMAL_MAP
+//#ifdef MAT_PBR_ENABLED
 //	in vec4 at_tangent;
 //#endif
 
@@ -13,7 +13,7 @@ out VertexData {
 	vec4 color;
 //	vec4 normalMat;
 
-//	#ifdef MC_NORMAL_MAP
+//	#ifdef MAT_PBR_ENABLED
 //		vec4 tangent;
 //	#endif
 } vOut;
@@ -38,7 +38,7 @@ void main() {
 
 	gl_Position = toClipSpace3(mul3(gl_ModelViewMatrix, gl_Vertex.xyz));
 
-//	#ifdef MC_NORMAL_MAP
+//	#ifdef MAT_PBR_ENABLED
 //		vOut.tangent = vec4(normalize(gl_NormalMatrix * at_tangent.rgb), at_tangent.w);
 //	#endif
 

@@ -2,7 +2,7 @@
 
 // Vignetting, applies bloom, applies exposure and tonemaps the final image
 
-//#define TEX_DEBUG TEX_GB_SPECULAR
+//#define TEX_DEBUG TEX_GB_NORMAL
 
 #include "/lib/common.glsl"
 #include "/lib/settings.glsl"
@@ -16,6 +16,7 @@ uniform sampler2D colortex7;
 
 #ifdef TEX_DEBUG
     uniform sampler2D TEX_DEBUG;
+    #include "/lib/octohedral.glsl"
 #endif
 
 uniform vec2 texelSize;
@@ -109,9 +110,9 @@ void main() {
     col = col + diff * (-lum * CROSSTALK + SATURATION);
 
     #ifdef TEX_DEBUG
-        vec2 texcoord = (gl_FragCoord.xy - 8.0) / 256.0;
+        vec2 texcoord = (gl_FragCoord.xy - 8.0) / 512.0;
         if (all(equal(saturate(texcoord), texcoord))) {
-            col = texture(TEX_DEBUG, texcoord).rgb;
+            col = OctDecode(texture(TEX_DEBUG, texcoord).ba) * 0.5 + 0.5;
             col = linearToSRGB(col);
         }
     #endif

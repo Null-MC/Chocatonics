@@ -9,12 +9,12 @@ out VertexData {
 	vec4 color;
 	vec3 normalMat;
 
-	#ifdef MC_NORMAL_MAP
+	#ifdef MAT_PBR_ENABLED
 		vec4 tangent;
 	#endif
 } vOut;
 
-#ifdef MC_NORMAL_MAP
+#ifdef MAT_PBR_ENABLED
 	attribute vec4 at_tangent;
 #endif
 
@@ -33,7 +33,7 @@ void main() {
 
 	vOut.normalMat = normalize(gl_NormalMatrix * gl_Normal);
 
-	#ifdef MC_NORMAL_MAP
+	#ifdef MAT_PBR_ENABLED
 		vOut.tangent = vec4(normalize(gl_NormalMatrix * at_tangent.rgb), at_tangent.w);
 	#endif
 

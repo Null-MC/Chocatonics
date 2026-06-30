@@ -7,21 +7,22 @@
 in vec4 mc_Entity;
 in vec4 mc_midTexCoord;
 
-#ifdef MC_NORMAL_MAP
+#ifdef MAT_PBR_ENABLED
 	in vec4 at_tangent;
 #endif
 
 out VertexData {
 	vec4 lmtexcoord;
 	vec4 color;
-	vec4 normalMat;
+	vec3 normalMat;
+	flat int blockId;
 
 	#ifdef MAT_PARALLAX_ENABLED
 		vec4 vtexcoordam; // .st for add, .pq for mul
 		vec4 vtexcoord;
 	#endif
 
-	#ifdef MC_NORMAL_MAP
+	#ifdef MAT_PBR_ENABLED
 		vec4 tangent;
 	#endif
 } vOut;
@@ -33,13 +34,16 @@ uniform vec3 cameraPosition;
 uniform vec2 texelSize;
 uniform int framemod8;
 
+uniform mat4 gbufferProjectionInverse;
+
 #include "/lib/blocks.glsl"
+#include "/lib/projections.glsl"
 #include "/lib/windWaving.glsl"
 
 
-vec4 toClipSpace3(const in vec3 viewSpacePosition) {
-	return vec4(projMAD(gl_ProjectionMatrix, viewSpacePosition), -viewSpacePosition.z);
-}
+//vec4 toNdcSpace(const in vec3 viewSpacePosition) {
+//	return vec4(projMAD(gl_ProjectionMatrix, viewSpacePosition), -viewSpacePosition.z);
+//}
 
 
 void main() {
@@ -58,35 +62,36 @@ void main() {
 	vOut.color = gl_Color;
 
 	bool istopv = gl_MultiTexCoord0.t < mc_midTexCoord.t;
-	#ifdef MC_NORMAL_MAP
+	#ifdef MAT_PBR_ENABLED
 		vOut.tangent = vec4(normalize(gl_NormalMatrix * at_tangent.rgb), at_tangent.w);
 	#endif
 
-	vOut.normalMat.xyz = normalize(gl_NormalMatrix * gl_Normal);
-	vOut.normalMat.w = (mc_Entity.x == BLOCK_SSS || mc_Entity.x == BLOCK_PLANT_WAVING_FULL || mc_Entity.x == BLOCK_PLANT_WAVING_TOP) ? 0.5 : 1.0;
+	vOut.normalMat = normalize(gl_NormalMatrix * gl_Normal);
+//	vOut.normalMat.w = (mc_Entity.x == BLOCK_SSS || mc_Entity.x == BLOCK_PLANT_WAVING_FULL || mc_Entity.x == BLOCK_PLANT_WAVING_TOP) ? 0.5 : 1.0;
+	vOut.blockId = int(mc_Entity.x);
 
-	if (mc_Entity.x == BLOCK_IDK) vOut.normalMat.a = 0.6;
+//	if (mc_Entity.x == BLOCK_IDK) vOut.normalMat.a = 0.6;
 
 	#ifdef WAVY_PLANTS
-		if ((mc_Entity.x == BLOCK_PLANT_WAVING_TOP && istopv) && abs(position.z) < 64.0) {
-    		vec3 worldpos = mat3(gbufferModelViewInverse) * position + gbufferModelViewInverse[3].xyz + cameraPosition;
+		if ((vOut.blockId == BLOCK_PLANT_WAVING_TOP && istopv) && abs(position.z) < 64.0) {
+    		vec3 worldpos = toWorldSpaceCamera(position);
 			worldpos.xyz += calcMovePlants(worldpos.xyz) * vOut.lmtexcoord.w - cameraPosition;
-    		position = mul3(gbufferModelView, worldpos);
+    		position = worldToViewSpace(worldpos);
 		}
 
-		if (mc_Entity.x == BLOCK_PLANT_WAVING_FULL && abs(position.z) < 64.0) {
-    		vec3 worldpos = mat3(gbufferModelViewInverse) * position + gbufferModelViewInverse[3].xyz + cameraPosition;
+		if (vOut.blockId == BLOCK_PLANT_WAVING_FULL && abs(position.z) < 64.0) {
+			vec3 worldpos = toWorldSpaceCamera(position);
 			worldpos.xyz += calcMoveLeaves(worldpos.xyz, 0.0040, 0.0064, 0.0043, 0.0035, 0.0037, 0.0041, vec3(1.0, 0.2, 1.0), vec3(0.5, 0.1, 0.5)) * vOut.lmtexcoord.w - cameraPosition;
-    		position = mul3(gbufferModelView, worldpos);
+    		position = worldToViewSpace(worldpos);
 		}
 	#endif
 
-	if (mc_Entity.x == BLOCK_EMISSIVE) {
-		vOut.color.rgb = normalize(vOut.color.rgb) * sqrt(3.0);
-		vOut.normalMat.a = 0.9;
-	}
+//	if (mc_Entity.x == BLOCK_EMISSIVE) {
+//		vOut.color.rgb = normalize(vOut.color.rgb) * sqrt(3.0);
+//		vOut.normalMat.a = 0.9;
+//	}
 
-	gl_Position = toClipSpace3(position);
+	gl_Position = viewToNdcSpace(gl_ProjectionMatrix, position);
 
 	#ifdef SEPARATE_AO
 		vOut.lmtexcoord.z *= sqrt(vOut.color.a);

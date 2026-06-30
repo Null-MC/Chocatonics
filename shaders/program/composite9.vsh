@@ -4,16 +4,20 @@
 #include "/lib/settings.glsl"
 
 
-uniform float viewWidth;
-uniform float viewHeight;
+out vec2 texcoord;
+flat out float exposureA;
+flat out float tempOffsets;
+
+uniform sampler2D colortex4;
+uniform int frameCounter;
+
+#include "/lib/util.glsl"
 
 
 void main() {
-	// Improves performances and makes sure bloom radius stays the same at high resolution (>1080p)
-	vec2 clampedRes = max(vec2(viewWidth, viewHeight), vec2(1920.0, 1080.0));
-
 	gl_Position = ftransform();
+	texcoord = gl_MultiTexCoord0.xy;
 
-	// *0.51 to avoid errors when sampling outside since clearing is disabled
-	gl_Position.xy = (gl_Position.xy * 0.5 + 0.5) * 0.51 * BLOOM_QUALITY / clampedRes * vec2(1920.0, 1080.0) * 2.0 - 1.0;
+	tempOffsets = HaltonSeq2(frameCounter % 10000);
+	exposureA = texelFetch(colortex4, ivec2(10, 37), 0).r;
 }

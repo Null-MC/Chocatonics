@@ -9,18 +9,15 @@ in VertexData {
 	vec4 color;
 	vec4 normalMat;
 
-	#ifdef MC_NORMAL_MAP
+	#ifdef MAT_PBR_ENABLED
 		vec4 tangent;
 	#endif
 } vIn;
 
 uniform sampler2D gtexture;
 
-#ifdef MC_NORMAL_MAP
+#ifdef MAT_PBR_ENABLED
 	uniform sampler2D normals;
-#endif
-
-#ifdef MC_TEXTURE_FORMAT_LAB_PBR
 	uniform sampler2D specular;
 #endif
 
@@ -32,7 +29,7 @@ uniform float alphaTestRef;
 #include "/lib/material.glsl"
 #include "/lib/octohedral.glsl"
 
-#ifdef MC_NORMAL_MAP
+#ifdef MAT_PBR_ENABLED
 //	const float wetness = 0.0;
 	#include "/lib/normal_map.glsl"
 #endif
@@ -57,7 +54,7 @@ void main() {
 
 	vec3 normal = vIn.normalMat.xyz;
 
-	#ifdef MC_NORMAL_MAP
+	#ifdef MAT_PBR_ENABLED
 		vec3 bitangent = normalize(cross(vIn.tangent.rgb, normal) * vIn.tangent.w);
 
 		mat3 tbnMatrix = mat3(
@@ -71,7 +68,7 @@ void main() {
 		normal = applyBump(tbnMatrix, tex_normal, wetness);
 	#endif
 
-	#ifdef MC_TEXTURE_FORMAT_LAB_PBR
+	#ifdef MAT_PBR_ENABLED
 		vec4 specularData = texture(specular, vIn.lmtexcoord.xy);
 
 		float smoothness = specularData.r;

@@ -5,7 +5,7 @@
 
 #define TEX_SKY_LUT gaux1
 #define TEX_FINAL_PREV gaux2
-#define TEX_DEPTH depthtex1
+#define TEX_DEPTH_REFLECT depthtex1
 
 
 in VertexData {
@@ -13,7 +13,7 @@ in VertexData {
 	vec4 color;
 	vec4 normalMat;
 
-	#ifdef MC_NORMAL_MAP
+	#ifdef MAT_PBR_ENABLED
 		vec4 tangent;
 	#endif
 } vIn;
@@ -27,11 +27,8 @@ uniform sampler2D gaux2;
 uniform sampler2D texDepthQ;
 uniform sampler2D depthtex1;
 
-#ifdef MC_NORMAL_MAP
+#ifdef MAT_PBR_ENABLED
 	uniform sampler2D normals;
-#endif
-
-#ifdef MAT_SPECULAR_ENABLED
 	uniform sampler2D specular;
 #endif
 
@@ -78,6 +75,7 @@ uniform int framemod8;
 #include "/lib/material.glsl"
 #include "/lib/blueNoise.glsl"
 #include "/lib/projections.glsl"
+#include "/lib/lod_projections.glsl"
 #include "/lib/Shadow_Params.glsl"
 #include "/lib/shadowSampling.glsl"
 #include "/lib/color_transforms.glsl"
@@ -85,7 +83,7 @@ uniform int framemod8;
 #include "/lib/clouds.glsl"
 #include "/lib/stars.glsl"
 
-#ifdef MC_NORMAL_MAP
+#ifdef MAT_PBR_ENABLED
 	#include "/lib/normal_map.glsl"
 #endif
 
@@ -113,7 +111,7 @@ void main() {
 
 	vec3 albedo = InputTransform(outColor2.rgb);
 
-	#ifdef MAT_SPECULAR_ENABLED
+	#ifdef MAT_PBR_ENABLED
 		vec4 specularData = texture(specular, vIn.lmtexcoord.xy);
 		float roughness = mat_roughness(specularData.r);
 		float emissive = mat_emission(specularData);
@@ -132,7 +130,7 @@ void main() {
 
 	vec3 normal = vIn.normalMat.xyz;
 
-	#ifdef MC_NORMAL_MAP
+	#ifdef MAT_PBR_ENABLED
 		vec3 binormal = normalize(cross(vIn.tangent.xyz, normal) * vIn.tangent.w);
 
 		mat3 tbnMatrix = mat3(

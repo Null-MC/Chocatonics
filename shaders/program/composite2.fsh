@@ -1,530 +1,86 @@
 #version 430 compatibility
 
-//Render sky, volumetric clouds, direct lighting
-
 #include "/lib/common.glsl"
 #include "/lib/settings.glsl"
 
-#define TEX_SKY_LUT colortex4
-#define TEX_FINAL_PREV colortex5
-#define TEX_DEPTH depthtex1
+#ifdef VOXY
+	#define TEX_DEPTH_OPAQUE texVoxyDepthOpaque
+#else
+	#define TEX_DEPTH_OPAQUE depthtex1
+#endif
 
 
 in VertexData {
-	flat vec4 lightCol; // main light source color (rgb), used light source (1=sun, -1=moon)
-	flat vec3 WsunVec;
-	flat vec3 ambientUp;
-	flat vec3 ambientLeft;
-	flat vec3 ambientRight;
-	flat vec3 ambientB;
-	flat vec3 ambientF;
-	flat vec3 ambientDown;
-//	flat float tempOffsets;
-	flat vec2 TAA_Offset;
-	flat vec3 refractedSunVec;
+	flat vec3 sunVecW;
+	flat vec2 taa_offset;
 } vIn;
 
-uniform sampler2D TEX_GB_COLOR;
 uniform sampler2D TEX_GB_NORMAL;
 uniform sampler2D TEX_GB_SPECULAR;
 uniform sampler2D TEX_GB_WORLD;
-uniform sampler2D colortex0;//clouds
-//uniform sampler2D colortex1;//albedo(rgb),material(alpha) RGBA16
-uniform sampler2D TEX_SKY_LUT;//Skybox
-uniform sampler2D colortex3;
-uniform sampler2D colortex5;
-uniform sampler2D colortex7;
-uniform sampler2D depthtex1;//depth
-uniform sampler2D depthtex0;//depth
-uniform sampler2D noisetex;//depth
-uniform sampler2D texBlueNoise;
-uniform sampler2D texDepthQ;
-uniform sampler2DShadow shadowtex0HW;
+//uniform sampler2D depthtex1;
+uniform sampler2D shadowtex0;
+uniform sampler2D noisetex;
+//uniform sampler2D texBlueNoise;
 
-#ifdef SHADOW_COLORED
-	uniform sampler2DShadow shadowtex1HW;
-	uniform sampler2D shadowcolor0;
-#endif
+uniform sampler2D TEX_DEPTH_OPAQUE;
 
-#ifdef REFLECTION_ENABLED
-	uniform sampler2D gaux2;
-#endif
-
-//#ifdef PH_ENABLE_GI
-//	uniform sampler2D texPhotonicsIndirect;
-//#endif
-
-uniform int heldBlockLightValue;
-uniform int frameCounter;
-uniform int isEyeInWater;
-uniform float far;
-uniform float near;
-//uniform float wetness;
-uniform float rainStrength;
+uniform vec3 sunVec;
+uniform vec2 texelSize;
 uniform float frameTimeCounter;
+uniform float rainStrength;
+uniform int frameCounter;
 uniform mat4 gbufferProjection;
 uniform mat4 gbufferProjectionInverse;
 uniform mat4 gbufferModelViewInverse;
-uniform mat4 gbufferPreviousModelView;
-uniform mat4 gbufferPreviousProjection;
-uniform vec3 previousCameraPosition;
 uniform mat4 shadowModelView;
 uniform mat4 shadowProjection;
-uniform mat4 gbufferModelView;
-uniform float viewWidth;
-uniform float viewHeight;
-uniform float aspectRatio;
-uniform vec2 texelSize;
 uniform vec3 cameraPosition;
-uniform vec3 sunVec;
-uniform ivec2 eyeBrightnessSmooth;
-uniform int framemod8;
+uniform float viewWidth;
+uniform float aspectRatio;
+uniform float viewHeight;
+uniform float far;
+uniform float near;
 
+uniform mat4 gbufferPreviousProjection;
 
-vec3 toScreenSpacePrev(vec3 p) {
-	vec4 iProjDiag = vec4(gbufferProjectionInverse[0].x, gbufferProjectionInverse[1].y, gbufferProjectionInverse[2].zw);
-    vec3 p3 = p * 2.0 - 1.0;
-    vec4 fragposition = iProjDiag * p3.xyzz + gbufferProjectionInverse[3];
-    return fragposition.xyz / fragposition.w;
-}
-
-#include "/lib/r2.glsl"
 #include "/lib/ign.glsl"
-#include "/lib/ggx.glsl"
-#include "/lib/dither.glsl"
-#include "/lib/fresnel.glsl"
-#include "/lib/bicubic.glsl"
 #include "/lib/blueNoise.glsl"
 #include "/lib/octohedral.glsl"
 #include "/lib/projections.glsl"
-#include "/lib/waterOptions.glsl"
+#include "/lib/lod_projections.glsl"
 #include "/lib/Shadow_Params.glsl"
 #include "/lib/shadowSampling.glsl"
-#include "/lib/color_transforms.glsl"
-#include "/lib/sky_gradient.glsl"
-#include "/lib/stars.glsl"
-#include "/lib/volumetricClouds.glsl"
-
-vec2 v_taa_offset = vIn.TAA_Offset;
-#include "/lib/specular.glsl"
-
-#if defined(PHOTONICS_BLOCK_LIGHT_ENABLED) || defined(PHOTONICS_HAND_LIGHT_ENABLED) || defined(PHOTONICS_GI_ENABLED)
-	#include "/photonics/samplers.glsl"
-#endif
-
-
-float rayTraceShadow(vec3 dir, vec3 position, float dither) {
-    const int quality = 16;
-
-    vec3 clipPosition = toClipSpace3(position);
-
-	// prevents the ray from going behind the camera
-	float rayLength = ((position.z + dir.z * farPlane*sqrt(3.0)) > -nearPlane) ?
-       (-nearPlane -position.z) / dir.z : farPlane*sqrt(3.0);
-
-    vec3 direction = toClipSpace3(dir * rayLength + position) - clipPosition;  // convert to clip space
-    direction.xyz = direction.xyz / max(abs(direction.x) / texelSize.x, abs(direction.y) / texelSize.y);	// fixed step size
-
-    vec3 stepv = direction * 3.0 * clamp(MC_RENDER_QUALITY, 1.0, 2.0) * vec3(RENDER_SCALE_2, 1.0);
-
-	vec3 spos = clipPosition * vec3(RENDER_SCALE_2, 1.0) + vec3(vIn.TAA_Offset * texelSize.xy * 0.5, 0.0) + stepv * dither;
-
-	for (int i = 0; i < quality; i++) {
-		spos += stepv;
-
-		float sp = texture(depthtex1, spos.xy).x;
-
-        if (sp < spos.z) {
-			float z2 = linZ(spos.z, nearPlane, farPlane);
-			float dist = abs(linZ(sp, nearPlane, farPlane) - z2) / z2;
-
-			if (dist < 0.01) return 0.0;
-		}
-	}
-
-    return 1.0;
-}
-
-vec2 tapLocation_AO(int sampleNumber, float spinAngle, int nb, float nbRot, float r0) {
-	float alpha = (float(sampleNumber * 1.0f + r0) * (1.0 / nb));
-	float angle = alpha * nbRot * 6.28 + spinAngle*6.28;
-
-	return vec2(cos(angle), sin(angle)) * alpha;
-}
-
-vec3 BilateralFiltering(sampler2D tex, sampler2D depth, vec2 coord, float frDepth, float maxZ) {
-	vec4 sampled = vec4(texelFetch(tex, ivec2(coord), 0).rgb, 1.0);
-	return vec3(sampled.x, sampled.yz / sampled.w);
-}
-
-float waterCaustics(vec3 wPos, vec3 lightSource) {
-	vec2 pos = (wPos.xz - lightSource.xz/lightSource.y * wPos.y) * 4.0;
-	vec2 movement = vec2(-0.02 * frameTimeCounter);
-
-	float caustic = 0.0;
-	float weightSum = 0.0;
-	float radiance = 2.39996;
-
-	mat2 rotationMatrix  = mat2(
-		vec2(cos(radiance), -sin(radiance)),
-		vec2(sin(radiance),  cos(radiance)));
-
-	vec2 displ = texture(noisetex, pos * vec2(3.0, 1.0) / 96.0 + movement).bb * 2.0 - 1.0;
-	pos = pos/2.0 + vec2(1.74 * frameTimeCounter);
-
-	for (int i = 0; i < 3; i++) {
-		pos = rotationMatrix * pos;
-
-		float w = exp2(-0.8 * i);
-		caustic += pow(0.5 + sin(dot(pos * exp2(0.8*i) + displ*PI, vec2(0.5)))*0.5, 6.0) * w/1.41;
-		weightSum += w;
-	}
-
-	return caustic * weightSum;
-}
-
-void waterVolumetrics(inout vec3 inColor, vec3 rayStart, vec3 rayEnd, float estEndDepth, float estSunDepth, float rayLength, float dither, vec3 waterCoefs, vec3 scatterCoef, vec3 ambient, vec3 lightSource, float VdotL){
-	inColor *= exp(-rayLength * waterCoefs); // No need to take the integrated value
-	int spCount = rayMarchSampleCount;
-	vec3 start = worldToShadowSpaceProjected(toWorldSpace(rayStart));
-	vec3 end = worldToShadowSpaceProjected(toWorldSpace(rayEnd));
-	vec3 dV = end - start;
-
-	// limit ray length at 32 blocks for performance and reducing integration error
-	// you can't see above this anyway
-	float maxZ = min(rayLength, 32.0) / (1e-8 + rayLength);
-	dV *= maxZ;
-
-	vec3 dVWorld = -mat3(gbufferModelViewInverse) * (rayEnd - rayStart) * maxZ;
-
-	rayLength *= maxZ;
-	estEndDepth *= maxZ;
-	estSunDepth *= maxZ;
-
-	vec3 absorbance = vec3(1.0);
-	vec3 vL = vec3(0.0);
-	float phase = phaseg(VdotL, Dirt_Mie_Phase);
-	float expFactor = 11.0;
-
-	vec3 progressW = gbufferModelViewInverse[3].xyz + cameraPosition;
-
-	for (int i = 0; i < spCount; i++) {
-		float d = (pow(expFactor, float(i+dither)/float(spCount))/expFactor - 1.0/expFactor)/(1-1.0/expFactor);
-		float dd = pow(expFactor, float(i+dither)/float(spCount)) * log(expFactor) / float(spCount)/(expFactor-1.0);
-		vec3 spPos = start.xyz + dV*d;
-		progressW = gbufferModelViewInverse[3].xyz + cameraPosition + d*dVWorld;
-
-		// project into biased shadowmap space
-		float distortFactor = calcDistort(spPos.xy);
-		vec3 pos = vec3(spPos.xy * distortFactor, spPos.z);
-		float sh = 1.0;
-
-		if (IsInShadowMap(pos)) {
-			pos = pos * vec3(0.5, 0.5, 0.5/6.0) + 0.5;
-			sh = texture(shadowtex0HW, pos);
-		}
-
-		vec3 ambientMul = exp(-estEndDepth * d * waterCoefs * 1.1);
-		vec3 sunMul = exp(-estSunDepth * d * waterCoefs);
-		vec3 light = (sh * lightSource/150.0 * 8.0/3.0 * phase * sunMul + ambientMul * ambient) * scatterCoef;
-		vL += (light - light * exp(-waterCoefs * dd * rayLength)) / waterCoefs *absorbance;
-		absorbance *= exp(-dd * rayLength * waterCoefs);
-	}
-
-	inColor += vL;
-}
-
-vec3 RT(vec3 dir, vec3 position, float noise, vec3 N) {
-	float stepSize = STEP_LENGTH;
-	int maxSteps = STEPS;
-
-	vec3 clipPosition = toClipSpace3(position);
-
-	float rayLength = ((position.z + dir.z * sqrt(3.0)*farPlane) > -sqrt(3.0)*nearPlane) ?
-	   								(-sqrt(3.0)*nearPlane -position.z) / dir.z : sqrt(3.0)*farPlane;
-
-	vec3 end = toClipSpace3(dir * rayLength + position);
-	vec3 direction = end - clipPosition;  //convert to clip space
-	float len = maxOf(abs(direction.xy) / texelSize.xy) / stepSize;
-
-	// get at which length the ray intersects with the edge of the screen
-	vec3 maxLengths = (step(0.0, direction) - clipPosition) / direction;
-	float mult = minOf(maxLengths);
-	vec3 stepv = direction / len;
-
-	int iterations = min(int(min(len, mult * len) - 2), maxSteps);
-
-	// Do one iteration for closest texel (good contact shadows)
-	vec3 spos = clipPosition * vec3(RENDER_SCALE_2, 1.0) + stepv/stepSize*6.0;
-	spos.xy += vIn.TAA_Offset * texelSize * 0.5*RENDER_SCALE;
-
-	#ifdef REFLECTION_QUARTER_RES_DEPTH
-		float sp = sqrt(texelFetch(texDepthQ, ivec2(spos.xy / texelSize/4.0), 0).r / 65000.0);
-	#else
-		float sp = texelFetch(depthtex1, ivec2(spos.xy / texelSize), 0).r;
-		sp = linZ(sp, nearPlane, farPlane);
-	#endif
-
-	float currZ = linZ(spos.z, nearPlane, farPlane);
-
-	if (sp < currZ) {
-		float dist = abs(sp - currZ) / currZ;
-		if (dist <= 0.035) return vec3(spos.xy, invLinZ(sp, nearPlane, farPlane)) / vec3(RENDER_SCALE_2, 1.0);
-	}
-
-	stepv *= vec3(RENDER_SCALE_2, 1.0);
-	spos += stepv * noise;
-
-	for (int i = 0; i < iterations; i++) {
-		#ifdef REFLECTION_QUARTER_RES_DEPTH
-			float sp = sqrt(texelFetch(texDepthQ, ivec2(spos.xy / texelSize/4.0), 0).r / 65000.0);
-		#else
-			float sp = texelFetch(depthtex1, ivec2(spos.xy / texelSize), 0).r;
-			sp = linZ(sp, nearPlane, farPlane);
-		#endif
-
-		float currZ = linZ(spos.z, nearPlane, farPlane);
-
-		if (sp < currZ) {
-			float dist = abs(sp - currZ) / currZ;
-			if (dist <= 0.035) return vec3(spos.xy, invLinZ(sp, nearPlane, farPlane)) / vec3(RENDER_SCALE_2, 1.0);
-		}
-
-		spos += stepv;
-	}
-
-	return vec3(1.1);
-}
-
-vec3 cosineHemisphereSample(vec2 Xi) {
-    float r = sqrt(Xi.x);
-    float theta = 2.0 * PI * Xi.y;
-
-    float x = r * cos(theta);
-    float y = r * sin(theta);
-
-    return vec3(x, y, sqrt(saturate(1.0 - Xi.x)));
-}
-
-vec3 TangentToWorld(vec3 N, vec3 H) {
-    vec3 UpVector = abs(N.z) < 0.999 ? vec3(0.0, 0.0, 1.0) : vec3(1.0, 0.0, 0.0);
-    vec3 T = normalize(cross(UpVector, N));
-    vec3 B = cross(N, T);
-
-    return vec3((T * H.x) + (B * H.y) + (N * H.z));
-}
-
-vec3 rtGI(vec3 normal, vec4 noise, vec3 fragpos, vec3 ambient, float translucent, vec3 torch, vec3 albedo) {
-	vec3 intRadiance = vec3(0.0);
-	float occlusion = 0.0;
-	float accLight = 0.0;
-
-	vec3 viewNormal = mat3(gbufferModelView) * normal;
-
-	for (int i = 0; i < RAY_COUNT; i++) {
-		int seed = (frameCounter % 40000) * RAY_COUNT + i;
-		vec2 ij = fract(R2_samples(seed) + noise.rg);
-
-		vec3 rayDir = normalize(cosineHemisphereSample(ij));
-		rayDir = TangentToWorld(normal, rayDir);
-
-		vec3 rayHit = RT(mat3(gbufferModelView) * rayDir, fragpos, fract(seed/1.6180339887 + noise.b), viewNormal);
-
-		if (rayHit.z < 1.0) {
-			vec3 previousPosition = mul3(gbufferModelViewInverse, toScreenSpace(rayHit)) + (cameraPosition - previousCameraPosition);
-			previousPosition = mul3(gbufferPreviousModelView, previousPosition);
-			previousPosition.xy = projMAD(gbufferPreviousProjection, previousPosition).xy / -previousPosition.z * 0.5 + 0.5;
-
-//			if (previousPosition.x > 0.0 && previousPosition.y > 0.0 && previousPosition.x < 1.0 && previousPosition.y < 1.0)
-			if (all(equal(saturate(previousPosition.xy), previousPosition.xy))) {
-				intRadiance += texture(colortex5, previousPosition.xy).rgb + ambient * albedo * translucent;
-			}
-			else {
-				intRadiance += ambient + ambient * translucent * albedo;
-			}
-
-			occlusion += 1.0;
-		}
-		else {
-		//	float bounceAmount = float(rayDir.y > 0.0) + clamp(-rayDir.y*0.1+0.1, 0.0,1.0);
-			//vec3 sky_c = skyCloudsFromTex(rayDir,TEX_SKY_LUT).rgb * bounceAmount;
-			intRadiance += ambient;
-		}
-	}
-
-	return intRadiance / RAY_COUNT + (1.0 - occlusion / RAY_COUNT) * torch;
-}
-
-void ssao(inout float occlusion, vec3 fragpos, float mulfov, float dither, vec3 normal) {
-	ivec2 pos = ivec2(gl_FragCoord.xy);
-	const float tan70 = tan(70.0 * PI / 180.0);
-	float mulfov2 = gbufferProjection[1][1] / tan70;
-
-	const float samplingRadius = 0.712;
-	float angle_thresh = 0.05;
-	float maxR2 = fragpos.z * fragpos.z * mulfov2 * 2.0 * 1.412 / 50.0;
-
-	float rd = mulfov2 * 0.04;
-
-	// pre-rotate direction
-	float n = 0.0;
-
-	occlusion = 0.0;
-
-	vec2 acc = -vIn.TAA_Offset * texelSize * 0.5;
-	float mult = (dot(normal, normalize(fragpos)) + 1.0) * 0.5 + 0.5;
-
-	vec2 v = fract(vec2(dither, R2_dither(gl_FragCoord.xy, frameCounter)) + (frameCounter % 10000) * vec2(0.75487765, 0.56984026));
-
-	for (int j = 0; j < 7; j++) {
-		vec2 sp = tapLocation_AO(j, v.x, 7, 88.0, v.y);
-		vec2 sampleOffset = sp * rd;
-
-		ivec2 offset = ivec2(gl_FragCoord.xy + sampleOffset * vec2(viewWidth, viewHeight * aspectRatio) * RENDER_SCALE);
-
-//		if (offset.x >= 0 && offset.y >= 0 && offset.x < viewWidth*RENDER_SCALE && offset.y < viewHeight*RENDER_SCALE) {
-		if (all(equal(clamp(offset, ivec2(0), vec2(viewWidth, viewHeight)*RENDER_SCALE), offset))) {
-			vec3 t0 = toScreenSpace(vec3((offset + 0.5) * texelSize + acc, texelFetch(depthtex1, offset, 0).x) * vec3(1.0/RENDER_SCALE_2, 1.0));
-
-			vec3 vec = t0.xyz - fragpos;
-			float dsquared = dot(vec, vec);
-
-			if (dsquared > 1.e-5) {
-				if (dsquared < maxR2) {
-					float NdotV = saturate(dot(vec * inversesqrt(dsquared), normalize(normal)));
-					occlusion += NdotV * saturate(1.0 - dsquared/maxR2);
-				}
-
-				n += 1.0;
-			}
-		}
-	}
-
-	occlusion = saturate(1.0 - occlusion/n*1.6);
-}
 
 
 /* RENDERTARGETS: 3 */
-layout(location = 0) out vec3 outColor3;
+layout(location = 0) out vec4 outColor3;
 
 void main() {
+	outColor3 = vec4(Min_Shadow_Filter_Radius, 0.1, 0.0, 0.0);
+
 	vec2 texcoord = gl_FragCoord.xy * texelSize;
+	float z = texture(TEX_DEPTH_OPAQUE, texcoord).x;
 
-	float dirtAmount = Dirt_Amount;
-	vec3 waterEpsilon = vec3(Water_Absorb_R, Water_Absorb_G, Water_Absorb_B);
-	vec3 dirtEpsilon = vec3(Dirt_Absorb_R, Dirt_Absorb_G, Dirt_Absorb_B);
-	vec3 totEpsilon = dirtEpsilon*dirtAmount + waterEpsilon;
-	vec3 scatterCoef = dirtAmount * vec3(Dirt_Scatter_R, Dirt_Scatter_G, Dirt_Scatter_B);
+	if (!isDepthSky(z)) {
+		vec4 worldData = texture(TEX_GB_WORLD, texcoord);
 
-	float z0 = texture(depthtex0, texcoord).x;
-	float z = texture(depthtex1, texcoord).x;
+		float mat = worldData.w;
+		bool hand = abs(mat-0.75) < 0.01;
 
-	float noise = blueNoise(gl_FragCoord.xy, frameCounter);
-
-	vec3 fragpos = toScreenSpace(vec3(texcoord / RENDER_SCALE - vIn.TAA_Offset * texelSize * 0.5, z));
-	vec3 p3 = mat3(gbufferModelViewInverse) * fragpos;
-	vec3 np3 = normVec(p3);
-
-	// sky
-	if (z >= 1.0) {
-		vec3 color = vec3(0.0);
-		vec4 cloud = texture2D_bicubic(colortex0, texcoord * CLOUDS_QUALITY);
-
-		if (np3.y > 0.0) {
-			color += stars(np3);
-			color += drawSun(dot(vIn.lightCol.a * vIn.WsunVec, np3), 0, vIn.lightCol.rgb/150.0, vec3(0.0));
-		}
-
-		vec3 albedo = InputTransform(texture(TEX_GB_COLOR, texcoord).rgb);
-		color += skyFromTex(np3, TEX_SKY_LUT)/150.0 + albedo/10.0 * 4.0*ffstep(0.985, -dot(vIn.lightCol.a * vIn.WsunVec, np3));
-		color = color * cloud.a + cloud.rgb;
-
-		outColor3 = clamp(fp10Dither(color * 8.0/3.0, triangularize(noise)), 0.0, 65000.0);
-
-		//if (outColor3.r > 65000.) outColor3 = vec3(0.0);
-		vec4 trpData = texture(colortex7, texcoord);
-
-		if (trpData.a > 0.99) {
-			vec3 fragpos0 = toScreenSpace(vec3(texcoord/RENDER_SCALE - vIn.TAA_Offset*texelSize*0.5, z0));
-			float Vdiff = distance(fragpos, fragpos0);
-			float VdotU = np3.y;
-
-			float estimatedDepth = Vdiff * abs(VdotU); // assuming water plane
-			float estimatedSunDepth = estimatedDepth / abs(vIn.refractedSunVec.y); // assuming water plane
-
-			vec3 lightColVol = vIn.lightCol.rgb * (1.0 - pow(1.0 - vIn.WsunVec.y, 5.0)); // fresnel
-			vec3 ambientColVol = vIn.ambientUp * 8.0/150.0/3.0 * 0.5 * eyeBrightnessSmooth.y/240.0;
-
-			if (isEyeInWater == 0)
-				waterVolumetrics(outColor3, fragpos0, fragpos, estimatedDepth, estimatedSunDepth, Vdiff, noise, totEpsilon, scatterCoef, ambientColVol, lightColVol, dot(np3, vIn.WsunVec));
-		}
-	}
-	// land
-	else {
-		p3 += gbufferModelViewInverse[3].xyz;
-
-		vec4 trpData = texture(colortex7, texcoord);
-//		bool iswater = texture(colortex7, texcoord).a > 0.99;
-		bool iswater = trpData.a > 0.99;
-
-		vec3 albedo = InputTransform(texture(TEX_GB_COLOR, texcoord).rgb);
+		if (hand) return;
 
 		vec4 normalData = texture(TEX_GB_NORMAL, texcoord);
-//		vec3 geo_normal = mat3(gbufferModelViewInverse) * OctDecode(normalData.xy);
-		vec3 tex_normal = OctDecode(normalData.zw);
+		vec4 specularData = texture(TEX_GB_SPECULAR, texcoord);
 
-		vec3 normal = mat3(gbufferModelViewInverse) * tex_normal;
+		vec3 localNormal = mat3(gbufferModelViewInverse) * OctDecode(normalData.xy);
+		float NdotL = saturate(dot(localNormal, vIn.sunVecW));
+		float sss = specularData.b;
 
-		#ifdef MAT_SPECULAR_ENABLED
-			vec4 specularData = texture(TEX_GB_SPECULAR, texcoord);
-			float emissive = specularData.a;
-		#endif
+		if (NdotL > 0.001 || sss > 0.001) {
+			vec3 fragpos = toScreenSpace_lod(vec3(texcoord/RENDER_SCALE - vIn.taa_offset*texelSize*0.5, z));
 
-		vec4 worldData = texture(TEX_GB_WORLD, texcoord);
-		vec2 lightmap = worldData.xy;
-		float mat = worldData.w;
-
-		bool hand = abs(mat-0.75) < 0.01;
-//		bool hand = false;
-
-		float NdotLGeom = dot(normal, vIn.WsunVec);
-		float NdotL = NdotLGeom;
-
-//		if ((iswater && isEyeInWater == 0) || (!iswater && isEyeInWater == 1))
-		if (iswater != (isEyeInWater == 1))
-			NdotL = dot(normal, vIn.refractedSunVec);
-
-		float diffuseSun = saturate(NdotL);
-
-		vec3 filtered = vec3(1.412, 1.0, 0.0);
-		if (!hand) {
-			filtered = texture(colortex3, texcoord).rgb;
-		}
-
-		float shading = 1.0 - filtered.b;
-		float pShadow = filtered.b * 2.0 - 1.0;
-
-		#ifdef SHADOW_COLORED
-			vec3 shadowColor = vec3(1.0);
-		#endif
-
-		vec3 SSS = vec3(0.0);
-		float sssAmount = specularData.b;
-
-		#ifdef Variable_Penumbra_Shadows
-			// compute shadows only if not backfacing the sun
-			// or if the blocker search was full or empty
-			// always compute all shadows at close range where artifacts may be more visible
-			if (diffuseSun > 0.001)
-		#else
-			if (sssAmount > 0.5) {
-				diffuseSun = mix(max(phaseg(dot(np3, vIn.WsunVec), 0.5), 2.0 * phaseg(dot(np3, vIn.WsunVec), 0.1)) * PI*1.6, diffuseSun, 0.3);
-			}
-
-			if (diffuseSun > 0.000)
-		#endif
-		{
-			vec3 projectedShadowPosition = worldToShadowSpaceProjected(p3);
+			vec3 projectedShadowPosition = worldToShadowSpaceProjected(toWorldSpace(fragpos));
 
 			// apply distortion
 			float distortFactor = calcDistort(projectedShadowPosition.xy);
@@ -532,257 +88,42 @@ void main() {
 
 			// do shadows only if on shadow map
 			if (IsInShadowMap(projectedShadowPosition)) {
-				float rdMul = filtered.x * distortFactor * shadow_d0 * shadow_k / shadowMapResolution;
+				float bn = blueNoise(gl_FragCoord.xy).a;
+				float noise = fract(bn + frameCounter/1.6180339887);
+
 				const float threshMul = max(2048.0/shadowMapResolution * shadowDistance/128.0, 0.95);
-				float distortThresh = (sqrt(1.0 - square(NdotLGeom)) / NdotLGeom + 0.7) / distortFactor;
-
-				#ifdef Variable_Penumbra_Shadows
-					float diffthresh = distortThresh/6000.0 * threshMul;
-				#else
-					float diffthresh = sss > 0.0 ? 0.0001 : distortThresh/6000.0 * threshMul;
-				#endif
-
-				#if defined(MAT_PARALLAX_ENABLED) && defined(MAT_PARALLAX_DEPTH_WRITE)
-					diffthresh += Parallax_Depth / 128.0/4.0/6.0;
-				#endif
-
+				float distortThresh = (sqrt(1.0 - square(NdotL)) / NdotL + 0.7) / distortFactor;
+				float diffthresh = distortThresh/6000.0 * threshMul;
 				projectedShadowPosition = projectedShadowPosition * vec3(0.5, 0.5, 0.5/6.0) + vec3(0.5, 0.5, 0.5);
 
-				shading = 0.0;
+				const float mult = Max_Shadow_Filter_Radius;
+				float avgBlockerDepth = 0.0;
+				vec2 scales = vec2(0.0, Max_Filter_Depth);
+				float blockerCount = 0.0;
+				float rdMul = distortFactor * (1.0 + mult) * shadow_d0 * shadow_k / shadowMapResolution;
+				float diffthreshM = diffthresh * mult * shadow_d0 * shadow_k/20.0;
+				float avgDepth = 0.0;
 
-				for (int i = 0; i < SHADOW_FILTER_SAMPLE_COUNT; i++) {
-					vec2 offsetS = tapLocation_Shadow(i, SHADOW_FILTER_SAMPLE_COUNT, 84.0, noise);
+				for (int i = 0; i < VPS_Search_Samples; i++) {
+					vec2 offsetS = tapLocation_Shadow(i, VPS_Search_Samples, 84.0, noise);
+					float weight = 3.0 + (i+noise) *rdMul/SHADOW_FILTER_SAMPLE_COUNT*shadowMapResolution*distortFactor/2.7;
+					float d = texelFetch(shadowtex0, ivec2((projectedShadowPosition.xy + offsetS * rdMul) * shadowMapResolution), 0).x;
+					float b = smoothstep(weight * diffthresh / 2.0, weight * diffthresh, projectedShadowPosition.z - d);
 
-					float bias = 1.0 + (i+noise) * rdMul/SHADOW_FILTER_SAMPLE_COUNT * shadowMapResolution;
-					vec3 samplePos = vec3(projectedShadowPosition + vec3(rdMul * offsetS, -diffthresh * bias));
-//					float isShadow = texture(shadowtex0HW, samplePos);
-
-					#ifdef SHADOW_COLORED
-						float isShadow = texture(shadowtex1HW, samplePos);
-
-						float shadowColorF = texture(shadowtex0HW, samplePos);
-
-						vec4 sampleColor = texture(shadowcolor0, samplePos.xy);
-
-						sampleColor.rgb = mix(sampleColor.rgb, vec3(1.0), shadowColorF);
-
-						shadowColor += InputTransform(sampleColor.rgb) * isShadow;
-					#else
-						float isShadow = texture(shadowtex0HW, samplePos);
-					#endif
-
-					shading += isShadow;
+					blockerCount += b;
+					avgDepth += max(projectedShadowPosition.z - d, 0.0) * 1000.0;
+					avgBlockerDepth += d * b;
 				}
 
-				shading /= float(SHADOW_FILTER_SAMPLE_COUNT);
-				#ifdef SHADOW_COLORED
-					shadowColor /= float(SHADOW_FILTER_SAMPLE_COUNT);
-				#endif
-			}
-		}
+				outColor3.g = avgDepth / VPS_Search_Samples;
+				outColor3.b = blockerCount / VPS_Search_Samples;
 
-		// custom shading model for translucent objects
-		#ifdef Variable_Penumbra_Shadows
-			if (sssAmount > 0.5) {
-//				sssAmount = 0.5;
-				vec3 extinction = 1.0 - albedo*0.85;
-				// Should be somewhat energy conserving
-				SSS = exp(-filtered.y*11.0*extinction) + 3.0*exp(-filtered.y*11./3.*extinction);
-				float scattering = saturate((0.7+0.3*PI * phaseg(dot(np3, vIn.WsunVec), 0.85)) * 1.5/4.0 * sssAmount);
-				SSS *= scattering;
-				diffuseSun *= 1.0 - sssAmount;
-				SSS *= sqrt(lightmap.y);
-			}
-
-			if (sssAmount > 0.2) {
-//				sssAmount = 0.2;
-				vec3 extinction = 1.0 - albedo*0.85;
-				// Should be somewhat energy conserving
-				SSS = exp(-filtered.y*11.0*extinction) + 3.0*exp(-filtered.y*11./3.*extinction);
-				float scattering = saturate((0.7+0.3*PI * phaseg(dot(np3, vIn.WsunVec), 0.85)) * 1.26/4.0 * sssAmount);
-				SSS *= scattering;
-				diffuseSun *= 1.0 - sssAmount;
-				SSS *= sqrt(lightmap.y);
-			}
-		#endif
-
-		bool apply_sss = true;//abs(filtered.y-0.1) < 0.0004;
-		if ((diffuseSun * shading > 0.001 || apply_sss) && !hand) {
-			#ifdef SCREENSPACE_CONTACT_SHADOWS
-				vec3 vec = vIn.lightCol.a * sunVec;
-				float screenShadow = rayTraceShadow(vec, fragpos, noise);
-				shading = min(screenShadow, shading);
-
-				// Out of shadow map
-				if (apply_sss) SSS *= screenShadow;
-			#endif
-
-			#ifdef CAVE_LIGHT_LEAK_FIX
-				shading = mix(0.0, shading, saturate(eyeBrightnessSmooth.y/255.0 + lightmap.y));
-			#endif
-		}
-
-		#ifdef CLOUDS_SHADOWS
-			vec3 pos = p3 + cameraPosition;
-			const int rayMarchSteps = 6;
-			float cloudShadow = 0.0;
-
-			for (int i = 0; i < rayMarchSteps; i++) {
-				vec3 cloudPos = pos + vIn.WsunVec / abs(vIn.WsunVec.y) * (1500 + (noise+i) / rayMarchSteps*1700 - pos.y);
-				cloudShadow += getCloudDensity(cloudPos, 0);
-			}
-
-			cloudShadow = mix(1.0, exp(-cloudShadow * cloudDensity * 1700/rayMarchSteps), mix(CLOUDS_SHADOWS_STRENGTH, 1.0, rainStrength));
-			shading *= cloudShadow;
-			SSS *= cloudShadow;
-		#endif
-
-		vec3 directLighting = vec3(0.0);
-		#if defined(PHOTONICS_BLOCK_LIGHT_ENABLED) || defined(PHOTONICS_GI_ENABLED)
-			directLighting += sample_photonics_direct(texcoord/RENDER_SCALE);
-		#endif
-
-		#ifdef PHOTONICS_HAND_LIGHT_ENABLED
-			directLighting += sample_photonics_handheld(texcoord/RENDER_SCALE);
-		#endif
-
-		#ifdef PHOTONICS_GI_ENABLED
-//			vec3 ambientLight = texture(texPhotonicsIndirect, texcoord).rgb;
-			vec3 ambientLight = vec3(0.0);
-		#else
-			vec3 ambientCoefs = normal / dot(abs(normal), vec3(1.0));
-			vec3 ambientLight = vIn.ambientUp * mix(saturate(ambientCoefs.y), 1.0/6.0, sssAmount);
-			ambientLight += vIn.ambientDown * mix(saturate(-ambientCoefs.y), 1.0/6.0, sssAmount);
-			ambientLight += vIn.ambientRight * mix(saturate(ambientCoefs.x), 1.0/6.0, sssAmount);
-			ambientLight += vIn.ambientLeft * mix(saturate(-ambientCoefs.x), 1.0/6.0, sssAmount);
-			ambientLight += vIn.ambientB * mix(saturate(ambientCoefs.z), 1.0/6.0, sssAmount);
-			ambientLight += vIn.ambientF * mix(saturate(-ambientCoefs.z), 1.0/6.0, sssAmount);
-		#endif
-
-		#if defined(PHOTONICS_BLOCK_LIGHT_ENABLED) && defined(PHOTONICS_GI_ENABLED)
-			vec3 custom_lightmap = vec3(0.0);
-		#else
-			#ifdef PHOTONICS_BLOCK_LIGHT_ENABLED
-				lightmap.x = 0.0;
-			#endif
-
-			#ifdef PHOTONICS_GI_ENABLED
-				lightmap.y = 0.0;
-			#endif
-
-			vec3 custom_lightmap = texture(colortex4, (lightmap * 15.0 + 0.5 + vec2(0.0, 19.0)) * texelSize).rgb / 150.0 * 8.0/3.0;
-		#endif
-
-		if (hand && heldBlockLightValue > 0.1) {
-			custom_lightmap.y = 0.0;
-		}
-
-		vec3 skyDirectLight = vIn.lightCol.rgb;
-
-		vec3 fragpos0;
-		float Vdiff;
-		float estimatedDepth;
-		float estimatedSunDepth;
-		if (iswater != (isEyeInWater == 1)) {
-//		if (!iswater && isEyeInWater != 1) {
-			fragpos0 = toScreenSpace(vec3(texcoord / RENDER_SCALE - vIn.TAA_Offset * texelSize * 0.5, z0));
-			Vdiff = distance(fragpos, fragpos0);
-
-			float VdotU = np3.y;
-			estimatedDepth = Vdiff * abs(VdotU); // assuming water plane
-
-			if (isEyeInWater == 1) {
-				Vdiff = length(fragpos);
-				estimatedDepth = saturate((15.5 - lightmap.y * 16.0) / 15.5);
-				estimatedDepth *= estimatedDepth * estimatedDepth * 32.0;
-
-				#ifndef lightMapDepthEstimation
-					estimatedDepth = max(Water_Top_Layer - (cameraPosition.y + p3.y), 0.0);
-				#endif
-			}
-
-			// k = 1-r*r*(1-sy*sy)
-			estimatedSunDepth = estimatedDepth / abs(vIn.refractedSunVec.y); //assuming water plane
-			skyDirectLight *= exp(-totEpsilon * estimatedSunDepth) * (1.0 - pow(1.0 - vIn.WsunVec.y, 5.0));
-
-			vec3 worldPos = toWorldSpaceCamera(fragpos);
-			float caustics = waterCaustics(worldPos, vIn.refractedSunVec);
-			skyDirectLight *= mix(caustics * 0.5 + 0.5, 1.0, exp(estimatedSunDepth / -3.0));
-
-			if (isEyeInWater == 0) {
-				ambientLight *= min(exp(-totEpsilon * estimatedDepth), custom_lightmap.x);
-				ambientLight += custom_lightmap.z;
-			}
-			else {
-				ambientLight += 10.0 * exp(totEpsilon * -8.0);
-				ambientLight *= exp(-totEpsilon * estimatedDepth) * 8.0/3.0 / 150.0;
-			}
-
-			ambientLight *= mix(caustics, 1.0, 0.85);
-			ambientLight += custom_lightmap.y * TorchColor;
-
-			#ifdef SSGI
-				if (!hand) {
-					float ao = 1.0;
-//					ssao(ao, fragpos, 1.0, noise, decode(dataUnpacked0.yw));
-					ssao(ao, fragpos, 1.0, noise, tex_normal);
-					ambientLight *= ao;
+				if (blockerCount >= 0.9) {
+					avgBlockerDepth /= blockerCount;
+					float ssample = max(projectedShadowPosition.z - avgBlockerDepth, 0.0) * 1500.0;
+					outColor3.r = clamp(ssample, scales.x, scales.y) / scales.y * (mult - Min_Shadow_Filter_Radius) + Min_Shadow_Filter_Radius;
 				}
-			#endif
-		}
-		else {
-			#ifdef SSGI
-				if (!hand)
-					ambientLight = rtGI(normal, blueNoise(texBlueNoise, gl_FragCoord.xy), fragpos, ambientLight * custom_lightmap.x, sssAmount, custom_lightmap.z * vec3(0.9, 1.0, 1.5) + custom_lightmap.y * TorchColor, normalize(albedo + 1.e-5) * 0.7);
-				else
-					ambientLight = ambientLight * custom_lightmap.x + custom_lightmap.z * vec3(0.9, 1.0, 1.5) + custom_lightmap.y * TorchColor;
-			#else
-					ambientLight = ambientLight * custom_lightmap.x + custom_lightmap.z * vec3(0.9, 1.0, 1.5) + custom_lightmap.y * TorchColor;
-			#endif
-		}
-
-		float emitting = pow(emissive, Emission_Curve) * 3.0 * MAT_EMISSION_SCALE;
-
-		// combine all light sources
-		vec3 skyDiffuse = vec3(shading * diffuseSun);
-
-		#ifdef SHADOW_COLORED
-			skyDiffuse *= shadowColor;
-		#endif
-
-//		skyDiffuse += SSS;
-
-		#ifdef DEBUG_WHITEWORLD
-			albedo = vec3(1.0);
-		#endif
-
-		outColor3 = ((skyDiffuse + SSS)/PI * skyDirectLight * 8.0/3.0 / 150.0 + ambientLight + directLighting + emitting) * albedo;
-
-		#ifdef MAT_SPECULAR_ENABLED
-//			#ifdef MC_TEXTURE_FORMAT_LAB_PBR
-				float roughness = square(1.0 - specularData.r);
-				float f0 = specularData.g;
-				if (f0 < EPSILON) f0 = 0.04;
-//			#else
-//				float roughness = 1.0;
-//				float f0 = 0.04;
-//			#endif
-
-			vec2 noise2 = blueNoise(texBlueNoise, gl_FragCoord.xy).rg;
-			MaterialReflections(outColor3, roughness, f0, albedo, vIn.WsunVec, vIn.lightCol.rgb, skyDiffuse, lightmap.y, normal, np3, fragpos, vec3(noise2, noise), hand);
-		#endif
-
-		if (iswater && isEyeInWater == 0) {
-			// Bruteforce integration is probably overkill
-			vec3 lightColVol = vIn.lightCol.rgb * (1.0 - pow(1.0 - vIn.WsunVec.y, 5.0)); // fresnel
-			vec3 ambientColVol = vIn.ambientUp * 8.0/3.0 / 150.0 * 0.5 * eyeBrightnessSmooth.y/240.0;
-
-			#ifdef VOXY
-				// Fake water depth since we cannot sample it
-				if (Vdiff == 0.0) Vdiff = 20.0;
-			#endif
-
-			waterVolumetrics(outColor3, fragpos0, fragpos, estimatedDepth, estimatedSunDepth, Vdiff, noise, totEpsilon, scatterCoef, ambientColVol, lightColVol, dot(np3, vIn.WsunVec));
+			}
 		}
 	}
 }

@@ -5,6 +5,8 @@
 #include "/lib/common.glsl"
 #include "/lib/settings.glsl"
 
+#define TEX_SKY_LUT colortex4
+
 
 in VertexData {
     flat vec3 ambientUp;
@@ -36,6 +38,8 @@ uniform sampler2D noisetex;
 uniform sampler2D texBlueNoise;
 uniform sampler2DShadow shadowtex0HW;
 
+uniform float far;
+uniform float near;
 uniform int frameCounter;
 uniform float rainStrength;
 uniform float eyeAltitude;
@@ -51,7 +55,6 @@ uniform mat4 shadowModelView;
 uniform mat4 shadowProjection;
 uniform float sunElevation;
 uniform vec3 cameraPosition;
-uniform float far;
 uniform ivec2 eyeBrightnessSmooth;
 
 vec4 lightCol = vec4(vIn.lightSourceColor, float(sunElevation > 1.e-5) * 2.0 - 1.0);

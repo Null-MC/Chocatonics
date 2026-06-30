@@ -9,12 +9,12 @@ out VertexData {
 	vec4 color;
 	vec4 normalMat;
 
-	#ifdef MC_NORMAL_MAP
+	#ifdef MAT_PBR_ENABLED
 		vec4 tangent;
 	#endif
 } vOut;
 
-#ifdef MC_NORMAL_MAP
+#ifdef MAT_PBR_ENABLED
 	attribute vec4 at_tangent;
 #endif
 
@@ -38,7 +38,7 @@ void main() {
 	vOut.normalMat.xyz = normalize(gl_NormalMatrix * gl_Normal);
 	vOut.normalMat.w = blockEntityId == BLOCK_BANNER ? 0.6 : 1.0;
 
-	#ifdef MC_NORMAL_MAP
+	#ifdef MAT_PBR_ENABLED
 		vOut.tangent = vec4(normalize(gl_NormalMatrix * at_tangent.rgb), at_tangent.w);
 	#endif
 

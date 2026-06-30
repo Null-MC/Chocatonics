@@ -237,9 +237,9 @@ void ray_iter_apply_transparency(inout vec4 accumulator, vec4 albedo) {
 //        accumulator.a+= mix_factor;
 //    } else accumulator = albedo;
     const float color_norm = 1.0 / sqrt(3.0);
+    float alpha_root = sqrt(albedo.a);
 
-    float alpha_rt = sqrt(albedo.a);
     vec3 tint = normalize(albedo.rgb + EPSILON) * color_norm;
-    tint = mix(vec3(1.0), tint, alpha_rt);
-    accumulator.rgb *= tint * alpha_rt;
+    tint = mix(vec3(1.0), tint, alpha_root);
+    accumulator.rgb *= tint * alpha_root;
 }

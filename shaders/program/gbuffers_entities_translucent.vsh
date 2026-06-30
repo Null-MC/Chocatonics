@@ -11,7 +11,7 @@ out VertexData {
 	vec4 color;
 	vec4 normalMat;
 
-	#ifdef MC_NORMAL_MAP
+	#ifdef MAT_PBR_ENABLED
 		vec4 tangent;
 	#endif
 } vOut;
@@ -20,10 +20,7 @@ uniform vec2 texelSize;
 uniform int framemod8;
 uniform mat4 gbufferModelViewInverse;
 
-
-vec4 toClipSpace3(vec3 viewSpacePosition) {
-	return vec4(projMAD(gl_ProjectionMatrix, viewSpacePosition), -viewSpacePosition.z);
-}
+#include "/lib/projections.glsl"
 
 
 void main() {
@@ -31,7 +28,7 @@ void main() {
 	vOut.lmtexcoord.zw = gl_MultiTexCoord1.xy / 255.0;
 
 	vec3 viewPos = mul3(gl_ModelViewMatrix, gl_Vertex.xyz);
-	gl_Position = toClipSpace3(viewPos);
+	gl_Position = viewToNdcSpace(gl_ProjectionMatrix, viewPos);
 	vOut.color = gl_Color;
 
 	float mat = 0.0;
@@ -39,8 +36,10 @@ void main() {
 	vOut.normalMat.xyz = normalize(gl_NormalMatrix * gl_Normal);
 	vOut.normalMat.w = mat;
 
-	vOut.tangent.xyz = normalize(gl_NormalMatrix * at_tangent.xyz);
-	vOut.tangent.w = at_tangent.w;
+	#ifdef MAT_PBR_ENABLED
+		vOut.tangent.xyz = normalize(gl_NormalMatrix * at_tangent.xyz);
+		vOut.tangent.w = at_tangent.w;
+	#endif
 
 	#ifdef TAA_UPSCALING
 		gl_Position.xy = gl_Position.xy * RENDER_SCALE + RENDER_SCALE * gl_Position.w - gl_Position.w;

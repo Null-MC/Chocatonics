@@ -1,11 +1,11 @@
-vec4 smoothfilter(in sampler2D tex, in vec2 uv) {
-	uv = uv*512.0 + 0.5;
-	vec2 iuv = floor(uv);
-	vec2 fuv = fract(uv);
-	uv = iuv + (fuv * fuv) * (3.0 - 2.0*fuv);
-	uv = uv/512.0 - 0.5/512.0;
-	return texture(tex, uv);
-}
+//vec4 smoothfilter(in sampler2D tex, in vec2 uv) {
+//	uv = uv*512.0 + 0.5;
+//	vec2 iuv = floor(uv);
+//	vec2 fuv = fract(uv);
+//	uv = iuv + (fuv * fuv) * (3.0 - 2.0*fuv);
+//	uv = uv/512.0 - 0.5/512.0;
+//	return texture(tex, uv);
+//}
 
 mat2 getWaterRotation(const in float radiance) {
 	float cos_rad = cos(radiance);

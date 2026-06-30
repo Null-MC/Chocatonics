@@ -1,8 +1,10 @@
+#define TEX_SKY_LUT colortex4
+
 #ifndef PHOTONICS_GI_SHADOWMAP
     #define NO_SHADOW_MAPPING
 #endif
 
-uniform sampler2D colortex4;
+uniform sampler2D TEX_SKY_LUT;
 
 #ifdef PHOTONICS_GI_SHADOWMAP
     uniform sampler2D noisetex;
@@ -25,6 +27,10 @@ uniform float sunElevation;
     #include "/lib/Shadow_Params.glsl"
 #endif
 
+#ifdef CLOUDS_SHADOWS
+    #include "/lib/volumetricClouds.glsl"
+#endif
+
 
 vec3 get_sun_direction() {
     vec3 localSunDir = normalize(mat3(gbufferModelViewInverse) * sunPosition);
@@ -33,11 +39,11 @@ vec3 get_sun_direction() {
 }
 
 vec3 get_sun_color(vec3 playerPos, vec3 direction) {
-    return texelFetch(colortex4, ivec2(6, 37), 0).rgb / 150.0;
+    return texelFetch(TEX_SKY_LUT, ivec2(6, 37), 0).rgb / 150.0;
 }
 
 vec3 get_sky_color(vec3 playerPos, vec3 direction) {
-    vec3 color = skyCloudsFromTex(direction, colortex4).rgb / 150.0;
+    vec3 color = skyCloudsFromTex(direction, TEX_SKY_LUT).rgb / 150.0;
     return clamp(color * 8.0/3.0, 0.0, 65000.0);
 }
 
@@ -79,6 +85,21 @@ vec3 get_sky_color(vec3 playerPos, vec3 direction) {
             sunColor *= InputTransform(sampleColor.rgb);
         #else
             float shadow = texture(shadowtex0HW, samplePos);
+        #endif
+
+        #ifdef CLOUDS_SHADOWS
+            vec3 world_pos = player_pos + cameraPosition;
+            vec3 localSkyLightDir = get_sun_direction();
+
+            const int rayMarchSteps = 6;
+            float cloudShadow = 0.0;
+
+            for (int i = 0; i < rayMarchSteps; i++) {
+                vec3 cloudPos = world_pos + localSkyLightDir / abs(localSkyLightDir.y) * (1500 + (noise+i) / rayMarchSteps*1700 - world_pos.y);
+                cloudShadow += getCloudDensity(cloudPos, 0);
+            }
+
+            shadow *= mix(1.0, exp(-cloudShadow * cloudDensity * 1700/rayMarchSteps), mix(CLOUDS_SHADOWS_STRENGTH, 1.0, rainStrength));
         #endif
 
         sun_radiance = shadow * sunColor;

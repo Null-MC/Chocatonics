@@ -4,7 +4,7 @@
     #include "/lib/settings.glsl"
   ",
   "version": 1,
-  "excludeLodsFromVanillaDepth": false,
+  "excludeLodsFromVanillaDepth": true,
   "opaqueDrawBuffers": [8,9,10,11],
   "translucentDrawBuffers": [2,7],
   "blending": {
@@ -58,10 +58,11 @@
   ],
   "samplers": {
     "gaux1": "sampler2D",
-    "gaux2": "sampler2D",
+    "colortex5": "sampler2D",
     "noisetex": "sampler2D",
     "depthtex1": "sampler2D",
     "shadowtex0HW": "sampler2DShadow",
+    "texVoxyDepthOpaque": "sampler2D",
     "texBlueNoise": "sampler2D",
     "texWave": "sampler2D"
   }
