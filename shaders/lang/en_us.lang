@@ -120,6 +120,18 @@ screen.MATERIALS=PBR Materials
         option.MAT_SPECULAR_ENABLED=Enabled
 
 
+screen.LIGHTING=Lighting
+
+    screen.LIGHTING_FLOODFILL=Colored
+
+        option.LIGHTING_COLORED=Enabled
+
+        option.LIGHTING_VOXEL_SIZE=Voxel Buffer Size
+        suffix.LIGHTING_VOXEL_SIZE=\ blocks
+
+        option.LIGHTING_FLOODFILL_FOG=Volumetric Fog
+
+
 screen.SHADOWS=Shadows
 
     option.shadowDistance=Distance

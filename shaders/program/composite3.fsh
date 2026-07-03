@@ -65,6 +65,10 @@ uniform sampler2D depthtex1;
 	uniform sampler2D shadowcolor0;
 #endif
 
+#ifdef LIGHTING_COLORED
+	uniform sampler3D texFloodFill;
+#endif
+
 #ifdef REFLECTION_ENABLED
 	uniform sampler2D gaux2;
 #endif
@@ -127,6 +131,11 @@ uniform int framemod8;
 
 vec2 v_taa_offset = vIn.TAA_Offset;
 #include "/lib/specular.glsl"
+
+#ifdef LIGHTING_COLORED
+	#include "/lib/voxel.glsl"
+	#include "/lib/floodfill.glsl"
+#endif
 
 #if defined(PHOTONICS_BLOCK_LIGHT_ENABLED) || defined(PHOTONICS_HAND_LIGHT_ENABLED) || defined(PHOTONICS_GI_ENABLED)
 	#include "/photonics/samplers.glsl"
@@ -508,10 +517,11 @@ void main() {
 		vec3 albedo = InputTransform(texture(TEX_GB_COLOR, texcoord).rgb);
 
 		vec4 normalData = texture(TEX_GB_NORMAL, texcoord);
-//		vec3 geo_normal = mat3(gbufferModelViewInverse) * OctDecode(normalData.xy);
-		vec3 tex_normal = OctDecode(normalData.zw);
+		vec3 geoViewNormal = OctDecode(normalData.xy);
+		vec3 texViewNormal = OctDecode(normalData.zw);
 
-		vec3 normal = mat3(gbufferModelViewInverse) * tex_normal;
+		vec3 geoLocalNormal = mat3(gbufferModelViewInverse) * geoViewNormal;
+		vec3 texLocalNormal = mat3(gbufferModelViewInverse) * texViewNormal;
 
 //		#ifdef MAT_SPECULAR_ENABLED
 			vec4 specularData = texture(TEX_GB_SPECULAR, texcoord);
@@ -525,12 +535,12 @@ void main() {
 		bool hand = abs(mat-0.75) < 0.01;
 //		bool hand = false;
 
-		float NdotLGeom = dot(normal, vIn.WsunVec);
+		float NdotLGeom = dot(texLocalNormal, vIn.WsunVec);
 		float NdotL = NdotLGeom;
 
 //		if ((iswater && isEyeInWater == 0) || (!iswater && isEyeInWater == 1))
 		if (iswater != (isEyeInWater == 1))
-			NdotL = dot(normal, vIn.refractedSunVec);
+			NdotL = dot(texLocalNormal, vIn.refractedSunVec);
 
 		float diffuseSun = saturate(NdotL);
 
@@ -710,7 +720,7 @@ void main() {
 		#endif
 
 		if (hasIndirect) {
-			vec3 ambientCoefs = normal / dot(abs(normal), vec3(1.0));
+			vec3 ambientCoefs = texLocalNormal / dot(abs(texLocalNormal), vec3(1.0));
 			ambientLight = vIn.ambientUp * mix(saturate(ambientCoefs.y), 1.0/6.0, sssAmount);
 			ambientLight += vIn.ambientDown * mix(saturate(-ambientCoefs.y), 1.0/6.0, sssAmount);
 			ambientLight += vIn.ambientRight * mix(saturate(ambientCoefs.x), 1.0/6.0, sssAmount);
@@ -719,18 +729,9 @@ void main() {
 			ambientLight += vIn.ambientF * mix(saturate(-ambientCoefs.z), 1.0/6.0, sssAmount);
 		}
 
-//		#if defined(PHOTONICS_BLOCK_LIGHT_ENABLED) && defined(PHOTONICS_GI_ENABLED)
-//			vec3 custom_lightmap = vec3(0.0);
-//		#else
-		#if defined(PHOTONICS_BLOCK_LIGHT_ENABLED) || defined(PHOTONICS_GI_ENABLED)
+		#ifdef PHOTONICS_GI_ENABLED
 			if (!isLod) {
-				#ifdef PHOTONICS_BLOCK_LIGHT_ENABLED
-					lightmap.x = 0.0;
-				#endif
-
-				#ifdef PHOTONICS_GI_ENABLED
-					lightmap.y = 0.0;
-				#endif
+				lightmap.y = 0.0;
 			}
 		#endif
 
@@ -748,6 +749,21 @@ void main() {
 		vec3 skyDirectLight = vIn.lightCol.rgb;
 
 		vec4 noise2 = blueNoise(texBlueNoise, gl_FragCoord.xy);
+
+		vec3 torchLight = custom_lightmap.y * TorchColor;
+
+		#ifdef PHOTONICS_BLOCK_LIGHT_ENABLED
+			if (!isLod) {
+				torchLight = vec3(0.0);
+			}
+		#elif defined(LIGHTING_COLORED)
+			vec3 voxelPos = GetVoxelPosition(p3);
+			vec3 samplePos = GetFloodFillSamplePos(voxelPos, geoLocalNormal, texLocalNormal);
+
+			if (IsInVoxelBounds(samplePos)) {
+				torchLight = SampleFloodFill(samplePos, frameCounter);
+			}
+		#endif
 
 		vec3 fragpos0;
 		float Vdiff;
@@ -789,13 +805,13 @@ void main() {
 			}
 
 			ambientLight *= mix(caustics, 1.0, 0.85);
-			ambientLight += custom_lightmap.y * TorchColor;
+			ambientLight += torchLight;
 
 			#ifdef SSGI
 				if (!hand) {
 					float ao = 1.0;
 //					ssao(ao, fragpos, 1.0, noise, decode(dataUnpacked0.yw));
-					ssao(ao, fragpos, 1.0, noise, tex_normal);
+					ssao(ao, fragpos, 1.0, noise, texViewNormal);
 					ambientLight *= ao;
 				}
 			#endif
@@ -803,11 +819,11 @@ void main() {
 		else {
 			#ifdef SSGI
 				if (!hand)
-					ambientLight = rtGI(normal, noise2, fragpos, ambientLight * custom_lightmap.x, sssAmount, custom_lightmap.z * vec3(0.9, 1.0, 1.5) + custom_lightmap.y * TorchColor, normalize(albedo + 1.e-5) * 0.7);
+					ambientLight = rtGI(texLocalNormal, noise2, fragpos, ambientLight * custom_lightmap.x, sssAmount, custom_lightmap.z * vec3(0.9, 1.0, 1.5) + torchLight, normalize(albedo + 1.e-5) * 0.7);
 				else
-					ambientLight = ambientLight * custom_lightmap.x + custom_lightmap.z * vec3(0.9, 1.0, 1.5) + custom_lightmap.y * TorchColor;
+					ambientLight = ambientLight * custom_lightmap.x + custom_lightmap.z * vec3(0.9, 1.0, 1.5) + torchLight;
 			#else
-					ambientLight = ambientLight * custom_lightmap.x + custom_lightmap.z * vec3(0.9, 1.0, 1.5) + custom_lightmap.y * TorchColor;
+					ambientLight = ambientLight * custom_lightmap.x + custom_lightmap.z * vec3(0.9, 1.0, 1.5) + torchLight;
 			#endif
 		}
 
@@ -839,7 +855,7 @@ void main() {
 //			#endif
 
 //			vec2 noise2 = blueNoise(texBlueNoise, gl_FragCoord.xy).rg;
-			MaterialReflections(outColor3, roughness, f0, albedo, vIn.WsunVec, vIn.lightCol.rgb, skyDiffuse, lightmap.y, normal, np3, fragpos, vec3(noise2.rg, noise), hand);
+			MaterialReflections(outColor3, roughness, f0, albedo, vIn.WsunVec, vIn.lightCol.rgb, skyDiffuse, lightmap.y, texLocalNormal, np3, fragpos, vec3(noise2.rg, noise), hand);
 		#endif
 
 		if (iswater && isEyeInWater == 0) {

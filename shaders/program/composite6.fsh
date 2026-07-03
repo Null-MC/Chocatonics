@@ -37,6 +37,10 @@ uniform sampler2D colortex2;
 uniform sampler2D colortex3;
 uniform sampler2D colortex4;
 
+#ifdef LIGHTING_COLORED
+	uniform sampler3D texFloodFill;
+#endif
+
 uniform float far;
 uniform float near;
 uniform vec3 sunVec;
@@ -69,6 +73,11 @@ uniform mat4 gbufferPreviousProjection;
 #include "/lib/lod_projections.glsl"
 #include "/lib/sky_gradient.glsl"
 #include "/lib/volumetricClouds.glsl"
+
+#ifdef LIGHTING_COLORED
+	#include "/lib/voxel.glsl"
+	#include "/lib/floodfill.glsl"
+#endif
 
 
 float phaseRayleigh(float cosTheta) {
@@ -124,8 +133,8 @@ mat2x3 getVolumetricRays(float dither, vec3 fragpos, vec4 lightCol) {
 	dVWorld *= maxLength;
 
 	// apply dither
-	vec3 progress = start.xyz;
-	vec3 progressW = gbufferModelViewInverse[3].xyz + cameraPosition;
+//	vec3 progress = start.xyz;
+//	vec3 progressW = gbufferModelViewInverse[3].xyz + cameraPosition;
 	vec3 vL = vec3(0.0);
 
 	float SdotV = dot(sunVec, normalize(fragpos)) * lightCol.a;
@@ -147,7 +156,7 @@ mat2x3 getVolumetricRays(float dither, vec3 fragpos, vec4 lightCol) {
 	vec3 skyCol0 = ambientLight * eyeBrightnessSmooth.y/vec3(240.0) * Ambient_Mult*2.0 * 8.0/150.0/3.0;
 	// Makes fog more white idk how to simulate it correctly
 	vec3 sunColor = lightCol.rgb * 8.0/150.0/3.0;
-	skyCol0 = skyCol0.rgb;
+//	skyCol0 = skyCol0.rgb;
 
 	vec3 rC = vec3(fog_coefficientRayleighR*1e-6, fog_coefficientRayleighG*1e-5, fog_coefficientRayleighB*1e-5);
 	vec3 mC = vec3(fog_coefficientMieR*1e-6, fog_coefficientMieG*1e-6, fog_coefficientMieB*1e-6);
@@ -159,12 +168,16 @@ mat2x3 getVolumetricRays(float dither, vec3 fragpos, vec4 lightCol) {
 	float expFactor = 11.0;
 
 //	vec3 WsunVec = mat3(gbufferModelViewInverse) * sunVec * lightCol.a;
+	float sampleCountInv = 1.0 / float(VL_SAMPLES);
 
 	for (int i = 0; i < VL_SAMPLES; i++) {
-		float d = (pow(expFactor, float(i+dither)/float(VL_SAMPLES))/expFactor - 1.0/expFactor)/(1-1.0/expFactor);
-		float dd = pow(expFactor, float(i+dither)/float(VL_SAMPLES)) * log(expFactor) / float(VL_SAMPLES)/(expFactor-1.0);
-		progress = start.xyz + d*dV;
-		progressW = gbufferModelViewInverse[3].xyz + cameraPosition + d*dVWorld;
+		float stepF = pow(expFactor, (i + dither) * sampleCountInv);
+		float d = (stepF/expFactor - 1.0/expFactor) / (1.0 - 1.0/expFactor);
+		float dd = stepF * log(expFactor) * sampleCountInv / (expFactor - 1.0);
+
+		vec3 progress = start.xyz + d*dV;
+		vec3 progressL = gbufferModelViewInverse[3].xyz + d*dVWorld;
+		vec3 progressW = progressL + cameraPosition;
 
 		// project into biased shadowmap space
 		float distortFactor = calcDistort(progress.xy);
@@ -189,6 +202,14 @@ mat2x3 getVolumetricRays(float dither, vec3 fragpos, vec4 lightCol) {
 				sh *= cloudShadow;
 			#endif
 		}
+
+		#if defined(LIGHTING_COLORED) && defined(LIGHTING_FLOODFILL_FOG)
+			vec3 voxelPos = GetVoxelPosition(progressL);
+			if (IsInVoxelBounds(voxelPos)) {
+				const float phaseIso = 1.0 / (4.0*PI);
+				skyCol0 += phaseIso * SampleFloodFill(voxelPos, frameCounter);
+			}
+		#endif
 
 		// Water droplets(fog)
 		float density = densityVol * ATMOSPHERIC_DENSITY * mu * 300.0;

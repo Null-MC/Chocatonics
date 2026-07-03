@@ -40,6 +40,11 @@ uniform sampler2D TEX_SKY_LUT;
 	uniform sampler2D TEX_REFLECT_HISTORY;
 #endif
 
+#ifdef LIGHTING_COLORED
+	uniform sampler3D texFloodFill;
+#endif
+
+
 uniform float far;
 uniform float near;
 uniform vec3 sunVec;
@@ -80,6 +85,11 @@ uniform vec3 shadowLightPosition;
 
 #ifdef CLOUDS_SHADOWS
 	#include "/lib/volumetricClouds.glsl"
+#endif
+
+#ifdef LIGHTING_COLORED
+	#include "/lib/voxel.glsl"
+	#include "/lib/floodfill.glsl"
 #endif
 
 #include "/photonics/tracing.glsl"
@@ -301,7 +311,7 @@ void main() {
 
 				vec3 hit_color = vec3(0.0);
 
-				#if MAT_FORMAT != 0 || defined(MC_TEXTURE_FORMAT_LAB_PBR)
+				#ifdef MAT_PBR_ENABLED
 					vec4 hit_specularData = voxel_data_specular(voxel_data);
 
 					float hit_roughness = square(1.0 - hit_specularData.r);
@@ -329,13 +339,23 @@ void main() {
 				ambientLight += vIn.ambientF * mix(saturate(-ambientCoefs.z), 1.0/6.0, hit_sss);
 
 				vec3 custom_lightmap = texture(TEX_SKY_LUT, (hit_lmcoord * 15.0 + 0.5 + vec2(0.0, 19.0)) * texelSize).rgb / 150.0 * 8.0/3.0;
-				ambientLight = ambientLight * custom_lightmap.x + custom_lightmap.z * vec3(0.9, 1.0, 1.5) + custom_lightmap.y * TorchColor;
+				vec3 torchLight = custom_lightmap.y * TorchColor;
+
+				#ifdef LIGHTING_COLORED
+					vec3 hit_voxelPos = GetVoxelPosition(hit_localPos);
+					vec3 hit_samplePos = GetFloodFillSamplePos(hit_voxelPos, hit_localNormal);
+
+					if (IsInVoxelBounds(hit_samplePos)) {
+						torchLight += SampleFloodFill(hit_samplePos, frameCounter);
+					}
+				#endif
+
+				ambientLight = ambientLight * custom_lightmap.x + custom_lightmap.z * vec3(0.9, 1.0, 1.5) + torchLight;
 				hit_color += (skyShading * shadow_color)/PI * vIn.lightCol.rgb * 8.0/3.0 / 150.0 + ambientLight;
 
 				// TODO: fresnel, probably wrong
 				float hit_NoVm = max(dot(hit_localNormal, -reflectLocalDir), 0.0);
 				float hit_F = schlick(hit_NoVm, hit_f0, 1.0);
-
 
 				hit_color *= hit_albedo;
 
@@ -347,9 +367,9 @@ void main() {
 				// check if the f0 is within the metal ranges, then tint by albedo if it's true.
 				transmittance *= mix(vec3(1.0), hit_albedo, hit_f0 > 229.5/255.0);
 
-				#ifndef REFLECTION_ROUGH
+//				#ifndef REFLECTION_ROUGH
 					transmittance *= 1.0 - sqrt(hit_roughness);
-				#endif
+//				#endif
 
 				vec3 hit_reflectLocalDir = normalize(reflect(reflectLocalDir, hit_localNormal));
 				localPosLast = hit_localPos;

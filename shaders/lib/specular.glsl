@@ -44,7 +44,7 @@ vec3 rayTraceSpeculars(vec3 dir, vec3 position, float dither, float quality, boo
 			float zL = near / spos.z;
 
 			// small bias
-			float biasamount = 0.0000004;//0.0002;
+			float biasamount = 0.00004;//0.0002;
 			if (hand) biasamount = 0.01;
 
 //			minZ = maxZ - biasamount / (zL);
@@ -61,7 +61,11 @@ vec3 rayTraceSpeculars(vec3 dir, vec3 position, float dither, float quality, boo
 		maxZ += stepv.z;
 	}
 
-	return vec3(1.1);
+	#ifdef VOXY
+		return vec3(-0.1);
+	#else
+		return vec3(1.1);
+	#endif
 }
 
 // pain
@@ -261,6 +265,7 @@ void MaterialReflections(
 				vec3 rtPos = rayTraceSpeculars(mat3(gbufferModelView) * L, fragpos, noise.b, rayQuality, hand, fresnel);
 
 				if (!isDepthSky(rtPos.z)) {
+					rtPos.z = max(rtPos.z, near / farPlane);
 					// Reproject on previous frame
 					vec3 previousPosition = toScreenSpace_lod(rtPos);
 					previousPosition = toWorldSpaceCamera(previousPosition) - previousCameraPosition;

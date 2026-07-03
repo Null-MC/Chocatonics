@@ -33,10 +33,13 @@ const bool colortex15Clear = false;
 
 const float PI = acos(-1.0);
 const float EPSILON = 1.e-6;
+const uint USHORT_MAX = uint(-1);
 
 const float vxNearPlane = 16.0;
 const float vxFarPlane = 16.0 * 3000.0;
 
+
+#define BLOCK_SOLID USHORT_MAX
 
 #define lumCoeff vec3(0.2125, 0.7154, 0.0721)
 
@@ -100,6 +103,11 @@ float luma(const in vec3 color) {return dot(color, lumCoeff);}
 float minOf(const in vec3 vec) {return min(min(vec[0], vec[1]), vec[2]);}
 
 float maxOf(const in vec2 vec) {return max(vec[0], vec[1]);}
+float maxOf(const in vec3 vec) {return max(vec[0], max(vec[1], vec[2]));}
+
+int sumOf(ivec3 vec) {return vec.x + vec.y + vec.z;}
+float sumOf(vec2 vec) {return vec.x + vec.y;}
+float sumOf(vec3 vec) {return vec.x + vec.y + vec.z;}
 
 float square(float x) {
     return x * x;

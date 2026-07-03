@@ -1,0 +1,208 @@
+#version 430 compatibility
+
+#include "/lib/common.glsl"
+#include "/lib/settings.glsl"
+
+
+layout (local_size_x = 8, local_size_y = 8, local_size_z = 8) in;
+
+#if LIGHTING_VOXEL_SIZE == 256
+    const ivec3 workGroups = ivec3(32, 32, 32);
+#elif LIGHTING_VOXEL_SIZE == 128
+    const ivec3 workGroups = ivec3(16, 16, 16);
+#elif LIGHTING_VOXEL_SIZE == 64
+    const ivec3 workGroups = ivec3(8, 8, 8);
+#endif
+
+const float LpvFalloff = 0.998;
+
+
+shared uint voxelSharedData[10*10*10];
+shared vec4 lpvBuffer[10*10*10];
+
+layout(rgba8) uniform image3D imgFloodFill;
+
+uniform usampler3D texVoxels;
+uniform sampler2D texBlockLight;
+
+uniform int frameCounter;
+uniform vec3 cameraPosition;
+uniform vec3 previousCameraPosition;
+uniform mat4 gbufferModelViewInverse;
+uniform mat4 gbufferPreviousModelView;
+
+#include "/lib/voxel.glsl"
+#include "/lib/blocks.glsl"
+#include "/lib/color_transforms.glsl"
+#include "/lib/blockLights.glsl"
+
+
+float avg(const in vec3 val) {
+    return sumOf(val) / 3.0;
+}
+
+vec3 toExp2(const in vec3 color) {
+    float lum_now = avg(color);
+    if (lum_now < EPSILON) return color;
+
+    float lum_tgt = exp2(lum_now * LIGHTING_FLOODFILL_RANGE) - 1.0;
+    return color * (lum_tgt / lum_now);
+}
+
+vec3 fromExp2(const in vec3 color) {
+    float lum_now = avg(color);
+    if (lum_now < EPSILON) return color;
+
+    float lum_tgt = log2(lum_now + 1.0) / LIGHTING_FLOODFILL_RANGE;
+    return color * (lum_tgt / lum_now);
+}
+
+vec4 GetLpvValue(in ivec3 voxelPos) {
+    if (!IsInVoxelBounds(voxelPos)) return vec4(0.0);
+
+    if (frameCounter % 2 == 0)
+    voxelPos.z += LIGHTING_VOXEL_SIZE;
+
+    vec4 color = imageLoad(imgFloodFill, voxelPos);
+    color.rgb = toLinear(color.rgb);
+    color.rgb = toExp2(color.rgb);
+    return color;
+}
+
+uint GetVoxelBlock(const in ivec3 voxelPos) {
+    if (!IsInVoxelBounds(voxelPos)) return 0u;
+
+    return texelFetch(texVoxels, voxelPos, 0).r;
+}
+
+const ivec3 lpvFlatten = ivec3(1, 10, 100);
+
+int getSharedCoord(const in ivec3 pos) {
+    return sumOf(pos * lpvFlatten);
+}
+
+ivec3 GetVoxelFrameOffset() {
+    return ivec3(floor(cameraPosition)) - ivec3(floor(previousCameraPosition));
+}
+
+vec4 sampleShared(const in ivec3 pos, const in int mask_index, out float weight) {
+    int shared_index = getSharedCoord(pos + 1);
+
+    //float mixWeight = 1.0;
+    uint mixMask = 0xFFFF;
+    uint blockId = voxelSharedData[shared_index];
+    weight = 1.0;
+
+    //    if (blockId > 0u && blockId < 65000u) {
+    //        ivec2 blockMaskUV = ivec2(blockId % 256, blockId / 256);
+    //        uint maskData = texelFetch(texBlockMask, blockMaskUV, 0).r;
+    //        mixWeight = unpackUnorm4x8(maskData).r;
+    //        mixMask = bitfieldExtract(maskData, 8, 8);
+    //    }
+
+    vec4 color = lpvBuffer[shared_index];
+    uint wMask = bitfieldExtract(mixMask, mask_index, 1);
+    color *= wMask;// * mixWeight;
+    return color;
+}
+
+vec3 mixNeighboursDirect(const in ivec3 fragCoord, const in uint mask) {
+    uvec3 m1 = (uvec3(mask) >> uvec3(0, 2, 4)) & uvec3(1u);
+    uvec3 m2 = (uvec3(mask) >> uvec3(1, 3, 5)) & uvec3(1u);
+
+    vec3 w1, w2;
+    vec3 nX1 = sampleShared(fragCoord + ivec3(-1,  0,  0), 1, w1.x).rgb * m1.x;
+    vec3 nX2 = sampleShared(fragCoord + ivec3( 1,  0,  0), 0, w2.x).rgb * m2.x;
+    vec3 nY1 = sampleShared(fragCoord + ivec3( 0, -1,  0), 3, w1.y).rgb * m1.y;
+    vec3 nY2 = sampleShared(fragCoord + ivec3( 0,  1,  0), 2, w2.y).rgb * m2.y;
+    vec3 nZ1 = sampleShared(fragCoord + ivec3( 0,  0, -1), 5, w1.z).rgb * m1.z;
+    vec3 nZ2 = sampleShared(fragCoord + ivec3( 0,  0,  1), 4, w2.z).rgb * m2.z;
+
+    const float wMaxInv = 1.0 / 6.0;//max(sumOf(w1 + w2), 1.0);
+    float avgFalloff = wMaxInv * LpvFalloff;
+    return (nX1 + nX2 + nY1 + nY2 + nZ1 + nZ2) * avgFalloff;
+}
+
+void copyToShared(const in ivec3 workGroupOffset, const in ivec3 imgCoordOffset, const in uint i) {
+    ivec3 voxelPos = workGroupOffset + ivec3(i / lpvFlatten) % 10;
+
+    lpvBuffer[i] = GetLpvValue(voxelPos + imgCoordOffset);
+    voxelSharedData[i] = GetVoxelBlock(voxelPos);
+}
+
+
+void main() {
+    uvec3 chunkPos = gl_WorkGroupID * gl_WorkGroupSize;
+    if (any(greaterThanEqual(chunkPos, VoxelBufferSize))) return;
+
+    uint i_base = uint(gl_LocalInvocationIndex) * 2u;
+    if (i_base < 1000u) {
+        ivec3 workGroupOffset = ivec3(gl_WorkGroupID * gl_WorkGroupSize) - 1;
+        ivec3 imgCoordOffset = GetVoxelFrameOffset();
+
+        copyToShared(workGroupOffset, imgCoordOffset, i_base);
+        copyToShared(workGroupOffset, imgCoordOffset, i_base + 1u);
+    }
+
+    memoryBarrierShared();
+    barrier();
+
+    ivec3 imgCoord = ivec3(gl_GlobalInvocationID);
+    if (any(greaterThanEqual(imgCoord, VoxelBufferSize))) return;
+
+    vec3 viewDir = gbufferModelViewInverse[2].xyz;
+    vec3 lpvCenter = GetVoxelCenter(cameraPosition, viewDir);
+    vec3 blockLocalPos = imgCoord - lpvCenter + 0.5;
+
+    uint blockId = voxelSharedData[getSharedCoord(ivec3(gl_LocalInvocationID) + 1)];
+
+    vec4 colorFinal = vec4(0.0);
+
+    float mixWeight = 1.0;
+    uint mixMask = 0xFFFF;
+    vec3 tint = vec3(1.0);
+
+    if (blockId > 0u && blockId < USHORT_MAX) {
+//        GetBlockMask(blockId, mixWeight, mixMask);
+        mixWeight = 0.0;
+        mixMask = 0u;
+    }
+
+    float _w;
+    colorFinal.a = lpvBuffer[getSharedCoord(ivec3(gl_LocalInvocationID) + ivec3(1,2,1))].a;
+    colorFinal.a = max(colorFinal.a, 1.0 - mixWeight);
+    if (blockId == BLOCK_GLASS) colorFinal.a = 1.0;
+    //uint blockId_up = voxelSharedData[getSharedCoord(ivec3(gl_LocalInvocationID) + ivec3(1,2,1))];
+    //    if (blockId_up != 0u) colorFinal.a = 0.0;
+
+    float lightRange = 0.0;
+    vec3 lightColor = vec3(0.0);
+    if (blockId > 0u && blockId < USHORT_MAX) {
+        GetBlockColorRange(blockId, lightColor, lightRange);
+    }
+
+    if (blockId >= BLOCK_HONEY && blockId <= BLOCK_TINTED_GLASS) {
+        tint = lightColor;
+        mixMask = 0xFFFF;
+        mixWeight = 1.0;
+    }
+
+    if (mixWeight > EPSILON) {
+        vec3 lightMixed = mixNeighboursDirect(ivec3(gl_LocalInvocationID), mixMask);
+        lightMixed *= mixWeight * tint;
+        colorFinal.rgb += lightMixed;
+    }
+
+    if (lightRange > 0.0) {
+        float lum = avg(lightColor);
+        vec3 newLight = lightColor * ((lightRange / 15.0) / lum);
+        colorFinal.rgb += toExp2(newLight);
+    }
+
+    colorFinal.rgb = fromExp2(colorFinal.rgb);
+    colorFinal.rgb = linearToSRGB(colorFinal.rgb);
+    //    colorFinal.a = saturate(colorFinal.a / 15.0);
+
+    if (frameCounter % 2 == 1) imgCoord.z += LIGHTING_VOXEL_SIZE;
+    imageStore(imgFloodFill, imgCoord, colorFinal);
+}
