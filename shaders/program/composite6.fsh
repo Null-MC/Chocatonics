@@ -115,6 +115,10 @@ float cloudVol(in vec3 pos) {
 }
 
 mat2x3 getVolumetricRays(float dither, vec3 fragpos, vec4 lightCol) {
+	// TODO:
+//	float len = length(fragpos);
+//	if (len > far) fragpos *= far / len;
+
 	// project pixel position into projected shadowmap space
 	vec3 wpos = toWorldSpace(fragpos);
 	vec3 fragposition = worldToShadowSpaceProjected(wpos);
@@ -203,11 +207,17 @@ mat2x3 getVolumetricRays(float dither, vec3 fragpos, vec4 lightCol) {
 			#endif
 		}
 
+		vec3 skyCol1 = skyCol0;
+
 		#if defined(LIGHTING_COLORED) && defined(LIGHTING_FLOODFILL_FOG)
 			vec3 voxelPos = GetVoxelPosition(progressL);
 			if (IsInVoxelBounds(voxelPos)) {
-				const float phaseIso = 1.0 / (4.0*PI);
-				skyCol0 += phaseIso * SampleFloodFill(voxelPos, frameCounter);
+				vec3 floodfill = SampleFloodFill(voxelPos, frameCounter);
+
+				float lum = luma(floodfill);
+				floodfill *= lum;
+
+				skyCol1 += 8.0 * floodfill;
 			}
 		#endif
 
@@ -220,7 +230,7 @@ mat2x3 getVolumetricRays(float dither, vec3 fragpos, vec4 lightCol) {
 		// Pbr for air, yolo mix between mie and rayleigh for water droplets
 		vec3 rL = rC * airCoef.x;
 		vec3 m = (airCoef.y + density) * mC;
-		vec3 vL0 = sunColor * sh * (rayL*rL+m*mie) + skyCol0 * (rL + m);
+		vec3 vL0 = sunColor * sh * (rayL*rL+m*mie) + skyCol1 * (rL + m);
 		vL += (vL0 - vL0 * exp(-(rL+m)*dd*dL)) / ((rL+m)+0.00000001) * absorbance;
 		absorbance *= saturate(exp(-(rL+m)*dd*dL));
 	}

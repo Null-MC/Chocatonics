@@ -69,7 +69,7 @@
 #define LIGHTING_VOXEL_SIZE 128 // [64 128 256]
 #define LIGHTING_FLOODFILL_RANGE 12 // [2 3 4 5 6 7 8 9 10 12 14 16 18 20 22 24 26 28 30 32]
 #define LPV_FRUSTUM_OFFSET 0 // [0]
-//#define LIGHTING_FLOODFILL_FOG
+#define LIGHTING_FLOODFILL_FOG
 
 #define HQ_CLOUDS	//Renders detailled clouds for viewport
 
@@ -207,8 +207,10 @@ const vec3 TorchColor = vec3(TORCH_R, TORCH_G, TORCH_B);
     #define VOXEL_ENABLED
 #endif
 
-#ifdef LIGHTING_FLOODFILL_FOG
-#endif
+// TODO
+//#ifdef LIGHTING_FLOODFILL_FOG
+//    #undef BLOOMY_FOG
+//#endif
 
 #if defined(TAA_ENABLED) && TAA_RENDER_SCALE != 100
     #define TAA_UPSCALING

@@ -110,7 +110,9 @@ void main() {
             || renderStage == MC_RENDER_STAGE_TERRAIN_TRANSLUCENT;
 
         if (isRenderTerrain) {
-            bool ignoreBlock = blockId == BLOCK_WATER || blockId == BLOCK_IGNORED || blockId == BLOCK_PLANT_WAVING_FULL || blockId == BLOCK_SSS;
+            bool ignoreBlock = blockId == BLOCK_WATER || blockId == BLOCK_IGNORED
+                    || blockId == BLOCK_PLANT_WAVING_FULL || blockId == BLOCK_SSS
+                    || blockId == BLOCK_GLASS;
 
             if (!ignoreBlock && (gl_VertexID % 4) == 0) {
                 originPos = localPos + at_midBlock.xyz / 64.0;
