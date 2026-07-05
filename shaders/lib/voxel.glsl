@@ -4,15 +4,18 @@ const float VoxelFrustumOffsetF = LPV_FRUSTUM_OFFSET * 0.01;
 const float Voxel_FadePadding = 8.0;
 
 
-vec3 GetVoxelCenter(const in vec3 viewPos, const in vec3 viewDir) {
-    //    ivec3 offset = ivec3(floor(viewDir * VoxelBufferSize * VoxelFrustumOffsetF));
-    //    return (VoxelBufferCenter + offset) + fract(viewPos);
-    return VoxelBufferCenter + fract(viewPos);
+vec3 GetVoxelCenter(const in vec3 viewDir) {
+    vec3 offset = viewDir * (VoxelBufferSize * VoxelFrustumOffsetF);
+    return VoxelBufferCenter + ivec3(floor(offset));
+}
+
+vec3 GetVoxelOffset(const in vec3 cameraPos, const in vec3 playerViewDir) {
+    return fract(cameraPos) + GetVoxelCenter(playerViewDir);
 }
 
 vec3 GetVoxelPosition(const in vec3 localPos) {
     vec3 viewDir = gbufferModelViewInverse[2].xyz;
-    return localPos + GetVoxelCenter(cameraPosition, viewDir);
+    return localPos + GetVoxelOffset(cameraPosition, viewDir);
 }
 
 bool IsInVoxelBounds(const in ivec3 voxelPos) {

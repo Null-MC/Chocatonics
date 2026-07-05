@@ -92,6 +92,12 @@ uniform int framemod8;
 	#include "/lib/specular.glsl"
 #endif
 
+//#ifdef PHOTONICS_REFLECT_ENABLED
+//	#include "/photonics/uniforms.glsl"
+//	#include "/photonics/tracing.glsl"
+//	#include "/photonics/trace_ray.glsl"
+//#endif
+
 
 /* RENDERTARGETS: 2,7 */
 layout(location = 0) out vec4 outColor2;

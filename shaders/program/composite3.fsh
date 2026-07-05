@@ -5,6 +5,7 @@
 #include "/lib/common.glsl"
 #include "/lib/settings.glsl"
 
+#define RENDER_OPAQUE_DEFERRED
 #define TEX_SKY_LUT colortex4
 #define TEX_FINAL_PREV colortex5
 

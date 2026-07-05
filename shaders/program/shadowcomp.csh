@@ -82,7 +82,15 @@ int getSharedCoord(const in ivec3 pos) {
 }
 
 ivec3 GetVoxelFrameOffset() {
-    return ivec3(floor(cameraPosition)) - ivec3(floor(previousCameraPosition));
+//    return ivec3(floor(cameraPosition)) - ivec3(floor(previousCameraPosition));
+
+    vec3 cameraViewDir = gbufferModelViewInverse[2].xyz;
+    vec3 lpvPosNow = GetVoxelOffset(cameraPosition, cameraViewDir);
+
+    vec3 previousCameraViewDir = vec3(gbufferPreviousModelView[0].z, gbufferPreviousModelView[1].z, gbufferPreviousModelView[2].z);
+    vec3 lpvPosLast = GetVoxelOffset(previousCameraPosition, previousCameraViewDir);
+
+    return ivec3(floor(lpvPosLast) - floor(lpvPosNow)) + ivec3(floor(cameraPosition) - floor(previousCameraPosition));
 }
 
 vec4 sampleShared(const in ivec3 pos, const in int mask_index, out float weight) {
@@ -151,7 +159,7 @@ void main() {
     if (any(greaterThanEqual(imgCoord, VoxelBufferSize))) return;
 
     vec3 viewDir = gbufferModelViewInverse[2].xyz;
-    vec3 lpvCenter = GetVoxelCenter(cameraPosition, viewDir);
+    vec3 lpvCenter = GetVoxelOffset(cameraPosition, viewDir);
     vec3 blockLocalPos = imgCoord - lpvCenter + 0.5;
 
     uint blockId = voxelSharedData[getSharedCoord(ivec3(gl_LocalInvocationID) + 1)];

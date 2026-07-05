@@ -114,11 +114,36 @@ float cloudVol(in vec3 pos) {
 	return cloud;
 }
 
-mat2x3 getVolumetricRays(float dither, vec3 fragpos, vec4 lightCol) {
-	// TODO:
-//	float len = length(fragpos);
-//	if (len > far) fragpos *= far / len;
+float VL_ShadowSample(vec3 progress, vec3 progressW) {
+	// project into biased shadowmap space
+	float distortFactor = calcDistort(progress.xy);
+	vec3 pos = vec3(progress.xy * distortFactor, progress.z);
 
+//	float densityVol = cloudVol(progressW);
+	float sh = 1.0;
+
+	if (IsInShadowMap(pos)) {
+		pos = pos * vec3(0.5, 0.5, 0.5/6.0) + 0.5;
+		sh = texture(shadowtex0HW, pos);
+
+		#ifdef VL_Clouds_Shadows
+			const int rayMarchSteps = 6;
+
+			float cloudShadow = 0.0;
+			for (int i = 0; i < rayMarchSteps; i++) {
+				vec3 cloudPos = progressW + vIn.WsunVec / abs(vIn.WsunVec.y) * (1500 + (dither+i) / rayMarchSteps*1700 - progressW.y);
+				cloudShadow += getCloudDensity(cloudPos, 0);
+			}
+
+			cloudShadow = mix(1.0, exp(cloudShadow * cloudDensity * -1700/rayMarchSteps), mix(CLOUDS_SHADOWS_STRENGTH, 1.0, rainStrength));
+			sh *= cloudShadow;
+		#endif
+	}
+
+	return sh;
+}
+
+mat2x3 getVolumetricRays(float dither, vec3 fragpos, vec4 lightCol) {
 	// project pixel position into projected shadowmap space
 	vec3 wpos = toWorldSpace(fragpos);
 	vec3 fragposition = worldToShadowSpaceProjected(wpos);
@@ -137,10 +162,6 @@ mat2x3 getVolumetricRays(float dither, vec3 fragpos, vec4 lightCol) {
 	dVWorld *= maxLength;
 
 	// apply dither
-//	vec3 progress = start.xyz;
-//	vec3 progressW = gbufferModelViewInverse[3].xyz + cameraPosition;
-	vec3 vL = vec3(0.0);
-
 	float SdotV = dot(sunVec, normalize(fragpos)) * lightCol.a;
 	float dL = length(dVWorld);
 	//Mie phase + somewhat simulates multiple scattering (Horizon zero down cloud approx)
@@ -158,12 +179,12 @@ mat2x3 getVolumetricRays(float dither, vec3 fragpos, vec4 lightCol) {
 	ambientLight += vIn.ambientF * saturate(-ambientCoefs.z);
 
 	vec3 skyCol0 = ambientLight * eyeBrightnessSmooth.y/vec3(240.0) * Ambient_Mult*2.0 * 8.0/150.0/3.0;
+
 	// Makes fog more white idk how to simulate it correctly
 	vec3 sunColor = lightCol.rgb * 8.0/150.0/3.0;
-//	skyCol0 = skyCol0.rgb;
 
-	vec3 rC = vec3(fog_coefficientRayleighR*1e-6, fog_coefficientRayleighG*1e-5, fog_coefficientRayleighB*1e-5);
-	vec3 mC = vec3(fog_coefficientMieR*1e-6, fog_coefficientMieG*1e-6, fog_coefficientMieB*1e-6);
+	const vec3 rC = vec3(fog_coefficientRayleighR, fog_coefficientRayleighG, fog_coefficientRayleighB) * 1e-6;
+	const vec3 mC = vec3(fog_coefficientMieR, fog_coefficientMieG, fog_coefficientMieB) * 1e-6;
 
 	float mu = 1.0;
 	float muS = 1.0*mu;
@@ -171,57 +192,31 @@ mat2x3 getVolumetricRays(float dither, vec3 fragpos, vec4 lightCol) {
 	vec3 absorbance = vec3(1.0);
 	float expFactor = 11.0;
 
-//	vec3 WsunVec = mat3(gbufferModelViewInverse) * sunVec * lightCol.a;
-	float sampleCountInv = 1.0 / float(VL_SAMPLES);
+	vec3 vL = vec3(0.0);
+	const float sampleCountInv = 1.0 / float(VL_SAMPLES);
 
 	for (int i = 0; i < VL_SAMPLES; i++) {
 		float stepF = pow(expFactor, (i + dither) * sampleCountInv);
 		float d = (stepF/expFactor - 1.0/expFactor) / (1.0 - 1.0/expFactor);
 		float dd = stepF * log(expFactor) * sampleCountInv / (expFactor - 1.0);
 
-		vec3 progress = start.xyz + d*dV;
+		vec3 progress = start + d*dV;
 		vec3 progressL = gbufferModelViewInverse[3].xyz + d*dVWorld;
 		vec3 progressW = progressL + cameraPosition;
 
-		// project into biased shadowmap space
-		float distortFactor = calcDistort(progress.xy);
-		vec3 pos = vec3(progress.xy * distortFactor, progress.z);
-		float densityVol = cloudVol(progressW);
-		float sh = 1.0;
+		float sh = VL_ShadowSample(progress, progressW);
 
-		if (IsInShadowMap(pos)) {
-			pos = pos * vec3(0.5, 0.5, 0.5/6.0) + 0.5;
-			sh = texture(shadowtex0HW, pos);
-
-			#ifdef VL_Clouds_Shadows
-				const int rayMarchSteps = 6;
-
-				float cloudShadow = 0.0;
-				for (int i = 0; i < rayMarchSteps; i++) {
-					vec3 cloudPos = progressW + vIn.WsunVec / abs(vIn.WsunVec.y) * (1500 + (dither+i) / rayMarchSteps*1700 - progressW.y);
-					cloudShadow += getCloudDensity(cloudPos, 0);
-				}
-
-				cloudShadow = mix(1.0, exp(cloudShadow * cloudDensity * -1700/rayMarchSteps), mix(CLOUDS_SHADOWS_STRENGTH, 1.0, rainStrength));
-				sh *= cloudShadow;
-			#endif
-		}
-
-		vec3 skyCol1 = skyCol0;
+		vec3 sampleLight = skyCol0;
 
 		#if defined(LIGHTING_COLORED) && defined(LIGHTING_FLOODFILL_FOG)
 			vec3 voxelPos = GetVoxelPosition(progressL);
 			if (IsInVoxelBounds(voxelPos)) {
-				vec3 floodfill = SampleFloodFill(voxelPos, frameCounter);
-
-				float lum = luma(floodfill);
-				floodfill *= lum;
-
-				skyCol1 += 8.0 * floodfill;
+				sampleLight += SampleFloodFill(voxelPos, frameCounter);
 			}
 		#endif
 
 		// Water droplets(fog)
+		float densityVol = cloudVol(progressW);
 		float density = densityVol * ATMOSPHERIC_DENSITY * mu * 300.0;
 
 		// Just air
@@ -230,9 +225,10 @@ mat2x3 getVolumetricRays(float dither, vec3 fragpos, vec4 lightCol) {
 		// Pbr for air, yolo mix between mie and rayleigh for water droplets
 		vec3 rL = rC * airCoef.x;
 		vec3 m = (airCoef.y + density) * mC;
-		vec3 vL0 = sunColor * sh * (rayL*rL+m*mie) + skyCol1 * (rL + m);
-		vL += (vL0 - vL0 * exp(-(rL+m)*dd*dL)) / ((rL+m)+0.00000001) * absorbance;
-		absorbance *= saturate(exp(-(rL+m)*dd*dL));
+		vec3 vL0 = sunColor * sh * (rayL*rL+m*mie) + sampleLight * (rL + m);
+
+		vL += (vL0 - vL0 * exp(-(rL+m) * dd*dL)) / ((rL+m) + 1e-8) * absorbance;
+		absorbance *= saturate(exp(-(rL+m) * dd*dL));
 	}
 
 	return mat2x3(vL, absorbance);
@@ -265,7 +261,7 @@ float waterCaustics(vec3 wPos, vec3 lightSource) {
 }
 
 void waterVolumetrics(inout vec3 inColor, vec3 rayStart, vec3 rayEnd, float estEyeDepth, float estSunDepth, float rayLength, float dither, vec3 waterCoefs, vec3 scatterCoef, vec3 ambient, vec3 lightSource, float VdotL){
-	int spCount = 16;
+	const int spCount = 16;
 
 	vec3 start = worldToShadowSpaceProjected(toWorldSpace(rayStart));
 	vec3 end = worldToShadowSpaceProjected(toWorldSpace(rayEnd));
@@ -283,16 +279,18 @@ void waterVolumetrics(inout vec3 inColor, vec3 rayStart, vec3 rayEnd, float estE
 	vec3 absorbance = vec3(1.0);
 	vec3 vL = vec3(0.0);
 
+	const float expFactor = 11.0;
+	const float sampleCountInv = 1.0 / spCount;
 	float phase = phaseg(VdotL, Dirt_Mie_Phase);
-	float expFactor = 11.0;
-	vec3 progressW = gbufferModelViewInverse[3].xyz + cameraPosition;
-//	vec3 WsunVec = mat3(gbufferModelViewInverse) * sunVec * vIn.lightCol.a;
 
 	for (int i = 0; i < spCount; i++) {
-		float d = (pow(expFactor, float(i+dither)/float(spCount))/expFactor - 1.0/expFactor) / (1.0 - 1.0/expFactor);		// exponential step position (0-1)
-		float dd = pow(expFactor, float(i+dither)/float(spCount)) * log(expFactor) / float(spCount) / (expFactor-1.0);	//step length (derivative)
+		float stepF = pow(expFactor, (i + dither) * sampleCountInv);
+		float d = (stepF/expFactor - 1.0/expFactor) / (1.0 - 1.0/expFactor);		// exponential step position (0-1)
+		float dd = stepF * log(expFactor) * sampleCountInv / (expFactor - 1.0);	//step length (derivative)
 		vec3 spPos = start.xyz + dV*d;
-		progressW = gbufferModelViewInverse[3].xyz + cameraPosition + d*dVWorld;
+
+		vec3 progressL = gbufferModelViewInverse[3].xyz + d*dVWorld;
+		vec3 progressW = progressL + cameraPosition;
 
 		// project into biased shadowmap space
 		float distortFactor = calcDistort(spPos.xy);
@@ -305,9 +303,18 @@ void waterVolumetrics(inout vec3 inColor, vec3 rayStart, vec3 rayEnd, float estE
 		}
 
 		vec3 ambientMul = exp(-max(estEyeDepth - dY * d, 0.0) * waterCoefs);
+		vec3 sampleLight = ambientMul * ambient;
+
+		#if defined(LIGHTING_COLORED) && defined(LIGHTING_FLOODFILL_FOG)
+			vec3 voxelPos = GetVoxelPosition(progressL);
+			if (IsInVoxelBounds(voxelPos)) {
+				sampleLight += SampleFloodFill(voxelPos, frameCounter);
+			}
+		#endif
+
 		vec3 sunMul = exp(-max((estEyeDepth - dY * d), 0.0) / abs(vIn.refractedSunVec.y) * waterCoefs);
 		float sunCaustics = mix(waterCaustics(progressW, vIn.WsunVec)*0.5+0.5, 1.0, exp(-max((estEyeDepth - dY * d), 0.0) / 3.0));
-		vec3 light = (sh * sunCaustics * lightSource * phase * sunMul + ambientMul*ambient) * scatterCoef;
+		vec3 light = (sh * sunCaustics * lightSource * phase * sunMul + sampleLight) * scatterCoef;
 		vL += (light - light * exp(-waterCoefs * dd * rayLength)) / waterCoefs * absorbance;
 		absorbance *= exp(-dd * rayLength * waterCoefs);
 	}
@@ -336,9 +343,9 @@ void main() {
 		color = vec4(vl[0], absorbance);
 	}
 	else {
-//		float dirtAmount = Dirt_Amount;
-		vec3 waterEpsilon = vec3(Water_Absorb_R, Water_Absorb_G, Water_Absorb_B);
-		vec3 dirtEpsilon = vec3(Dirt_Absorb_R, Dirt_Absorb_G, Dirt_Absorb_B);
+		const vec3 waterEpsilon = vec3(Water_Absorb_R, Water_Absorb_G, Water_Absorb_B);
+		const vec3 dirtEpsilon = vec3(Dirt_Absorb_R, Dirt_Absorb_G, Dirt_Absorb_B);
+
 		vec3 totEpsilon = dirtEpsilon * Dirt_Amount + waterEpsilon;
 		vec3 scatterCoef = Dirt_Amount * vec3(Dirt_Scatter_R, Dirt_Scatter_G, Dirt_Scatter_B);
 

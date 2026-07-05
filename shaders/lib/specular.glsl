@@ -123,13 +123,15 @@ void MaterialReflections(
 	vec3 SunReflection = skyShading * GGX2(normal, -np3, sunPos, roughness, vec3(f0)) * sunCol * Sun_specular_Strength / 150.0 * 8.0/3.0;
 
 //	#if !defined(PHOTONICS_REFLECT_ENABLED) || (defined(RENDER_GBUFFERS) && !defined(RENDER_VOXY))
-	#if !defined(PHOTONICS_REFLECT_ENABLED) || defined(RENDER_VOXY)
+//	#if !defined(PHOTONICS_REFLECT_ENABLED) || defined(RENDER_VOXY)
+	#if !(defined(PHOTONICS_REFLECT_ENABLED) && defined(RENDER_OPAQUE_DEFERRED))
 		vec3 SkyReflection = skyCloudsFromTex(L, TEX_SKY_LUT).rgb * 0.035;
 	#endif
 
-	#if defined(REFLECTION_ENABLED) && (defined(RENDER_GBUFFERS) || defined(RENDER_VOXY) || !defined(PHOTONICS_REFLECT_ENABLED))
+	#if defined(REFLECTION_ENABLED) && !(defined(PHOTONICS_REFLECT_ENABLED) && defined(RENDER_OPAQUE_DEFERRED))
 		if (hasReflections) { // Skip SSR if ray contribution is low
-			#if defined(PHOTONICS_REFLECT_ENABLED) && !defined(RENDER_VOXY)
+//			#if defined(PHOTONICS_REFLECT_ENABLED) && !defined(RENDER_VOXY)
+			#if defined(PHOTONICS_REFLECT_ENABLED) && defined(RENDER_GBUFFERS) && !defined(RENDER_VOXY)
 //				vec3 localPos = mul3(gbufferModelViewInverse, fragpos);
 				vec3 localPos = toWorldSpace(fragpos);
 				Outdoors = 1.0;
@@ -231,16 +233,16 @@ void MaterialReflections(
 				}
 				else {
 					#ifdef PHOTONICS_REFLECT_SS_FALLBACK
-						vec3 endViewPos = worldToViewSpace(ray.position - rt_camera_position);
+						vec3 endViewPos = fragpos;//worldToViewSpace(ray.position - rt_camera_position);
 						vec3 endScreenPos = toClipSpace3_lod(endViewPos);
 
 						if (all(equal(saturate(endScreenPos.xy), endScreenPos.xy))) {
 							// Scale quality with ray contribution
-							float rayQuality = mix(float(REFLECTION_QUALITY), 0.0, sqrt(roughness));
+							float rayQuality = mix(float(REFLECTION_QUALITY), 2.0, sqrt(roughness));
 
 							vec3 rtPos = rayTraceSpeculars(mat3(gbufferModelView) * L, endViewPos, noise.b, rayQuality, hand, fresnel);
 
-							if (rtPos.z < 1.0) {
+							if (!isDepthSky(rtPos.z)) {
 								// Reproject on previous frame
 								vec3 previousPosition = toWorldSpaceCamera(toScreenSpace_lod(rtPos)) - previousCameraPosition;
 								previousPosition = worldToViewSpace_prev(previousPosition);
@@ -252,11 +254,6 @@ void MaterialReflections(
 								}
 							}
 						}
-						else {
-							Reflections.rgb = skyCloudsFromTex(L, TEX_SKY_LUT).rgb * 0.035;
-						}
-					#else
-						Reflections.rgb = skyCloudsFromTex(L, TEX_SKY_LUT).rgb * 0.035;
 					#endif
 				}
 			#else
@@ -265,12 +262,19 @@ void MaterialReflections(
 				vec3 rtPos = rayTraceSpeculars(mat3(gbufferModelView) * L, fragpos, noise.b, rayQuality, hand, fresnel);
 
 				if (!isDepthSky(rtPos.z)) {
-					rtPos.z = max(rtPos.z, near / farPlane);
+//					#ifdef VOXY
+//						rtPos.z = max(rtPos.z, near / farPlane);
+//					#endif
+
 					// Reproject on previous frame
-					vec3 previousPosition = toScreenSpace_lod(rtPos);
-					previousPosition = toWorldSpaceCamera(previousPosition) - previousCameraPosition;
-					previousPosition = worldToViewSpace_prev(previousPosition);
-					previousPosition = toClipSpace3_lodPrev(previousPosition);
+					vec3 previousPosition = rtPos;
+					// TODO: reprojection breaks on voxy terrain
+					#if defined(RENDER_GBUFFERS) && !defined(RENDER_VOXY)
+						previousPosition = toScreenSpace_lod(previousPosition);
+						previousPosition = toWorldSpaceCamera(previousPosition) - previousCameraPosition;
+						previousPosition = worldToViewSpace_prev(previousPosition);
+						previousPosition = toClipSpace3_lodPrev(previousPosition);
+					#endif
 
 					if (all(equal(saturate(previousPosition.xy), previousPosition.xy))) {
 						Reflections.rgb = textureLod(TEX_FINAL_PREV, previousPosition.xy, 0).rgb;
@@ -289,7 +293,8 @@ void MaterialReflections(
 	SunReflection *= metal_tint;
 
 //	#if !defined(PHOTONICS_REFLECT_ENABLED) || (defined(RENDER_GBUFFERS) && !defined(RENDER_VOXY))
-	#if !defined(PHOTONICS_REFLECT_ENABLED) || defined(RENDER_VOXY)
+//	#if !defined(PHOTONICS_REFLECT_ENABLED) || defined(RENDER_VOXY)
+	#if !(defined(PHOTONICS_REFLECT_ENABLED) && defined(RENDER_OPAQUE_DEFERRED))
 		SkyReflection *= metal_tint;
 	#endif
 
@@ -303,8 +308,9 @@ void MaterialReflections(
 	// apply all reflections to the lighting
 	Reflections_Final += Reflections.rgb;
 
-	#if !defined(PHOTONICS_REFLECT_ENABLED) || defined(RENDER_VOXY)
+//	#if !defined(PHOTONICS_REFLECT_ENABLED) || defined(RENDER_VOXY)
 //	#if !defined(PHOTONICS_REFLECT_ENABLED) || (defined(RENDER_GBUFFERS) && !defined(RENDER_VOXY))
+	#if !(defined(PHOTONICS_REFLECT_ENABLED) && defined(RENDER_OPAQUE_DEFERRED))
 		Reflections_Final += SkyReflection * (1.0-Reflections.a) * Outdoors;
 	#endif
 

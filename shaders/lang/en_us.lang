@@ -37,6 +37,8 @@ screen.PHOTONICS=Photonics
 
         option.PHOTONICS_REFLECT_STEPS=Trace Steps
 
+        option.PHOTONICS_REFLECT_SS_FALLBACK=Screen-Space Fallback
+
     screen.PHOTONICS_RESTIR=ReSTIR Options
 
         option.PHOTONICS_RESTIR_ENABLED=Enabled
@@ -130,6 +132,9 @@ screen.LIGHTING=Lighting
         suffix.LIGHTING_VOXEL_SIZE=\ blocks
 
         option.LIGHTING_FLOODFILL_FOG=Volumetric Fog
+
+        option.LPV_FRUSTUM_OFFSET=Shift Forward
+        suffix.LPV_FRUSTUM_OFFSET=%
 
 
 screen.SHADOWS=Shadows
