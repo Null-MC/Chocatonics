@@ -14,7 +14,7 @@ layout (local_size_x = 8, local_size_y = 8, local_size_z = 8) in;
     const ivec3 workGroups = ivec3(8, 8, 8);
 #endif
 
-const float LpvFalloff = 0.998;
+const float LpvFalloff = 0.96;
 
 
 shared uint voxelSharedData[10*10*10];
@@ -31,8 +31,9 @@ uniform vec3 previousCameraPosition;
 uniform mat4 gbufferModelViewInverse;
 uniform mat4 gbufferPreviousModelView;
 
-#include "/lib/voxel.glsl"
 #include "/lib/blocks.glsl"
+
+#include "/lib/voxel.glsl"
 #include "/lib/color_transforms.glsl"
 #include "/lib/blockLights.glsl"
 
@@ -170,7 +171,8 @@ void main() {
     uint mixMask = 0xFFFF;
     vec3 tint = vec3(1.0);
 
-    if (blockId > 0u && blockId < USHORT_MAX) {
+//    if (blockId > 0u && blockId < USHORT_MAX) {
+    if (IsVoxelSolid(blockId)) {
 //        GetBlockMask(blockId, mixWeight, mixMask);
         mixWeight = 0.0;
         mixMask = 0u;

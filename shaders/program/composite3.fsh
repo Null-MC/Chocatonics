@@ -9,14 +9,14 @@
 #define TEX_SKY_LUT colortex4
 #define TEX_FINAL_PREV colortex5
 
-#define TEX_DEPTH_REFLECT depthtex1
-
 #ifdef VOXY
 	#define TEX_DEPTH_OPAQUE texVoxyDepthOpaque
 	#define TEX_DEPTH_TRANSLUCENT texVoxyDepthTranslucent
+	#define TEX_DEPTH_REFLECT texVoxyDepthOpaque
 #else
 	#define TEX_DEPTH_OPAQUE depthtex1
 	#define TEX_DEPTH_TRANSLUCENT depthtex0
+	#define TEX_DEPTH_REFLECT depthtex1
 #endif
 
 
@@ -67,7 +67,9 @@ uniform sampler2D depthtex1;
 #endif
 
 #ifdef LIGHTING_COLORED
+	uniform usampler3D texVoxels;
 	uniform sampler3D texFloodFill;
+	uniform sampler2D texBlockLight;
 #endif
 
 #ifdef REFLECTION_ENABLED
@@ -78,9 +80,12 @@ uniform sampler2D depthtex1;
 //	uniform sampler2D texPhotonicsIndirect;
 //#endif
 
-uniform int heldBlockLightValue;
 uniform int frameCounter;
 uniform int isEyeInWater;
+uniform int heldItemId;
+uniform int heldItemId2;
+uniform int heldBlockLightValue;
+uniform int heldBlockLightValue2;
 uniform float far;
 uniform float near;
 //uniform float wetness;
@@ -102,6 +107,7 @@ uniform vec2 texelSize;
 uniform vec3 cameraPosition;
 uniform vec3 sunVec;
 uniform ivec2 eyeBrightnessSmooth;
+uniform vec3 relativeEyePosition;
 uniform int framemod8;
 
 
@@ -111,6 +117,8 @@ uniform int framemod8;
 //    vec4 fragposition = iProjDiag * p3.xyzz + gbufferProjectionInverse[3];
 //    return fragposition.xyz / fragposition.w;
 //}
+
+#include "/lib/blocks.glsl"
 
 #include "/lib/r2.glsl"
 #include "/lib/ign.glsl"
@@ -136,6 +144,8 @@ vec2 v_taa_offset = vIn.TAA_Offset;
 #ifdef LIGHTING_COLORED
 	#include "/lib/voxel.glsl"
 	#include "/lib/floodfill.glsl"
+	#include "/lib/blockLights.glsl"
+	#include "/lib/handLight.glsl"
 #endif
 
 #if defined(PHOTONICS_BLOCK_LIGHT_ENABLED) || defined(PHOTONICS_HAND_LIGHT_ENABLED) || defined(PHOTONICS_GI_ENABLED)
@@ -220,8 +230,10 @@ float waterCaustics(vec3 wPos, vec3 lightSource) {
 
 void waterVolumetrics(inout vec3 inColor, vec3 rayStart, vec3 rayEnd, float estEndDepth, float estSunDepth, float rayLength, float dither, vec3 waterCoefs, vec3 scatterCoef, vec3 ambient, vec3 lightSource, float VdotL){
 	inColor *= exp(-rayLength * waterCoefs); // No need to take the integrated value
-	int spCount = rayMarchSampleCount;
-	vec3 start = worldToShadowSpaceProjected(toWorldSpace(rayStart));
+
+	vec3 startWorld = toWorldSpace(rayStart);
+
+	vec3 start = worldToShadowSpaceProjected(startWorld);
 	vec3 end = worldToShadowSpaceProjected(toWorldSpace(rayEnd));
 	vec3 dV = end - start;
 
@@ -230,7 +242,7 @@ void waterVolumetrics(inout vec3 inColor, vec3 rayStart, vec3 rayEnd, float estE
 	float maxZ = min(rayLength, 32.0) / (1e-8 + rayLength);
 	dV *= maxZ;
 
-	vec3 dVWorld = -mat3(gbufferModelViewInverse) * (rayEnd - rayStart) * maxZ;
+	vec3 dVWorld = mat3(gbufferModelViewInverse) * (rayEnd - rayStart) * maxZ;
 
 	rayLength *= maxZ;
 	estEndDepth *= maxZ;
@@ -241,13 +253,19 @@ void waterVolumetrics(inout vec3 inColor, vec3 rayStart, vec3 rayEnd, float estE
 	float phase = phaseg(VdotL, Dirt_Mie_Phase);
 	float expFactor = 11.0;
 
-	vec3 progressW = gbufferModelViewInverse[3].xyz + cameraPosition;
+//	vec3 progressW = gbufferModelViewInverse[3].xyz + cameraPosition;
+	const int spCount = rayMarchSampleCount;
+	const float sampleCountInv = 1.0 / spCount;
 
 	for (int i = 0; i < spCount; i++) {
-		float d = (pow(expFactor, float(i+dither)/float(spCount))/expFactor - 1.0/expFactor)/(1-1.0/expFactor);
-		float dd = pow(expFactor, float(i+dither)/float(spCount)) * log(expFactor) / float(spCount)/(expFactor-1.0);
-		vec3 spPos = start.xyz + dV*d;
-		progressW = gbufferModelViewInverse[3].xyz + cameraPosition + d*dVWorld;
+		float stepF = pow(expFactor, (i + dither) * sampleCountInv);
+		float d = (stepF/expFactor - 1.0/expFactor)/(1.0 - 1.0/expFactor);
+		float dd = stepF * log(expFactor) * sampleCountInv / (expFactor-1.0);
+
+		vec3 spPos = start.xyz + d*dV;
+
+		vec3 progressL = startWorld + d*dVWorld;
+//		vec3 progressW = progressL + cameraPosition;
 
 		// project into biased shadowmap space
 		float distortFactor = calcDistort(spPos.xy);
@@ -260,9 +278,18 @@ void waterVolumetrics(inout vec3 inColor, vec3 rayStart, vec3 rayEnd, float estE
 		}
 
 		vec3 ambientMul = exp(-estEndDepth * d * waterCoefs * 1.1);
+		vec3 sampleLight = ambientMul * ambient;
+
+		#if defined(LIGHTING_COLORED) && defined(LIGHTING_FLOODFILL_FOG)
+			vec3 voxelPos = GetVoxelPosition(progressL);
+			if (IsInVoxelBounds(voxelPos)) {
+				sampleLight += SampleFloodFill(voxelPos, frameCounter);
+			}
+		#endif
+
 		vec3 sunMul = exp(-estSunDepth * d * waterCoefs);
-		vec3 light = (sh * lightSource/150.0 * 8.0/3.0 * phase * sunMul + ambientMul * ambient) * scatterCoef;
-		vL += (light - light * exp(-waterCoefs * dd * rayLength)) / waterCoefs *absorbance;
+		vec3 light = (sh * lightSource/150.0 * 8.0/3.0 * phase * sunMul + sampleLight) * scatterCoef;
+		vL += (light - light * exp(-waterCoefs * dd * rayLength)) / waterCoefs * absorbance;
 		absorbance *= exp(-dd * rayLength * waterCoefs);
 	}
 
@@ -295,21 +322,24 @@ vec3 RT(vec3 dir, vec3 position, float noise, vec3 N) {
 
 	#ifdef REFLECTION_QUARTER_RES_DEPTH
 		float sp = sqrt(texelFetch(texDepthQ, ivec2(spos.xy / texelSize/4.0), 0).r / 65000.0);
+		float spL = sp * farPlane;
 	#else
 		float sp = texelFetch(TEX_DEPTH_OPAQUE, ivec2(spos.xy / texelSize), 0).r;
 
 		#ifdef VOXY
-			sp = sp > 0.0 ? near / sp : farPlane;
+			float spL = sp > 0.0 ? near / sp : farPlane;
 		#else
-			sp = depthScreenToLinear(sp, nearPlane, farPlane);
+			float spL = depthScreenToLinear(sp, nearPlane, farPlane);
 		#endif
 	#endif
 
 	float currZ = depthScreenToLinear(spos.z, nearPlane, farPlane);
 
-	if (sp < currZ) {
-		float dist = abs(sp - currZ) / currZ;
-		if (dist <= 0.035) return vec3(spos.xy, depthLinearToScreen(sp, nearPlane, farPlane)) / vec3(RENDER_SCALE_2, 1.0);
+	if (spL < currZ) {
+		float dist = abs(spL - currZ) / currZ;
+		if (dist <= 0.035) {
+			return vec3(spos.xy, sp) / vec3(RENDER_SCALE_2, 1.0);
+		}
 	}
 
 	stepv *= vec3(RENDER_SCALE_2, 1.0);
@@ -318,21 +348,22 @@ vec3 RT(vec3 dir, vec3 position, float noise, vec3 N) {
 	for (int i = 0; i < iterations; i++) {
 		#ifdef REFLECTION_QUARTER_RES_DEPTH
 			float sp = sqrt(texelFetch(texDepthQ, ivec2(spos.xy / texelSize/4.0), 0).r / 65000.0);
+			float spL = sp * farPlane;
 		#else
 			float sp = texelFetch(TEX_DEPTH_OPAQUE, ivec2(spos.xy / texelSize), 0).r;
 
 			#ifdef VOXY
-				sp = sp > 0.0 ? near / sp : farPlane;
+				float spL = sp > 0.0 ? near / sp : farPlane;
 			#else
-				sp = depthScreenToLinear(sp, nearPlane, farPlane);
+				float spL = depthScreenToLinear(sp, nearPlane, farPlane);
 			#endif
 		#endif
 
 		float currZ = depthScreenToLinear(spos.z, nearPlane, farPlane);
 
-		if (sp < currZ) {
-			float dist = abs(sp - currZ) / currZ;
-			if (dist <= 0.035) return vec3(spos.xy, depthLinearToScreen(sp, nearPlane, farPlane)) / vec3(RENDER_SCALE_2, 1.0);
+		if (spL < currZ) {
+			float dist = abs(spL - currZ) / currZ;
+			if (dist <= 0.035) return vec3(spos.xy, sp) / vec3(RENDER_SCALE_2, 1.0);
 		}
 
 		spos += stepv;
@@ -376,9 +407,11 @@ vec3 rtGI(vec3 normal, vec4 noise, vec3 fragpos, vec3 ambient, float translucent
 		vec3 rayHit = RT(mat3(gbufferModelView) * rayDir, fragpos, fract(seed/1.6180339887 + noise.b), viewNormal);
 
 		if (!isDepthSky(rayHit.z)) {
-			vec3 previousPosition = toWorldSpaceCamera(toScreenSpace(rayHit)) - previousCameraPosition;
-			previousPosition = worldToViewSpace_prev(previousPosition);
-			previousPosition = toClipSpace3_prev(previousPosition);
+			vec3 previousPosition = rayHit;
+//			previousPosition = toScreenSpace_lod(previousPosition);
+//			previousPosition = toWorldSpaceCamera(previousPosition) - previousCameraPosition;
+//			previousPosition = worldToViewSpace_prev(previousPosition);
+//			previousPosition = toClipSpace3_lodPrev(previousPosition);
 
 //			if (previousPosition.x > 0.0 && previousPosition.y > 0.0 && previousPosition.x < 1.0 && previousPosition.y < 1.0)
 			if (all(equal(saturate(previousPosition.xy), previousPosition.xy))) {
@@ -736,8 +769,18 @@ void main() {
 			}
 		#endif
 
+		#if !defined(PHOTONICS_HAND_LIGHT_ENABLED) && !defined(LIGHTING_COLORED)
+			float maxLit = max(heldBlockLightValue, heldBlockLightValue2);
+			float handLightDist = length(p3 + relativeEyePosition);
+			maxLit = max(maxLit - handLightDist, 0.0) / 15.0;
+
+			vec3 playerLightDir = -normalize(relativeEyePosition + p3);
+			maxLit *= max(dot(texLocalNormal, playerLightDir), 0.0);
+
+			lightmap.x = max(lightmap.x, maxLit);
+		#endif
+
 		vec3 custom_lightmap = texture(colortex4, (lightmap * 15.0 + 0.5 + vec2(0.0, 19.0)) * texelSize).rgb / 150.0 * 8.0/3.0;
-//		#endif
 
 //		#if defined(PHOTONICS_BLOCK_LIGHT_ENABLED) && defined(PHOTONICS_GI_ENABLED)
 //			if (!isLod) custom_lightmap = vec3(0.0);
@@ -762,8 +805,13 @@ void main() {
 			vec3 samplePos = GetFloodFillSamplePos(voxelPos, geoLocalNormal, texLocalNormal);
 
 			if (IsInVoxelBounds(samplePos)) {
-				torchLight = SampleFloodFill(samplePos, frameCounter);
+				torchLight = SampleFloodFill2(samplePos, frameCounter);
 			}
+		#endif
+
+		#if !defined(PHOTONICS_HAND_LIGHT_ENABLED) && defined(LIGHTING_COLORED)
+			torchLight += SampleHandLight(p3, texLocalNormal, heldItemId, heldBlockLightValue);
+			torchLight += SampleHandLight(p3, texLocalNormal, heldItemId2, heldBlockLightValue2);
 		#endif
 
 		vec3 fragpos0;

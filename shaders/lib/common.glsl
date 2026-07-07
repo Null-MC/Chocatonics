@@ -100,6 +100,7 @@ vec3 normVec(vec3 vec) {
 
 float luma(const in vec3 color) {return dot(color, lumCoeff);}
 
+float minOf(const in vec2 vec) {return min(vec[0], vec[1]);}
 float minOf(const in vec3 vec) {return min(min(vec[0], vec[1]), vec[2]);}
 
 float maxOf(const in vec2 vec) {return max(vec[0], vec[1]);}

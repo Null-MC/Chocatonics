@@ -41,6 +41,7 @@ uniform sampler2D TEX_SKY_LUT;
 #endif
 
 #ifdef LIGHTING_COLORED
+	uniform usampler3D texVoxels;
 	uniform sampler3D texFloodFill;
 #endif
 
@@ -66,6 +67,8 @@ uniform mat4 shadowProjection;
 uniform vec3 cameraPosition;
 uniform vec3 previousCameraPosition;
 uniform vec3 shadowLightPosition;
+
+#include "/lib/blocks.glsl"
 
 #include "/lib/r2.glsl"
 #include "/lib/ggx.glsl"

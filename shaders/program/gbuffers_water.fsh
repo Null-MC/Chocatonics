@@ -38,8 +38,18 @@ uniform sampler2D TEX_DEPTH_REFLECT;
 	uniform sampler2D specular;
 #endif
 
+#ifdef LIGHTING_COLORED
+	uniform usampler3D texVoxels;
+	uniform sampler3D texFloodFill;
+	uniform sampler2D texBlockLight;
+#endif
+
 uniform vec4 lightCol;
 uniform vec3 sunVec;
+uniform int heldItemId;
+uniform int heldItemId2;
+uniform int heldBlockLightValue;
+uniform int heldBlockLightValue2;
 uniform float frameTimeCounter;
 uniform float waveScale;
 uniform float lightSign;
@@ -68,9 +78,12 @@ uniform vec3 cameraPosition;
 uniform vec3 sunPosition;
 uniform mat4 gbufferPreviousModelView;
 uniform vec3 previousCameraPosition;
+uniform vec3 relativeEyePosition;
 uniform int isEyeInWater;
 uniform int frameCounter;
 uniform int framemod8;
+
+#include "/lib/blocks.glsl"
 
 #include "/lib/r2.glsl"
 #include "/lib/ign.glsl"
@@ -88,6 +101,13 @@ uniform int framemod8;
 #include "/lib/waterBump.glsl"
 #include "/lib/clouds.glsl"
 #include "/lib/stars.glsl"
+
+#ifdef LIGHTING_COLORED
+	#include "/lib/voxel.glsl"
+	#include "/lib/floodfill.glsl"
+	#include "/lib/blockLights.glsl"
+	#include "/lib/handLight.glsl"
+#endif
 
 #ifdef PHOTONICS_REFLECT_ENABLED
 	#include "/photonics/uniforms.glsl"
@@ -184,14 +204,15 @@ void main() {
 		roughness = 0.0;
 	}
 
-	vec3 normal = vIn.normalMat.xyz;
+	vec3 geoViewNormal = vIn.normalMat.xyz;
+	vec3 texViewNormal = geoViewNormal;
 
 	vec3 localPos = toWorldSpace(viewPos);
 
 	mat3 tbnMatrix = mat3(
-		vIn.tangent.x, vIn.binormal.x, normal.x,
-		vIn.tangent.y, vIn.binormal.y, normal.y,
-		vIn.tangent.z, vIn.binormal.z, normal.z);
+		vIn.tangent.x, vIn.binormal.x, geoViewNormal.x,
+		vIn.tangent.y, vIn.binormal.y, geoViewNormal.y,
+		vIn.tangent.z, vIn.binormal.z, geoViewNormal.z);
 
 	if (iswater > 0.4) {
 		float bumpmult = 1.0;
@@ -210,18 +231,20 @@ void main() {
 
 		bump = bump * vec3(bumpmult) + vec3(0.0, 0.0, 1.0 - bumpmult);
 
-		normal = normalize(bump * tbnMatrix);
+		texViewNormal = normalize(bump * tbnMatrix);
 	}
 	else {
 		#ifdef MAT_PBR_ENABLED
 			const float wetness = 0.0; // TODO
 			vec3 tex_normal = mat_normal(texture(normals, vIn.lmtexcoord.xy).rgb);
-			normal = applyBump(tbnMatrix, tex_normal, wetness);
+			texViewNormal = applyBump(tbnMatrix, tex_normal, wetness);
 		#endif
 	}
 
-	float NdotL = lightSign * dot(normal, sunVec);
-	float NdotU = dot(upVec, normal);
+	vec3 texLocalNormal = mat3(gbufferModelViewInverse) * texViewNormal;
+
+	float NdotL = lightSign * dot(texViewNormal, sunVec);
+	float NdotU = dot(upVec, texViewNormal);
 	float diffuseSun = saturate(NdotL);
 
 	vec3 direct = texelFetch(TEX_SKY_LUT, ivec2(6, 37), 0).rgb / PI;
@@ -274,13 +297,39 @@ void main() {
 		#endif
 	}
 
-	direct *= (iswater > 0.9 ? 0.2 : 1.0) * diffuseSun * vIn.lmtexcoord.w;
+	vec2 lmcoord = vIn.lmtexcoord.zw;
 
-	vec3 diffuseLight = direct + texture(TEX_SKY_LUT, (vIn.lmtexcoord.zw * 15.0 + 0.5) * texelSize).rgb;
-	vec3 color = diffuseLight * albedo * 8.0/3.0 / 150.0;
+	#ifdef LIGHTING_COLORED
+		vec3 geoLocalNormal = mat3(gbufferModelViewInverse) * geoViewNormal;
 
-//	float normalDotEye = dot(normal, -normalize(viewPos));
-	float F = schlick(dot(normal, -normalize(viewPos)), f0, 1.0);
+		vec3 voxelPos = GetVoxelPosition(localPos);
+		vec3 samplePos = GetFloodFillSamplePos(voxelPos, geoLocalNormal, texLocalNormal);
+
+		vec3 floodfill_light = vec3(0.0);
+		if (IsInVoxelBounds(samplePos)) {
+			lmcoord.x = 0.0;
+			floodfill_light = SampleFloodFill2(samplePos, frameCounter);
+		}
+	#endif
+
+	direct *= (iswater > 0.9 ? 0.2 : 1.0) * diffuseSun * lmcoord.y;
+
+	vec3 color = direct + texture(TEX_SKY_LUT, (lmcoord * 15.0 + 0.5) * texelSize).rgb;
+	color *= 8.0/3.0 / 150.0;
+
+	#ifdef LIGHTING_COLORED
+		color += floodfill_light;
+
+		#if !defined(PHOTONICS_HAND_LIGHT_ENABLED)
+			color += SampleHandLight(localPos, texLocalNormal, heldItemId, heldBlockLightValue);
+			color += SampleHandLight(localPos, texLocalNormal, heldItemId2, heldBlockLightValue2);
+		#endif
+	#endif
+
+	color *= albedo;
+
+//	float normalDotEye = dot(texViewNormal, -normalize(viewPos));
+	float F = schlick(dot(texViewNormal, -normalize(viewPos)), f0, 1.0);
 //	float fresnel = pow(clamp(1.0 + normalDotEye, 0.0, 1.0), 5.0);
 //	fresnel = mix(f0, 1.0, fresnel);
 
@@ -294,14 +343,14 @@ void main() {
 		vec2 noise2 = blueNoise(texBlueNoise, gl_FragCoord.xy).rg;
 		vec3 lightCol2 = texelFetch(TEX_SKY_LUT, ivec2(6, 37), 0).rgb;// / PI;
 
-		vec3 localNormal = mat3(gbufferModelViewInverse) * normal;
+//		vec3 texLocalNormal = mat3(gbufferModelViewInverse) * texViewNormal;
 		vec3 localViewDir = normalize(localPos);
 
 		float lightCol_a = float(sunElevation > 1.e-5) * 2.0 - 1.0;
 		vec3 localSunDir = normalize(mat3(gbufferModelViewInverse) * sunPosition);
 		vec3 WsunVec = lightCol_a * localSunDir;
 
-		MaterialReflections(outColor2.rgb, roughness, f0, albedo, WsunVec, lightCol2, vec3(shading * diffuseSun), vIn.lmtexcoord.w, localNormal, localViewDir, viewPos, vec3(noise2, noise), hand);
+		MaterialReflections(outColor2.rgb, roughness, f0, albedo, WsunVec, lightCol2, vec3(shading * diffuseSun), lmcoord.y, texLocalNormal, localViewDir, viewPos, vec3(noise2, noise), hand);
 //	#endif
 
 	outColor2.rgb = clamp(outColor2.rgb * 0.1, 0.0, 65100.0);

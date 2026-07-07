@@ -235,7 +235,9 @@ void main() {
 			sss = 0.5;
 		}
 
-		if (vIn.blockId == BLOCK_IDK) sss = 0.2;
+		if (vIn.blockId == BLOCK_IDK || vIn.blockId == BLOCK_SNOW || vIn.blockId == BLOCK_SNOW_LAYERS) {
+			sss = 0.2;
+		}
 
 		if (vIn.blockId == BLOCK_EMISSIVE) {
 			emission = saturate(luma(toLinear(color.rgb)));

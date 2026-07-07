@@ -1,10 +1,8 @@
-// #define TEX_SKY_LUT colortex4 | gaux1
-
 vec3 rayTraceSpeculars(vec3 dir, vec3 position, float dither, float quality, bool hand, float fres) {
 	vec3 clipPosition = toClipSpace3_lod(position);
 
-	float rayLength = ((position.z + dir.z * farPlane*sqrt(3.0)) > -near) ?
-	                   (-near -position.z) / dir.z : farPlane*sqrt(3.0);
+	float rayLength = ((position.z + dir.z * far) > -near) ?
+	                   (-near - position.z) / dir.z : far;
 
 	vec3 direction = normalize(toClipSpace3_lod(dir*rayLength + position) - clipPosition);  // convert to clip space
 	direction.xy = normalize(direction.xy);
@@ -41,24 +39,24 @@ vec3 rayTraceSpeculars(vec3 dir, vec3 position, float dither, float quality, boo
 		spos += stepv;
 
 		#ifdef VOXY
-			float zL = near / spos.z;
-
 			// small bias
-			float biasamount = 0.00004;//0.0002;
+			float biasamount = 0.004;
 			if (hand) biasamount = 0.01;
 
-//			minZ = maxZ - biasamount / (zL);
-			minZ = maxZ;// - biasamount * zL;
+			float zL = near / spos.z;
+			maxZ = minZ + biasamount / zL;
+
+			minZ += stepv.z;
 		#else
 			// small bias
-			float biasamount = 0.00004;//0.0002;
+			float biasamount = 0.00004;
 			if (hand) biasamount = 0.01;
 
 			float zL = depthScreenToLinear(spos.z, nearPlane, farPlane);
 			minZ = maxZ - biasamount / (zL / farPlane);
-		#endif
 
-		maxZ += stepv.z;
+			maxZ += stepv.z;
+		#endif
 	}
 
 	#ifdef VOXY
@@ -68,7 +66,6 @@ vec3 rayTraceSpeculars(vec3 dir, vec3 position, float dither, float quality, boo
 	#endif
 }
 
-// pain
 void MaterialReflections(
 	inout vec3 Output,
 	float roughness,
@@ -148,14 +145,14 @@ void MaterialReflections(
 					vec3 hit_albedo = voxel_data_albedo(voxel_data).rgb;
 
 					vec3 hit_position = ray_result_position(hit);
-					vec3 hitLocalPos = hit_position - rt_camera_position;
+					vec3 hit_localPos = hit_position - rt_camera_position;
 					vec3 hit_localNormal = ray_result_normal(hit);
 
 					float hit_sky = ray_result_skylight(hit) / 15.0;
 					vec2 hit_lmcoord = vec2(0.0, hit_sky);
 
 					// shadows
-					vec3 projectedShadowPosition = worldToShadowSpaceProjected(hitLocalPos);
+					vec3 projectedShadowPosition = worldToShadowSpaceProjected(hit_localPos);
 
 					// apply distortion
 					float distortFactor = calcDistort(projectedShadowPosition.xy);
@@ -210,6 +207,15 @@ void MaterialReflections(
 
 						vec3 diffuseLight = direct/PI + texture(TEX_SKY_LUT, (hit_lmcoord * 15.0 + 0.5) * texelSize).rgb;
 						hit_color += diffuseLight * 8.0/3.0 / 150.0;
+
+						#ifdef LIGHTING_COLORED
+							vec3 hit_voxelPos = GetVoxelPosition(hit_localPos);
+							vec3 hit_samplePos = GetFloodFillSamplePos(hit_voxelPos, hit_localNormal);
+
+							if (IsInVoxelBounds(hit_samplePos)) {
+								hit_color += SampleFloodFill(hit_samplePos, frameCounter);
+							}
+						#endif
 					#else
 						vec3 ambientCoefs = hit_localNormal / dot(abs(hit_localNormal), vec3(1.0));
 						vec3 ambientLight = vIn.ambientUp * mix(saturate(ambientCoefs.y), 1.0/6.0, hit_sss);

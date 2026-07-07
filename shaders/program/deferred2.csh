@@ -7,7 +7,21 @@
 
 
 layout (local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
-const vec2 workGroupsRender = vec2(RENDER_SCALE*0.25, RENDER_SCALE*0.25);
+//const vec2 workGroupsRender = vec2(RENDER_SCALE*0.25, RENDER_SCALE*0.25);
+
+#if TAA_RENDER_SCALE == 100
+    const vec2 workGroupsRender = vec2(0.250, 0.250);
+#elif TAA_RENDER_SCALE == 90
+    const vec2 workGroupsRender = vec2(0.225, 0.225);
+#elif TAA_RENDER_SCALE == 80
+    const vec2 workGroupsRender = vec2(0.200, 0.200);
+#elif TAA_RENDER_SCALE == 70
+    const vec2 workGroupsRender = vec2(0.175, 0.175);
+#elif TAA_RENDER_SCALE == 60
+    const vec2 workGroupsRender = vec2(0.150, 0.150);
+#elif TAA_RENDER_SCALE == 50
+    const vec2 workGroupsRender = vec2(0.125, 0.125);
+#endif
 
 layout(r16f) uniform writeonly image2D imgDepthQ;
 

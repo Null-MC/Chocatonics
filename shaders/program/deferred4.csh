@@ -5,7 +5,20 @@
 
 
 layout (local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
-const vec2 workGroupsRender = vec2(RENDER_SCALE, RENDER_SCALE);
+
+#if TAA_RENDER_SCALE == 100
+    const vec2 workGroupsRender = vec2(1.0, 1.0);
+#elif TAA_RENDER_SCALE == 90
+    const vec2 workGroupsRender = vec2(0.9, 0.9);
+#elif TAA_RENDER_SCALE == 80
+    const vec2 workGroupsRender = vec2(0.8, 0.8);
+#elif TAA_RENDER_SCALE == 70
+    const vec2 workGroupsRender = vec2(0.7, 0.7);
+#elif TAA_RENDER_SCALE == 60
+    const vec2 workGroupsRender = vec2(0.6, 0.6);
+#elif TAA_RENDER_SCALE == 50
+    const vec2 workGroupsRender = vec2(0.5, 0.5);
+#endif
 
 layout(r32f) uniform writeonly image2D imgVoxyDepthOpaque;
 

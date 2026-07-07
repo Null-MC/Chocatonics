@@ -38,6 +38,7 @@ uniform sampler2D colortex3;
 uniform sampler2D colortex4;
 
 #ifdef LIGHTING_COLORED
+	uniform usampler3D texVoxels;
 	uniform sampler3D texFloodFill;
 #endif
 
@@ -61,6 +62,8 @@ uniform mat4 shadowProjection;
 uniform vec3 cameraPosition;
 
 uniform mat4 gbufferPreviousProjection;
+
+#include "/lib/blocks.glsl"
 
 //#include "/lib/ign.glsl"
 #include "/lib/bicubic.glsl"
@@ -211,7 +214,8 @@ mat2x3 getVolumetricRays(float dither, vec3 fragpos, vec4 lightCol) {
 		#if defined(LIGHTING_COLORED) && defined(LIGHTING_FLOODFILL_FOG)
 			vec3 voxelPos = GetVoxelPosition(progressL);
 			if (IsInVoxelBounds(voxelPos)) {
-				sampleLight += SampleFloodFill(voxelPos, frameCounter);
+				const float phaseIso = 1.0 / (4.0*PI);
+				sampleLight += phaseIso * SampleFloodFill(voxelPos, frameCounter);
 			}
 		#endif
 
