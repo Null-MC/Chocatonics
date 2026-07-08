@@ -1,5 +1,9 @@
+ivec2 GetBlockLightUV(const in uint blockId) {
+    return ivec2(blockId % 256, blockId / 256);
+}
+
 vec4 SampleBlockLightRange(const in uint blockId) {
-    ivec2 blockLightUV = ivec2(blockId % 256, blockId / 256);
+    ivec2 blockLightUV = GetBlockLightUV(blockId);
     return texelFetch(texBlockLight, blockLightUV, 0);
 }
 

@@ -24,6 +24,7 @@ layout(rgba8) uniform image3D imgFloodFill;
 
 uniform usampler3D texVoxels;
 uniform sampler2D texBlockLight;
+uniform usampler2D texBlockLightMask;
 
 uniform int frameCounter;
 uniform vec3 cameraPosition;
@@ -36,6 +37,7 @@ uniform mat4 gbufferPreviousModelView;
 #include "/lib/voxel.glsl"
 #include "/lib/color_transforms.glsl"
 #include "/lib/blockLights.glsl"
+#include "/lib/blockLightMask.glsl"
 
 
 float avg(const in vec3 val) {
@@ -75,6 +77,11 @@ uint GetVoxelBlock(const in ivec3 voxelPos) {
 
     return texelFetch(texVoxels, voxelPos, 0).r;
 }
+
+//uint GetBlockLightMask(const in uint blockId) {
+//    ivec2 blockLightUV = ivec2(blockId % 256, blockId / 256);
+//    return texelFetch(texBlockLightMask, blockLightUV, 0).r;
+//}
 
 const ivec3 lpvFlatten = ivec3(1, 10, 100);
 
@@ -167,23 +174,26 @@ void main() {
 
     vec4 colorFinal = vec4(0.0);
 
-    float mixWeight = 1.0;
-    uint mixMask = 0xFFFF;
+//    float mixWeight = 1.0;
+//    uint mixMask = 0xFFFF;
     vec3 tint = vec3(1.0);
 
+    uint solid_face_mask = GetBlockLightMask(texBlockLightMask, blockId);
+
 //    if (blockId > 0u && blockId < USHORT_MAX) {
-    if (IsVoxelSolid(blockId)) {
-//        GetBlockMask(blockId, mixWeight, mixMask);
-        mixWeight = 0.0;
-        mixMask = 0u;
-    }
+//    if (IsVoxelSolid(blockId)) {
+//    if ((solid_face_mask & BLOCKLIGHT_SOLID_MASK) == BLOCKLIGHT_SOLID_MASK) {
+////        GetBlockMask(blockId, mixWeight, mixMask);
+//        mixWeight = 0.0;
+//        mixMask = 0u;
+//    }
+
+    bool solid = IsLightMaskSolid(solid_face_mask);
 
     float _w;
     colorFinal.a = lpvBuffer[getSharedCoord(ivec3(gl_LocalInvocationID) + ivec3(1,2,1))].a;
-    colorFinal.a = max(colorFinal.a, 1.0 - mixWeight);
+    colorFinal.a = max(colorFinal.a, 1.0 - float(solid));
     if (blockId == BLOCK_GLASS) colorFinal.a = 1.0;
-    //uint blockId_up = voxelSharedData[getSharedCoord(ivec3(gl_LocalInvocationID) + ivec3(1,2,1))];
-    //    if (blockId_up != 0u) colorFinal.a = 0.0;
 
     float lightRange = 0.0;
     vec3 lightColor = vec3(0.0);
@@ -193,14 +203,13 @@ void main() {
 
     if (blockId >= BLOCK_HONEY && blockId <= BLOCK_TINTED_GLASS) {
         tint = lightColor;
-        mixMask = 0xFFFF;
-        mixWeight = 1.0;
+//        mixMask = 0xFFFF;
+//        mixWeight = 1.0;
     }
 
-    if (mixWeight > EPSILON) {
-        vec3 lightMixed = mixNeighboursDirect(ivec3(gl_LocalInvocationID), mixMask);
-        lightMixed *= mixWeight * tint;
-        colorFinal.rgb += lightMixed;
+    if (!solid) {
+        vec3 lightMixed = mixNeighboursDirect(ivec3(gl_LocalInvocationID), solid_face_mask);
+        colorFinal.rgb += lightMixed * tint;
     }
 
     if (lightRange > 0.0) {

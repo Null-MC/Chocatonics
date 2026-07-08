@@ -9,6 +9,7 @@ const ivec3 workGroups = ivec3(16, 16, 1);
 
 
 layout(rgba8) uniform writeonly image2D imgBlockLight;
+layout(r8ui) uniform writeonly uimage2D imgBlockLightMask;
 
 #include "/lib/blocks.glsl"
 
@@ -48,11 +49,14 @@ uint blockId;
 
 #define IS(id) (blockId == id)
 #define RANGE(minId, maxId) (blockId >= minId && blockId <= maxId)
+#define MASK(N,E,S,W,U,D) (E | (W << 1) | (D << 2) | (U << 3) | (S << 4) | (N << 5))
 
 
 void main() {
     blockId = gl_GlobalInvocationID.x + gl_GlobalInvocationID.y * 256u;
 
+    bool solid = blockId > 0u;
+    uint faceMask = 0u;
     vec3 color = vec3(0.0);
     float range = 0.0;
 
@@ -60,6 +64,7 @@ void main() {
 
     if RANGE(BLOCK_LIGHT_1, BLOCK_LIGHT_15) {
         color = color_White;
+        solid = false;
 
         if IS(BLOCK_LIGHT_1) range = 1;
         if IS(BLOCK_LIGHT_2) range = 2;
@@ -80,6 +85,7 @@ void main() {
 
     if RANGE(BLOCK_AMETHYST_BUD_MEDIUM, BLOCK_AMETHYST_CLUSTER) {
         color = color_Amethyst;
+        solid = false;
 
         if IS(BLOCK_AMETHYST_BUD_MEDIUM) range = 2;
         if IS(BLOCK_AMETHYST_BUD_LARGE) range = 4;
@@ -99,16 +105,19 @@ void main() {
     if IS(BLOCK_BREWING_STAND) {
         color = color_Furnace;
         range = 2;
+        solid = false;
     }
 
     if IS(BLOCK_CAMPFIRE_LIT) {
         color = color_Fire;
         range = 15;
+        solid = false;
     }
 
     if IS(BLOCK_CAVEVINE_BERRIES) {
         color = vec3(230, 120, 30);
         range = 14;
+        solid = false;
     }
 
     if RANGE(BLOCK_COPPER_BULB_LIT, BLOCK_COPPER_BULB_OXIDIZED_LIT) {
@@ -123,11 +132,13 @@ void main() {
     if IS(BLOCK_COPPER_LANTERN) {
         color = color_CopperLantern;
         range = 15;
+        solid = false;
     }
 
     if IS(BLOCK_COPPER_TORCH) {
         color = color_CopperTorch;
         range = 14;
+        solid = false;
     }
 
     if IS(BLOCK_CRYING_OBSIDIAN) {
@@ -138,11 +149,13 @@ void main() {
     if IS(BLOCK_END_ROD) {
         color = vec3(244, 237, 223);
         range = 14;
+        solid = false;
     }
 
     if IS(BLOCK_FIRE) {
         color = color_Fire;
         range = 15;
+        solid = false;
     }
 
     if RANGE(BLOCK_FROGLIGHT_OCHRE, BLOCK_FROGLIGHT_VERDANT) {
@@ -171,6 +184,7 @@ void main() {
     if IS(BLOCK_LANTERN) {
         color = vec3(181, 86, 51);
         range = 12;
+        solid = false;
     }
 
     if IS(BLOCK_LAVA) {
@@ -181,6 +195,7 @@ void main() {
     if IS(BLOCK_LIGHTING_ROD_POWERED) {
         color = vec3(222, 244, 249);
         range = 8;
+        solid = false;
     }
 
     if IS(BLOCK_MAGMA) {
@@ -191,6 +206,7 @@ void main() {
     if IS(BLOCK_NETHER_PORTAL) {
         color = vec3(128, 42, 212);
         range = 11;
+        solid = false;
     }
 
     if IS(BLOCK_REDSTONE_LAMP_LIT) {
@@ -206,6 +222,7 @@ void main() {
     if IS(BLOCK_REDSTONE_TORCH_LIT) {
         color = color_RedstoneTorch;
         range = 7;
+        solid = false;
     }
 
     if RANGE(BLOCK_RESPAWN_ANCHOR_1, BLOCK_RESPAWN_ANCHOR_4) {
@@ -229,6 +246,7 @@ void main() {
 
     if RANGE(BLOCK_SEA_PICKLE_WET_1, BLOCK_SEA_PICKLE_WET_4) {
         color = color_SeaPickle;
+        solid = false;
 
         if IS(BLOCK_SEA_PICKLE_WET_1) range = 6;
         if IS(BLOCK_SEA_PICKLE_WET_2) range = 9;
@@ -249,54 +267,72 @@ void main() {
     if IS(BLOCK_SOUL_CAMPFIRE_LIT) {
         color = color_SoulFire;
         range = 12;
+        solid = false;
     }
 
     if IS(BLOCK_SOUL_FIRE) {
         color = color_SoulFire;
         range = 12;
+        solid = false;
     }
 
     if IS(BLOCK_SOUL_LANTERN) {
         color = color_SoulFire;
         range = 12;
+        solid = false;
     }
 
     if IS(BLOCK_SOUL_TORCH) {
         color = color_SoulFire;
         range = 10;
+        solid = false;
     }
 
     if IS(BLOCK_TORCH) {
         color = color_Fire;
         range = 12;
+        solid = false;
     }
 
     // TINTED
 
-    if IS(BLOCK_HONEY) color = vec3(251, 187, 64);
-    if IS(BLOCK_SLIME) color = vec3(104, 185, 84);
-    if IS(BLOCK_STAINED_GLASS_BLACK) color = vec3(77, 77, 77);
-    if IS(BLOCK_STAINED_GLASS_BLUE) color = vec3(26, 26, 250);
-    if IS(BLOCK_STAINED_GLASS_BROWN) color = vec3(144, 99, 38);
-    if IS(BLOCK_STAINED_GLASS_CYAN) color = vec3(21, 136, 195);
-    if IS(BLOCK_STAINED_GLASS_GRAY) color = vec3(102, 102, 102);
-    if IS(BLOCK_STAINED_GLASS_GREEN) color = vec3(32, 206, 21);
-    if IS(BLOCK_STAINED_GLASS_LIGHT_BLUE) color = vec3(82, 175, 244);
-    if IS(BLOCK_STAINED_GLASS_LIGHT_GRAY) color = vec3(179, 179, 179);
-    if IS(BLOCK_STAINED_GLASS_LIME) color = vec3(161, 236, 32);
-    if IS(BLOCK_STAINED_GLASS_MAGENTA) color = vec3(178, 76, 216);
-    if IS(BLOCK_STAINED_GLASS_ORANGE) color = vec3(234, 149, 47);
-    if IS(BLOCK_STAINED_GLASS_PINK) color = vec3(242, 70, 127);
-    if IS(BLOCK_STAINED_GLASS_PURPLE) color = vec3(147, 43, 231);
-    if IS(BLOCK_STAINED_GLASS_RED) color = vec3(255, 48, 48);
-    if IS(BLOCK_STAINED_GLASS_WHITE) color = vec3(245, 245, 245);
-    if IS(BLOCK_STAINED_GLASS_YELLOW) color = vec3(246, 246, 31);
-    if IS(BLOCK_TINTED_GLASS) color = vec3(51, 26, 51);
+    if RANGE(BLOCK_HONEY, BLOCK_TINTED_GLASS) {
+        solid = false;
+
+        if IS(BLOCK_HONEY) color = vec3(251, 187, 64);
+        if IS(BLOCK_SLIME) color = vec3(104, 185, 84);
+        if IS(BLOCK_STAINED_GLASS_BLACK) color = vec3(77, 77, 77);
+        if IS(BLOCK_STAINED_GLASS_BLUE) color = vec3(26, 26, 250);
+        if IS(BLOCK_STAINED_GLASS_BROWN) color = vec3(144, 99, 38);
+        if IS(BLOCK_STAINED_GLASS_CYAN) color = vec3(21, 136, 195);
+        if IS(BLOCK_STAINED_GLASS_GRAY) color = vec3(102, 102, 102);
+        if IS(BLOCK_STAINED_GLASS_GREEN) color = vec3(32, 206, 21);
+        if IS(BLOCK_STAINED_GLASS_LIGHT_BLUE) color = vec3(82, 175, 244);
+        if IS(BLOCK_STAINED_GLASS_LIGHT_GRAY) color = vec3(179, 179, 179);
+        if IS(BLOCK_STAINED_GLASS_LIME) color = vec3(161, 236, 32);
+        if IS(BLOCK_STAINED_GLASS_MAGENTA) color = vec3(178, 76, 216);
+        if IS(BLOCK_STAINED_GLASS_ORANGE) color = vec3(234, 149, 47);
+        if IS(BLOCK_STAINED_GLASS_PINK) color = vec3(242, 70, 127);
+        if IS(BLOCK_STAINED_GLASS_PURPLE) color = vec3(147, 43, 231);
+        if IS(BLOCK_STAINED_GLASS_RED) color = vec3(255, 48, 48);
+        if IS(BLOCK_STAINED_GLASS_WHITE) color = vec3(245, 245, 245);
+        if IS(BLOCK_STAINED_GLASS_YELLOW) color = vec3(246, 246, 31);
+        if IS(BLOCK_TINTED_GLASS) color = vec3(51, 26, 51);
+    }
 
     // OTHER
 
-    if IS(BLOCK_PLANT_WAVING_FULL) {
-        //
+    if (IS(BLOCK_SLAB_BOTTOM) || IS(BLOCK_SLAB_TOP)) {
+        solid = false;
+
+        if IS(BLOCK_SLAB_BOTTOM) faceMask = MASK(0,0,0,0,0,1);
+        if IS(BLOCK_SLAB_TOP)    faceMask = MASK(0,0,0,0,1,0);
+    }
+
+    // TODO: stairs
+
+    if (IS(BLOCK_IGNORED) || IS(BLOCK_PLANT_WAVING_FULL) || IS(BLOCK_PLANT_WAVING_TOP)) {
+        solid = false;
     }
 
     // FINAL
@@ -305,4 +341,7 @@ void main() {
 
     vec4 dataLight = vec4(color / 255.0, range / 32.0);
     imageStore(imgBlockLight, uv, dataLight);
+
+    uvec4 dataMask = uvec4((uint(solid) << 7) | (~faceMask & 0x3Fu));
+    imageStore(imgBlockLightMask, uv, dataMask);
 }

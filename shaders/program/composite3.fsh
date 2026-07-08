@@ -70,6 +70,7 @@ uniform sampler2D depthtex1;
 	uniform usampler3D texVoxels;
 	uniform sampler3D texFloodFill;
 	uniform sampler2D texBlockLight;
+	uniform usampler2D texBlockLightMask;
 #endif
 
 #ifdef REFLECTION_ENABLED
@@ -143,8 +144,10 @@ vec2 v_taa_offset = vIn.TAA_Offset;
 
 #ifdef LIGHTING_COLORED
 	#include "/lib/voxel.glsl"
-	#include "/lib/floodfill.glsl"
 	#include "/lib/blockLights.glsl"
+	#include "/lib/blockLightMask.glsl"
+	#include "/lib/floodfill.glsl"
+	#include "/lib/floodfillMasked.glsl"
 	#include "/lib/handLight.glsl"
 #endif
 
@@ -805,7 +808,7 @@ void main() {
 			vec3 samplePos = GetFloodFillSamplePos(voxelPos, geoLocalNormal, texLocalNormal);
 
 			if (IsInVoxelBounds(samplePos)) {
-				torchLight = SampleFloodFill2(samplePos, frameCounter);
+				torchLight = SampleFloodFillMasked(samplePos, frameCounter);
 			}
 		#endif
 

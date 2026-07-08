@@ -26,13 +26,13 @@ bool IsInVoxelBounds(const in vec3 voxelPos) {
     return clamp(voxelPos, 0.5, LIGHTING_VOXEL_SIZE-0.5) == voxelPos;
 }
 
-bool IsVoxelSolid(const in uint voxelId) {
-    if (voxelId == 0u) return false;
-    if (voxelId == BLOCK_IGNORED) return false;
-    if (voxelId == BLOCK_SNOW_LAYERS) return false;
-
-    return true;
-}
+//bool IsVoxelSolid(const in uint voxelId) {
+//    if (voxelId == 0u) return false;
+//    if (voxelId == BLOCK_IGNORED) return false;
+//    if (voxelId == BLOCK_SNOW_LAYERS) return false;
+//
+//    return true;
+//}
 
 float GetVoxelFade(const in vec3 voxelPos) {
     const vec3 lpvSizeInner = VoxelBufferCenter - Voxel_FadePadding;

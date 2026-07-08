@@ -42,6 +42,7 @@ uniform sampler2D TEX_DEPTH_REFLECT;
 	uniform usampler3D texVoxels;
 	uniform sampler3D texFloodFill;
 	uniform sampler2D texBlockLight;
+	uniform usampler2D texBlockLightMask;
 #endif
 
 uniform vec4 lightCol;
@@ -104,8 +105,10 @@ uniform int framemod8;
 
 #ifdef LIGHTING_COLORED
 	#include "/lib/voxel.glsl"
-	#include "/lib/floodfill.glsl"
 	#include "/lib/blockLights.glsl"
+	#include "/lib/blockLightMask.glsl"
+	#include "/lib/floodfill.glsl"
+	#include "/lib/floodfillMasked.glsl"
 	#include "/lib/handLight.glsl"
 #endif
 
@@ -308,7 +311,7 @@ void main() {
 		vec3 floodfill_light = vec3(0.0);
 		if (IsInVoxelBounds(samplePos)) {
 			lmcoord.x = 0.0;
-			floodfill_light = SampleFloodFill2(samplePos, frameCounter);
+			floodfill_light = SampleFloodFillMasked(samplePos, frameCounter);
 		}
 	#endif
 
