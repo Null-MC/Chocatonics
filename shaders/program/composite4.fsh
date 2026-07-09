@@ -110,11 +110,13 @@ vec2 reproject(const in vec3 screenPos, const in float reflectDist, const in flo
 	viewPos += normalize(viewPos) * (reflectDist * smoothness);
 
     vec3 localPos = mul3(gbufferModelViewInverse, viewPos);
+//	vec3 localPos = mat3(gbufferModelViewInverse) * viewPos;
 
 	// camera movement
 	vec3 prev_localPos = localPos + cameraPosition - previousCameraPosition;
 
 	vec3 prev_viewPos = mul3(gbufferPreviousModelView, prev_localPos);
+//	vec3 prev_viewPos = mat3(gbufferPreviousModelView) * prev_localPos;
 
 	// parallax offset
 //	prev_viewPos -= reflectDist * normalize(prev_viewPos);
@@ -325,7 +327,7 @@ void main() {
 
 					// apply emission
 					float hit_emission = mat_emission(hit_specularData);
-					hit_color += pow(hit_emission, Emission_Curve) * 3.0 * MAT_EMISSION_SCALE;
+					hit_color += pow(hit_emission, Emission_Curve) * MAT_EMISSION_SCALE;
 				#else
 					float hit_roughness = 1.0;
 					float hit_f0 = 0.04;

@@ -117,20 +117,32 @@ void MaterialReflections(
 
 	// SSR, Sky, and Sun reflections
 	vec4 Reflections = vec4(0.0);
-	vec3 SunReflection = skyShading * GGX2(normal, -np3, sunPos, roughness, vec3(f0)) * sunCol * Sun_specular_Strength / 150.0 * 8.0/3.0;
+	float sun_NoL = saturate(dot(normal, sunPos));
+	vec3 SunReflection = sun_NoL * skyShading * GGX2(normal, -np3, sunPos, roughness, vec3(f0)) * sunCol * Sun_specular_Strength / 150.0 * 8.0/3.0;
 
-//	#if !defined(PHOTONICS_REFLECT_ENABLED) || (defined(RENDER_GBUFFERS) && !defined(RENDER_VOXY))
-//	#if !defined(PHOTONICS_REFLECT_ENABLED) || defined(RENDER_VOXY)
 	#if !(defined(PHOTONICS_REFLECT_ENABLED) && defined(RENDER_OPAQUE_DEFERRED))
 		vec3 SkyReflection = skyCloudsFromTex(L, TEX_SKY_LUT).rgb * 0.035;
+	#endif
+
+	// TODO: FINSIH THIS!!!
+	vec3 localPos = toWorldSpace(fragpos);
+	vec3 toHandLightDir = normalize(-relativeEyePosition - localPos);
+
+	#ifdef LIGHTING_COLORED
+		vec3 handLight1 = SampleHandLight(localPos, normal, heldItemId, heldBlockLightValue);
+		vec3 handLight2 = SampleHandLight(localPos, normal, heldItemId2, heldBlockLightValue2);
+
+		vec3 handReflection = GGX2(normal, -np3, toHandLightDir, roughness, vec3(f0)) * (handLight1 + handLight2);
+	#else
+		float handLight = SampleHandLight(localPos, normal);
+		vec3 handReflection = GGX2(normal, -np3, toHandLightDir, roughness, vec3(f0)) * TorchColor * handLight;
 	#endif
 
 	#if defined(REFLECTION_ENABLED) && !(defined(PHOTONICS_REFLECT_ENABLED) && defined(RENDER_OPAQUE_DEFERRED))
 		if (hasReflections) { // Skip SSR if ray contribution is low
 //			#if defined(PHOTONICS_REFLECT_ENABLED) && !defined(RENDER_VOXY)
 			#if defined(PHOTONICS_REFLECT_ENABLED) && defined(RENDER_GBUFFERS) && !defined(RENDER_VOXY)
-//				vec3 localPos = mul3(gbufferModelViewInverse, fragpos);
-				vec3 localPos = toWorldSpace(fragpos);
+//				vec3 localPos = toWorldSpace(fragpos);
 				Outdoors = 1.0;
 
 				RayIterator ray;
@@ -194,7 +206,7 @@ void MaterialReflections(
 
 						// apply emission
 						float hit_emission = mat_emission(hit_specularData);
-						hit_color += pow(hit_emission, Emission_Curve) * 3.0 * MAT_EMISSION_SCALE;
+						hit_color += pow(hit_emission, Emission_Curve) * MAT_EMISSION_SCALE;
 					#else
 //						float hit_roughness = 1.0;
 //						float hit_f0 = 0.04;
@@ -291,18 +303,12 @@ void MaterialReflections(
 		}
 	#endif
 
-	// check if the f0 is within the metal ranges, then tint by albedo if it's true.
-//	vec3 metal_tint = f0 > 229.5/255.0 ? albedo : vec3(1.0);
-	vec3 metal_tint = mix(vec3(1.0), albedo, f0 > 229.5/255.0);
+//	Reflections.rgb *= metal_tint;
+//	SunReflection *= metal_tint;
 
-	Reflections.rgb *= metal_tint;
-	SunReflection *= metal_tint;
-
-//	#if !defined(PHOTONICS_REFLECT_ENABLED) || (defined(RENDER_GBUFFERS) && !defined(RENDER_VOXY))
-//	#if !defined(PHOTONICS_REFLECT_ENABLED) || defined(RENDER_VOXY)
-	#if !(defined(PHOTONICS_REFLECT_ENABLED) && defined(RENDER_OPAQUE_DEFERRED))
-		SkyReflection *= metal_tint;
-	#endif
+//	#if !(defined(PHOTONICS_REFLECT_ENABLED) && defined(RENDER_OPAQUE_DEFERRED))
+//		SkyReflection *= metal_tint;
+//	#endif
 
 	// darken albedos, and stop darkening where the sky gets occluded indoors
 	#if defined(PHOTONICS_REFLECT_ENABLED) && !defined(RENDER_VOXY)
@@ -313,6 +319,7 @@ void MaterialReflections(
 	
 	// apply all reflections to the lighting
 	Reflections_Final += Reflections.rgb;
+	Reflections_Final += handReflection;
 
 //	#if !defined(PHOTONICS_REFLECT_ENABLED) || defined(RENDER_VOXY)
 //	#if !defined(PHOTONICS_REFLECT_ENABLED) || (defined(RENDER_GBUFFERS) && !defined(RENDER_VOXY))
@@ -320,7 +327,10 @@ void MaterialReflections(
 		Reflections_Final += SkyReflection * (1.0-Reflections.a) * Outdoors;
 	#endif
 
-	Reflections_Final *= F;
+	// check if the f0 is within the metal ranges, then tint by albedo if it's true.
+	vec3 metal_tint = mix(vec3(1.0), albedo, f0 > 229.5/255.0);
+
+	Reflections_Final *= F * metal_tint;
 
 	#ifdef REFLECTION_ROUGH
 		Output += Reflections_Final * (1.0 - sqrt(roughness));
@@ -329,5 +339,5 @@ void MaterialReflections(
 		Output = mix(Output + Reflections_Final, Output, vec3(sqrt(roughness)));
 	#endif
 
-	Output += SunReflection;
+	Output += SunReflection * metal_tint;
 }

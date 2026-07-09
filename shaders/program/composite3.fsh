@@ -139,17 +139,18 @@ uniform int framemod8;
 #include "/lib/stars.glsl"
 #include "/lib/volumetricClouds.glsl"
 
-vec2 v_taa_offset = vIn.TAA_Offset;
-#include "/lib/specular.glsl"
-
 #ifdef LIGHTING_COLORED
 	#include "/lib/voxel.glsl"
 	#include "/lib/blockLights.glsl"
 	#include "/lib/blockLightMask.glsl"
 	#include "/lib/floodfill.glsl"
 	#include "/lib/floodfillMasked.glsl"
-	#include "/lib/handLight.glsl"
 #endif
+
+#include "/lib/handLight.glsl"
+
+vec2 v_taa_offset = vIn.TAA_Offset;
+#include "/lib/specular.glsl"
 
 #if defined(PHOTONICS_BLOCK_LIGHT_ENABLED) || defined(PHOTONICS_HAND_LIGHT_ENABLED) || defined(PHOTONICS_GI_ENABLED)
 	#include "/photonics/samplers.glsl"
@@ -500,17 +501,21 @@ void main() {
 	vec3 totEpsilon = dirtEpsilon*dirtAmount + waterEpsilon;
 	vec3 scatterCoef = dirtAmount * vec3(Dirt_Scatter_R, Dirt_Scatter_G, Dirt_Scatter_B);
 
-	float z0 = texture(TEX_DEPTH_TRANSLUCENT, texcoord).x;
-	float z = texture(TEX_DEPTH_OPAQUE, texcoord).x;
+	float depth_trans = texture(TEX_DEPTH_TRANSLUCENT, texcoord).x;
+	float depth_opaque = texture(TEX_DEPTH_OPAQUE, texcoord).x;
 
 	float noise = blueNoise(gl_FragCoord.xy, frameCounter);
 
-	vec3 fragpos = toScreenSpace_lod(vec3(texcoord / RENDER_SCALE - vIn.TAA_Offset * texelSize * 0.5, max(z, near/farPlane)));
-	vec3 p3 = mat3(gbufferModelViewInverse) * fragpos;
-	vec3 np3 = normVec(p3);
+	vec3 screenPos_opaque = vec3(
+		texcoord / RENDER_SCALE - vIn.TAA_Offset * texelSize * 0.5,
+		max(depth_opaque, near/farPlane));
+
+	vec3 viewPos_opaque = toScreenSpace_lod(screenPos_opaque);
+	vec3 localPos_opaque = mat3(gbufferModelViewInverse) * viewPos_opaque;
+	vec3 np3 = normVec(localPos_opaque);
 
 	// sky
-	if (isDepthSky(z)) {
+	if (isDepthSky(depth_opaque)) {
 		vec3 color = vec3(0.0);
 		vec4 cloud = texture2D_bicubic(colortex0, texcoord * CLOUDS_QUALITY);
 
@@ -529,8 +534,8 @@ void main() {
 		vec4 trpData = texture(colortex7, texcoord);
 
 		if (trpData.a > 0.99) {
-			vec3 fragpos0 = toScreenSpace_lod(vec3(texcoord/RENDER_SCALE - vIn.TAA_Offset*texelSize*0.5, max(z0, near/farPlane)));
-			float Vdiff = distance(fragpos, fragpos0);
+			vec3 fragpos_trans = toScreenSpace_lod(vec3(texcoord/RENDER_SCALE - vIn.TAA_Offset*texelSize*0.5, max(depth_trans, near/farPlane)));
+			float Vdiff = distance(viewPos_opaque, fragpos_trans);
 			float VdotU = np3.y;
 
 			float estimatedDepth = Vdiff * abs(VdotU); // assuming water plane
@@ -540,12 +545,12 @@ void main() {
 			vec3 ambientColVol = vIn.ambientUp * 8.0/150.0/3.0 * 0.5 * eyeBrightnessSmooth.y/240.0;
 
 			if (isEyeInWater == 0)
-				waterVolumetrics(outColor3, fragpos0, fragpos, estimatedDepth, estimatedSunDepth, Vdiff, noise, totEpsilon, scatterCoef, ambientColVol, lightColVol, dot(np3, vIn.WsunVec));
+				waterVolumetrics(outColor3, fragpos_trans, viewPos_opaque, estimatedDepth, estimatedSunDepth, Vdiff, noise, totEpsilon, scatterCoef, ambientColVol, lightColVol, dot(np3, vIn.WsunVec));
 		}
 	}
 	// land
 	else {
-		p3 += gbufferModelViewInverse[3].xyz;
+		localPos_opaque += gbufferModelViewInverse[3].xyz;
 
 		vec4 trpData = texture(colortex7, texcoord);
 //		bool iswater = texture(colortex7, texcoord).a > 0.99;
@@ -600,7 +605,7 @@ void main() {
 		vec3 SSS = vec3(0.0);
 		float sssAmount = specularData.b;
 
-		vec3 projectedShadowPosition = worldToShadowSpaceProjected(p3);
+		vec3 projectedShadowPosition = worldToShadowSpaceProjected(localPos_opaque);
 		bool inShadowMap = IsInShadowMap(projectedShadowPosition);
 
 		#ifdef Variable_Penumbra_Shadows
@@ -616,7 +621,7 @@ void main() {
 			if (diffuseSun > 0.000)
 		#endif
 		{
-//			vec3 projectedShadowPosition = worldToShadowSpaceProjected(p3);
+//			vec3 projectedShadowPosition = worldToShadowSpaceProjected(localPos_opaque);
 
 			// apply distortion
 			float distortFactor = calcDistort(projectedShadowPosition.xy);
@@ -707,7 +712,7 @@ void main() {
 		if ((diffuseSun * shading > 0.001 || sssAmount > 0.0) && !hand) {
 			#ifdef SCREENSPACE_CONTACT_SHADOWS
 				vec3 vec = vIn.lightCol.a * sunVec;
-				float screenShadow = rayTraceShadow(vec, fragpos, noise);
+				float screenShadow = rayTraceShadow(vec, viewPos_opaque, noise);
 				shading = min(screenShadow, shading);
 
 				// Out of shadow map
@@ -720,12 +725,12 @@ void main() {
 		}
 
 		#ifdef CLOUDS_SHADOWS
-			vec3 pos = p3 + cameraPosition;
+			vec3 worldPos = localPos_opaque + cameraPosition;
 			const int rayMarchSteps = 6;
 			float cloudShadow = 0.0;
 
 			for (int i = 0; i < rayMarchSteps; i++) {
-				vec3 cloudPos = pos + vIn.WsunVec / abs(vIn.WsunVec.y) * (1500 + (noise+i) / rayMarchSteps*1700 - pos.y);
+				vec3 cloudPos = worldPos + vIn.WsunVec / abs(vIn.WsunVec.y) * (1500 + (noise+i) / rayMarchSteps*1700 - worldPos.y);
 				cloudShadow += getCloudDensity(cloudPos, 0);
 			}
 
@@ -773,13 +778,7 @@ void main() {
 		#endif
 
 		#if !defined(PHOTONICS_HAND_LIGHT_ENABLED) && !defined(LIGHTING_COLORED)
-			float maxLit = max(heldBlockLightValue, heldBlockLightValue2);
-			float handLightDist = length(p3 + relativeEyePosition);
-			maxLit = max(maxLit - handLightDist, 0.0) / 15.0;
-
-			vec3 playerLightDir = -normalize(relativeEyePosition + p3);
-			maxLit *= max(dot(texLocalNormal, playerLightDir), 0.0);
-
+			float maxLit = SampleHandLight(localPos_opaque, texLocalNormal);
 			lightmap.x = max(lightmap.x, maxLit);
 		#endif
 
@@ -804,7 +803,7 @@ void main() {
 				torchLight = vec3(0.0);
 			}
 		#elif defined(LIGHTING_COLORED)
-			vec3 voxelPos = GetVoxelPosition(p3);
+			vec3 voxelPos = GetVoxelPosition(localPos_opaque);
 			vec3 samplePos = GetFloodFillSamplePos(voxelPos, geoLocalNormal, texLocalNormal);
 
 			if (IsInVoxelBounds(samplePos)) {
@@ -813,29 +812,30 @@ void main() {
 		#endif
 
 		#if !defined(PHOTONICS_HAND_LIGHT_ENABLED) && defined(LIGHTING_COLORED)
-			torchLight += SampleHandLight(p3, texLocalNormal, heldItemId, heldBlockLightValue);
-			torchLight += SampleHandLight(p3, texLocalNormal, heldItemId2, heldBlockLightValue2);
+			torchLight += SampleHandLight(localPos_opaque, texLocalNormal, heldItemId, heldBlockLightValue);
+			torchLight += SampleHandLight(localPos_opaque, texLocalNormal, heldItemId2, heldBlockLightValue2);
 		#endif
 
-		vec3 fragpos0;
+		vec3 fragpos_trans;
 		float Vdiff;
 		float estimatedDepth;
 		float estimatedSunDepth;
+
 		if (iswater != (isEyeInWater == 1)) {
-//		if (!iswater && isEyeInWater != 1) {
-			fragpos0 = toScreenSpace_lod(vec3(texcoord / RENDER_SCALE - vIn.TAA_Offset * texelSize * 0.5, z0));
-			Vdiff = distance(fragpos, fragpos0);
+			fragpos_trans = toScreenSpace_lod(vec3(texcoord / RENDER_SCALE - vIn.TAA_Offset * texelSize * 0.5, depth_trans));
+			Vdiff = distance(viewPos_opaque, fragpos_trans);
 
 			float VdotU = np3.y;
 			estimatedDepth = Vdiff * abs(VdotU); // assuming water plane
 
 			if (isEyeInWater == 1) {
-				Vdiff = length(fragpos);
-				estimatedDepth = saturate((15.5 - lightmap.y * 16.0) / 15.5);
-				estimatedDepth *= estimatedDepth * estimatedDepth * 32.0;
+				Vdiff = length(viewPos_opaque);
 
-				#ifndef lightMapDepthEstimation
-					estimatedDepth = max(Water_Top_Layer - (cameraPosition.y + p3.y), 0.0);
+				#ifdef lightMapDepthEstimation
+					estimatedDepth = saturate((15.5 - lightmap.y * 16.0) / 15.5);
+					estimatedDepth *= estimatedDepth * estimatedDepth * 32.0;
+				#else
+					estimatedDepth = max(Water_Top_Layer - (cameraPosition.y + localPos_opaque.y), 0.0);
 				#endif
 			}
 
@@ -843,17 +843,17 @@ void main() {
 			estimatedSunDepth = estimatedDepth / abs(vIn.refractedSunVec.y); //assuming water plane
 			skyDirectLight *= exp(-totEpsilon * estimatedSunDepth) * (1.0 - pow(1.0 - vIn.WsunVec.y, 5.0));
 
-			vec3 worldPos = toWorldSpaceCamera(fragpos);
+			vec3 worldPos = toWorldSpaceCamera(viewPos_opaque);
 			float caustics = waterCaustics(worldPos, vIn.refractedSunVec);
 			skyDirectLight *= mix(caustics * 0.5 + 0.5, 1.0, exp(estimatedSunDepth / -3.0));
 
-			if (isEyeInWater == 0) {
-				ambientLight *= min(exp(-totEpsilon * estimatedDepth), custom_lightmap.x);
-				ambientLight += custom_lightmap.z;
-			}
-			else {
+			if (isEyeInWater == 1) {
 				ambientLight += 10.0 * exp(totEpsilon * -8.0);
 				ambientLight *= exp(-totEpsilon * estimatedDepth) * 8.0/3.0 / 150.0;
+			}
+			else {
+				ambientLight *= min(exp(-totEpsilon * estimatedDepth), custom_lightmap.x);
+				ambientLight += custom_lightmap.z;
 			}
 
 			ambientLight *= mix(caustics, 1.0, 0.85);
@@ -862,8 +862,7 @@ void main() {
 			#ifdef SSGI
 				if (!hand) {
 					float ao = 1.0;
-//					ssao(ao, fragpos, 1.0, noise, decode(dataUnpacked0.yw));
-					ssao(ao, fragpos, 1.0, noise, texViewNormal);
+					ssao(ao, viewPos_opaque, 1.0, noise, texViewNormal);
 					ambientLight *= ao;
 				}
 			#endif
@@ -871,7 +870,7 @@ void main() {
 		else {
 			#ifdef SSGI
 				if (!hand)
-					ambientLight = rtGI(texLocalNormal, noise2, fragpos, ambientLight * custom_lightmap.x, sssAmount, custom_lightmap.z * vec3(0.9, 1.0, 1.5) + torchLight, normalize(albedo + 1.e-5) * 0.7);
+					ambientLight = rtGI(texLocalNormal, noise2, viewPos_opaque, ambientLight * custom_lightmap.x, sssAmount, custom_lightmap.z * vec3(0.9, 1.0, 1.5) + torchLight, normalize(albedo + 1.e-5) * 0.7);
 				else
 					ambientLight = ambientLight * custom_lightmap.x + custom_lightmap.z * vec3(0.9, 1.0, 1.5) + torchLight;
 			#else
@@ -879,7 +878,7 @@ void main() {
 			#endif
 		}
 
-		float emitting = pow(emissive, Emission_Curve) * 3.0 * MAT_EMISSION_SCALE;
+		float emitting = pow(emissive, Emission_Curve) * MAT_EMISSION_SCALE;
 
 		// combine all light sources
 		vec3 skyDiffuse = vec3(shading * diffuseSun);
@@ -907,7 +906,7 @@ void main() {
 //			#endif
 
 //			vec2 noise2 = blueNoise(texBlueNoise, gl_FragCoord.xy).rg;
-			MaterialReflections(outColor3, roughness, f0, albedo, vIn.WsunVec, vIn.lightCol.rgb, skyDiffuse, lightmap.y, texLocalNormal, np3, fragpos, vec3(noise2.rg, noise), hand);
+			MaterialReflections(outColor3, roughness, f0, albedo, vIn.WsunVec, vIn.lightCol.rgb, skyDiffuse, lightmap.y, texLocalNormal, np3, viewPos_opaque, vec3(noise2.rg, noise), hand);
 		#endif
 
 		if (iswater && isEyeInWater == 0) {
@@ -920,7 +919,7 @@ void main() {
 				if (Vdiff == 0.0) Vdiff = 20.0;
 			#endif
 
-			waterVolumetrics(outColor3, fragpos0, fragpos, estimatedDepth, estimatedSunDepth, Vdiff, noise, totEpsilon, scatterCoef, ambientColVol, lightColVol, dot(np3, vIn.WsunVec));
+			waterVolumetrics(outColor3, fragpos_trans, viewPos_opaque, estimatedDepth, estimatedSunDepth, Vdiff, noise, totEpsilon, scatterCoef, ambientColVol, lightColVol, dot(np3, vIn.WsunVec));
 		}
 	}
 }

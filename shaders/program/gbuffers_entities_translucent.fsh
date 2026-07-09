@@ -32,6 +32,11 @@ uniform sampler2D depthtex1;
 	uniform sampler2D specular;
 #endif
 
+#ifdef LIGHTING_COLORED
+	uniform sampler3D texFloodFill;
+	uniform sampler2D texBlockLight;
+#endif
+
 uniform vec4 lightCol;
 uniform vec3 sunVec;
 uniform float alphaTestRef;
@@ -39,6 +44,10 @@ uniform float frameTimeCounter;
 uniform float lightSign;
 uniform float near;
 uniform float far;
+uniform int heldItemId;
+uniform int heldItemId2;
+uniform int heldBlockLightValue;
+uniform int heldBlockLightValue2;
 //uniform float wetness;
 uniform float moonIntensity;
 uniform float sunIntensity;
@@ -62,6 +71,7 @@ uniform vec3 cameraPosition;
 uniform vec3 sunPosition;
 uniform mat4 gbufferPreviousModelView;
 uniform vec3 previousCameraPosition;
+uniform vec3 relativeEyePosition;
 uniform vec4 entityColor;
 uniform int isEyeInWater;
 uniform int frameCounter;
@@ -87,6 +97,16 @@ uniform int framemod8;
 	#include "/lib/normal_map.glsl"
 #endif
 
+#ifdef LIGHTING_COLORED
+	#include "/lib/voxel.glsl"
+	#include "/lib/blockLights.glsl"
+//	#include "/lib/blockLightMask.glsl"
+	#include "/lib/floodfill.glsl"
+//	#include "/lib/floodfillMasked.glsl"
+#endif
+
+#include "/lib/handLight.glsl"
+
 #ifdef MAT_SPECULAR_ENABLED
 	const vec2 v_taa_offset = vec2(0.0);
 	#include "/lib/specular.glsl"
@@ -108,7 +128,7 @@ void main() {
 
 	vec2 taa_offset = taa_offsets[framemod8];
 
-	vec3 fragpos = toScreenSpace(gl_FragCoord.xyz * vec3(texelSize / RENDER_SCALE, 1.0) - vec3(taa_offset * texelSize * 0.5, 0.0));
+	vec3 viewPos = toScreenSpace(gl_FragCoord.xyz * vec3(texelSize / RENDER_SCALE, 1.0) - vec3(taa_offset * texelSize * 0.5, 0.0));
 
 	outColor2 = texture(gtexture, vIn.lmtexcoord.xy, Texture_MipMap_Bias) * vIn.color;
 	if (outColor2.a < alphaTestRef) discard;
@@ -130,28 +150,29 @@ void main() {
 		float f0 = 0.04;
 	#endif
 
-	vec3 p3 = toWorldSpace(fragpos);
+	vec3 localPos = toWorldSpace(viewPos);
 
-	vec3 np3 = normalize(p3);
+	vec3 np3 = normalize(localPos);
 
-	vec3 normal = vIn.normalMat.xyz;
+	vec3 geoViewNormal = vIn.normalMat.xyz;
+	vec3 texViewNormal = geoViewNormal;
 
 	#ifdef MAT_PBR_ENABLED
-		vec3 binormal = normalize(cross(vIn.tangent.xyz, normal) * vIn.tangent.w);
+		vec3 binormal = normalize(cross(vIn.tangent.xyz, geoViewNormal) * vIn.tangent.w);
 
 		mat3 tbnMatrix = mat3(
-			vIn.tangent.x, binormal.x, normal.x,
-			vIn.tangent.y, binormal.y, normal.y,
-			vIn.tangent.z, binormal.z, normal.z);
+			vIn.tangent.x, binormal.x, geoViewNormal.x,
+			vIn.tangent.y, binormal.y, geoViewNormal.y,
+			vIn.tangent.z, binormal.z, geoViewNormal.z);
 
 		vec3 tex_normal = mat_normal(texture(normals, vIn.lmtexcoord.xy).rgb);
 
 		const float wetness = 0.0; // TODO
-		normal = applyBump(tbnMatrix, tex_normal, wetness);
+		texViewNormal = applyBump(tbnMatrix, tex_normal, wetness);
 	#endif
 
-	float NdotL = lightSign * dot(normal, sunVec);
-	float NdotU = dot(upVec, normal);
+	float NdotL = lightSign * dot(texViewNormal, sunVec);
+	float NdotU = dot(upVec, texViewNormal);
 	float diffuseSun = saturate(NdotL);
 
 	vec3 direct = texelFetch(TEX_SKY_LUT, ivec2(6, 37), 0).rgb / PI;
@@ -161,7 +182,7 @@ void main() {
 
 	// compute shadows only if not backface
 	if (diffuseSun > 0.001) {
-		vec3 projectedShadowPosition = worldToShadowSpaceProjected(p3);
+		vec3 projectedShadowPosition = worldToShadowSpaceProjected(localPos);
 
 		// apply distortion
 		float distortFactor = calcDistort(projectedShadowPosition.xy);
@@ -190,17 +211,47 @@ void main() {
 
 	direct *= diffuseSun * vIn.lmtexcoord.w;
 
-	vec3 diffuseLight = direct + texture(TEX_SKY_LUT, (vIn.lmtexcoord.zw * 15.0 + 0.5) * texelSize).rgb;
+	vec3 texLocalNormal = mat3(gbufferModelViewInverse) * texViewNormal;
+	vec2 lmcoord = vIn.lmtexcoord.zw;
 
-	diffuseLight /= 150.0;
-	diffuseLight += pow(emissive, Emission_Curve) * 3.0 * MAT_EMISSION_SCALE;
+	#ifdef LIGHTING_COLORED
+		vec3 geoLocalNormal = mat3(gbufferModelViewInverse) * geoViewNormal;
 
-	vec3 color = diffuseLight * albedo * 8.0/3.0;
+		vec3 voxelPos = GetVoxelPosition(localPos);
+		vec3 samplePos = GetFloodFillSamplePos(voxelPos, geoLocalNormal, texLocalNormal);
 
-//	float normalDotEye = dot(normal, normalize(fragpos));
+		vec3 floodfill_light = vec3(0.0);
+		if (IsInVoxelBounds(samplePos)) {
+			lmcoord.x = 0.0;
+			floodfill_light = SampleFloodFill(samplePos, frameCounter);
+		}
+	#else
+		float maxLit = SampleHandLight(localPos, texLocalNormal);
+		lmcoord.x = max(lmcoord.x, maxLit);
+	#endif
+
+	vec3 diffuseLight = direct + texture(TEX_SKY_LUT, (lmcoord * 15.0 + 0.5) * texelSize).rgb;
+
+	diffuseLight *= 8.0/3.0 / 150.0;
+	diffuseLight += pow(emissive, Emission_Curve) * MAT_EMISSION_SCALE;
+
+	vec3 color = diffuseLight;
+
+	#ifdef LIGHTING_COLORED
+		color += floodfill_light;
+
+		#if !defined(PHOTONICS_HAND_LIGHT_ENABLED)
+			color += SampleHandLight(localPos, texLocalNormal, heldItemId, heldBlockLightValue);
+			color += SampleHandLight(localPos, texLocalNormal, heldItemId2, heldBlockLightValue2);
+		#endif
+	#endif
+
+	color *= albedo;
+
+	//	float normalDotEye = dot(texViewNormal, normalize(viewPos));
 //	float fresnel = pow(clamp(1.0 + normalDotEye, 0.0, 1.0), 5.0);
 //	fresnel = mix(f0, 1.0, fresnel);
-	float F = schlick(dot(normal, -normalize(fragpos)), f0, 1.0);
+	float F = schlick(dot(texViewNormal, -normalize(viewPos)), f0, 1.0);
 
 	// premultiply alpha
 	outColor2.rgb = color * outColor2.a;
@@ -212,13 +263,12 @@ void main() {
 
 		vec2 noise2 = blueNoise(texBlueNoise, gl_FragCoord.xy).rg;
 		vec3 lightCol2 = texelFetch(TEX_SKY_LUT, ivec2(6, 37), 0).rgb;// / PI;
-		vec3 localNormal = mat3(gbufferModelViewInverse) * normal;
 
 		float lightCol_a = float(sunElevation > 1.e-5) * 2.0 - 1.0;
 		vec3 localSunDir = normalize(mat3(gbufferModelViewInverse) * sunPosition);
 		vec3 WsunVec = lightCol_a * localSunDir;
 
-		MaterialReflections(outColor2.rgb, roughness, f0, albedo, WsunVec, lightCol2, vec3(shading * diffuseSun), vIn.lmtexcoord.w, localNormal, np3, fragpos, vec3(noise2, noise), hand);
+		MaterialReflections(outColor2.rgb, roughness, f0, albedo, WsunVec, lightCol2, vec3(shading * diffuseSun), lmcoord.y, texLocalNormal, np3, viewPos, vec3(noise2, noise), hand);
 	#endif
 
 	outColor2.rgb *= 0.1;

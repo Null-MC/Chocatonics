@@ -109,8 +109,9 @@ uniform int framemod8;
 	#include "/lib/blockLightMask.glsl"
 	#include "/lib/floodfill.glsl"
 	#include "/lib/floodfillMasked.glsl"
-	#include "/lib/handLight.glsl"
 #endif
+
+#include "/lib/handLight.glsl"
 
 #ifdef PHOTONICS_REFLECT_ENABLED
 	#include "/photonics/uniforms.glsl"
@@ -313,6 +314,9 @@ void main() {
 			lmcoord.x = 0.0;
 			floodfill_light = SampleFloodFillMasked(samplePos, frameCounter);
 		}
+	#else
+		float maxLit = SampleHandLight(localPos, texLocalNormal);
+		lmcoord.x = max(lmcoord.x, maxLit);
 	#endif
 
 	direct *= (iswater > 0.9 ? 0.2 : 1.0) * diffuseSun * lmcoord.y;
@@ -332,7 +336,8 @@ void main() {
 	color *= albedo;
 
 //	float normalDotEye = dot(texViewNormal, -normalize(viewPos));
-	float F = schlick(dot(texViewNormal, -normalize(viewPos)), f0, 1.0);
+	vec3 viewDir = normalize(viewPos);
+	float F = schlick(dot(texViewNormal, -viewDir), f0, 1.0);
 //	float fresnel = pow(clamp(1.0 + normalDotEye, 0.0, 1.0), 5.0);
 //	fresnel = mix(f0, 1.0, fresnel);
 
@@ -347,7 +352,8 @@ void main() {
 		vec3 lightCol2 = texelFetch(TEX_SKY_LUT, ivec2(6, 37), 0).rgb;// / PI;
 
 //		vec3 texLocalNormal = mat3(gbufferModelViewInverse) * texViewNormal;
-		vec3 localViewDir = normalize(localPos);
+		vec3 localViewDir = mat3(gbufferModelViewInverse) * viewDir;
+//		vec3 localViewDir = normalize(localPos);
 
 		float lightCol_a = float(sunElevation > 1.e-5) * 2.0 - 1.0;
 		vec3 localSunDir = normalize(mat3(gbufferModelViewInverse) * sunPosition);

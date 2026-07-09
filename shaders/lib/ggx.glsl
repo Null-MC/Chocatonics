@@ -65,7 +65,8 @@ vec3 GGX2(vec3 n, vec3 v, vec3 l, float r, vec3 F0) {
     float G = gSimple(dotNV, roughness) * gSimple(dotNL, roughness);
     vec3 F = F0 + (1.0 - F0) * exp2((-5.55473*dotVH - 6.98316)*dotVH);
 
-    return dotNL * F * (G * D / (4.0 * dotNV * dotNL + 1e-7));
+//    return dotNL * F * (G * D / (4.0 * dotNV * dotNL + 1e-7));
+    return F * (G * D / (4.0 * dotNV * dotNL + 1e-7));
 }
 
 vec3 sampleGGXVNDF(vec3 view, vec2 alpha, float U1, float U2, bool ishand) {
