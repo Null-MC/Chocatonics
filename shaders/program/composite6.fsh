@@ -107,12 +107,20 @@ float densityAtPosFog(in vec3 pos) {
 }
 
 float cloudVol(in vec3 pos) {
-	vec3 samplePos = pos * vec3(1.0, 1.0/16.0, 1.0) + frameTimeCounter * vec3(0.5, 0.0, 0.5) * 5.0;
-	float coverage = mix(exp2(-(pos.y - SEA_LEVEL) * (pos.y - SEA_LEVEL) / 10000.0), 1.0, rainStrength * 0.5);
-	float noise = densityAtPosFog(samplePos * 12.0);
-	float unifCov = exp2(-max(pos.y-SEA_LEVEL, 0.0) / 50.0);
+	#ifdef WORLD_NETHER
+		vec3 samplePos = pos * vec3(1.0, 1.0/32.0, 1.0) * 5.0 + frameTimeCounter * vec3(0.5, 0.0, 0.5);
+		float noise = densityAtPos(samplePos * 12.0);
+		float unifCov = exp2(-max(pos.y - SEA_LEVEL, 0.0) / 50.0);
 
-	float cloud = pow(clamp(coverage - noise - 0.76, 0.0, 1.0), 2.0) * 1200.0/0.23 / (coverage+0.01)*vIn.VFAmount*600 + unifCov*60.0*vIn.fogAmount + rainStrength*2.0;
+		float cloud = pow(saturate(1.0 - noise - 0.76), 2.0) + 0.005;
+	#else
+		vec3 samplePos = pos * vec3(1.0, 1.0/16.0, 1.0) + frameTimeCounter * vec3(0.5, 0.0, 0.5) * 5.0;
+		float coverage = mix(exp2(-(pos.y - SEA_LEVEL) * (pos.y - SEA_LEVEL) / 10000.0), 1.0, rainStrength * 0.5);
+		float noise = densityAtPosFog(samplePos * 12.0);
+		float unifCov = exp2(-max(pos.y-SEA_LEVEL, 0.0) / 50.0);
+
+		float cloud = pow(saturate(coverage - noise - 0.76), 2.0) * 1200.0/0.23 / (coverage+0.01)*vIn.VFAmount*600 + unifCov*60.0*vIn.fogAmount + rainStrength*2.0;
+	#endif
 
 	return cloud;
 }
@@ -167,30 +175,51 @@ mat2x3 getVolumetricRays(float dither, vec3 fragpos, vec4 lightCol) {
 	// apply dither
 	float SdotV = dot(sunVec, normalize(fragpos)) * lightCol.a;
 	float dL = length(dVWorld);
-	//Mie phase + somewhat simulates multiple scattering (Horizon zero down cloud approx)
-	float mie = mix(phaseg(SdotV, fog_mieg1), phaseg(SdotV, fog_mieg2), 0.5);
-	float rayL = phaseRayleigh(SdotV);
-//	wpos.y = clamp(wpos.y,0.0,1.0);
 
-	vec3 ambientCoefs = dVWorld / dot(abs(dVWorld), vec3(1.0));
+	#ifdef WORLD_NETHER
+		float mie = max(phaseg(SdotV, fog_mieg1), 1.0/13.0);
 
-	vec3 ambientLight = vIn.ambientUp * saturate(ambientCoefs.y);
-	ambientLight += vIn.ambientDown * saturate(-ambientCoefs.y);
-	ambientLight += vIn.ambientRight * saturate(ambientCoefs.x);
-	ambientLight += vIn.ambientLeft * saturate(-ambientCoefs.x);
-	ambientLight += vIn.ambientB * saturate(ambientCoefs.z);
-	ambientLight += vIn.ambientF * saturate(-ambientCoefs.z);
+		vec3 ambientLight = vIn.ambientUp;
+		ambientLight += vIn.ambientDown;
+		ambientLight += vIn.ambientRight;
+		ambientLight += vIn.ambientLeft;
+		ambientLight += vIn.ambientB;
+		ambientLight += vIn.ambientF;
 
-	vec3 skyCol0 = ambientLight * eyeBrightnessSmooth.y/vec3(240.0) * Ambient_Mult*2.0 * 8.0/150.0/3.0;
+		vec3 skyCol0 = ambientLight*2.0 * 8.0/3.0/150.0 * Ambient_Mult*PI;
 
-	// Makes fog more white idk how to simulate it correctly
-	vec3 sunColor = lightCol.rgb * 8.0/150.0/3.0;
+		vec3 fogColor = saturate(gl_Fog.color.rgb * pow(luma(gl_Fog.color.rgb), -0.75) * 0.65) * 0.05;
+	#else
+		// Mie phase + somewhat simulates multiple scattering (Horizon zero down cloud approx)
+		float mie = mix(phaseg(SdotV, fog_mieg1), phaseg(SdotV, fog_mieg2), 0.5);
+
+		float rayL = phaseRayleigh(SdotV);
+
+		vec3 ambientCoefs = dVWorld / dot(abs(dVWorld), vec3(1.0));
+
+		vec3 ambientLight = vIn.ambientUp * saturate(ambientCoefs.y);
+		ambientLight += vIn.ambientDown * saturate(-ambientCoefs.y);
+		ambientLight += vIn.ambientRight * saturate(ambientCoefs.x);
+		ambientLight += vIn.ambientLeft * saturate(-ambientCoefs.x);
+		ambientLight += vIn.ambientB * saturate(ambientCoefs.z);
+		ambientLight += vIn.ambientF * saturate(-ambientCoefs.z);
+
+		vec3 skyCol0 = ambientLight * eyeBrightnessSmooth.y/vec3(240.0) * Ambient_Mult*2.0 * 8.0/150.0/3.0;
+
+		// Makes fog more white idk how to simulate it correctly
+		vec3 sunColor = lightCol.rgb * 8.0/150.0/3.0;
+	#endif
 
 	const vec3 rC = vec3(fog_coefficientRayleighR, fog_coefficientRayleighG, fog_coefficientRayleighB) * 1e-6;
 	const vec3 mC = vec3(fog_coefficientMieR, fog_coefficientMieG, fog_coefficientMieB) * 1e-6;
 
 	float mu = 1.0;
-	float muS = 1.0*mu;
+
+	#ifdef WORLD_NETHER
+		float muS = 1.05;
+	#else
+		float muS = 1.0;
+	#endif
 
 	vec3 absorbance = vec3(1.0);
 	float expFactor = 11.0;
@@ -207,9 +236,13 @@ mat2x3 getVolumetricRays(float dither, vec3 fragpos, vec4 lightCol) {
 		vec3 progressL = gbufferModelViewInverse[3].xyz + d*dVWorld;
 		vec3 progressW = progressL + cameraPosition;
 
-		float sh = VL_ShadowSample(progress, progressW);
-
-		vec3 sampleLight = skyCol0;
+		#ifdef WORLD_NETHER
+			float density = cloudVol(progressW) * 2.0;
+			vec3 sampleLight = vec3(0.0);
+		#else
+			float sh = VL_ShadowSample(progress, progressW);
+			vec3 sampleLight = skyCol0;
+		#endif
 
 		#if defined(LIGHTING_COLORED) && defined(LIGHTING_FLOODFILL_FOG)
 			vec3 voxelPos = GetVoxelPosition(progressL);
@@ -219,20 +252,27 @@ mat2x3 getVolumetricRays(float dither, vec3 fragpos, vec4 lightCol) {
 			}
 		#endif
 
-		// Water droplets(fog)
-		float densityVol = cloudVol(progressW);
-		float density = densityVol * ATMOSPHERIC_DENSITY * mu * 300.0;
+		#ifndef WORLD_NETHER
+			// Water droplets(fog)
+			float density = cloudVol(progressW) * ATMOSPHERIC_DENSITY * mu * 300.0;
 
-		// Just air
-		vec2 airCoef = exp2(-max(progressW.y - SEA_LEVEL, 0.0) / vec2(8.0e3, 1.2e3) * vec2(6.0, 7.0)) * 6.0;
+			// Just air
+			vec2 airCoef = exp2(-max(progressW.y - SEA_LEVEL, 0.0) / vec2(8.0e3, 1.2e3) * vec2(6.0, 7.0)) * 6.0;
 
-		// Pbr for air, yolo mix between mie and rayleigh for water droplets
-		vec3 rL = rC * airCoef.x;
-		vec3 m = (airCoef.y + density) * mC;
-		vec3 vL0 = sunColor * sh * (rayL*rL+m*mie) + sampleLight * (rL + m);
+			// Pbr for air, yolo mix between mie and rayleigh for water droplets
+			vec3 rL = rC * airCoef.x;
+			vec3 m = (airCoef.y + density) * mC;
+		#endif
 
-		vL += (vL0 - vL0 * exp(-(rL+m) * dd*dL)) / ((rL+m) + 1e-8) * absorbance;
-		absorbance *= saturate(exp(-(rL+m) * dd*dL));
+		#ifdef WORLD_NETHER
+			vec3 vL0 = density * (fogColor + sampleLight);
+			vL += (vL0 - vL0 * exp(-density * mu*dd*dL)) / (density * mu + 0.00000001) * absorbance;
+			absorbance *= saturate(exp(-density * mu*dd*dL));
+		#else
+			vec3 vL0 = sunColor * sh * (rayL*rL+m*mie) + sampleLight * (rL + m);
+			vL += (vL0 - vL0 * exp(-(rL+m) * dd*dL)) / ((rL+m) + 1e-8) * absorbance;
+			absorbance *= saturate(exp(-(rL+m) * dd*dL));
+		#endif
 	}
 
 	return mat2x3(vL, absorbance);

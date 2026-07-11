@@ -136,6 +136,12 @@ screen.LIGHTING=Lighting
         option.LPV_FRUSTUM_OFFSET=Shift Forward
         suffix.LPV_FRUSTUM_OFFSET=%
 
+        option.LIGHTING_FLOODFILL_CORNER_FIX=Corner Fix
+        option.LIGHTING_FLOODFILL_CORNER_FIX.comment=Removes darkening in corners.
+
+        option.LIGHTING_FLOODFILL_NORMAL_STRENGTH=Normal Offset Strength
+        suffix.LIGHTING_FLOODFILL_NORMAL_STRENGTH=%
+
 
 screen.SHADOWS=Shadows
 

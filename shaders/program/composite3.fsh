@@ -516,19 +516,24 @@ void main() {
 
 	// sky
 	if (isDepthSky(depth_opaque)) {
-		vec3 color = vec3(0.0);
-		vec4 cloud = texture2D_bicubic(colortex0, texcoord * CLOUDS_QUALITY);
+		#ifdef WORLD_NETHER
+			vec3 color = clamp(gl_Fog.color.rgb*pow(luma(gl_Fog.color.rgb),-0.75)*0.65,0.0,1.0)*0.02;
+			outColor3 = clamp(fp10Dither(color * 8.0/3.0 * (1.0 - rainStrength*0.4), triangularize(noise)), 0.0, 65000.0);
+		#else
+			vec4 cloud = texture2D_bicubic(colortex0, texcoord * CLOUDS_QUALITY);
 
-		if (np3.y > 0.0) {
-			color += stars(np3);
-			color += drawSun(dot(vIn.lightCol.a * vIn.WsunVec, np3), 0, vIn.lightCol.rgb/150.0, vec3(0.0));
-		}
+			vec3 color = vec3(0.0);
+			if (np3.y > 0.0) {
+				color += stars(np3);
+				color += drawSun(dot(vIn.lightCol.a * vIn.WsunVec, np3), 0, vIn.lightCol.rgb/150.0, vec3(0.0));
+			}
 
-		vec3 albedo = InputTransform(texture(TEX_GB_COLOR, texcoord).rgb);
-		color += skyFromTex(np3, TEX_SKY_LUT)/150.0 + albedo/10.0 * 4.0*ffstep(0.985, -dot(vIn.lightCol.a * vIn.WsunVec, np3));
-		color = color * cloud.a + cloud.rgb;
+			vec3 albedo = InputTransform(texture(TEX_GB_COLOR, texcoord).rgb);
+			color += skyFromTex(np3, TEX_SKY_LUT)/150.0 + albedo/10.0 * 4.0*ffstep(0.985, -dot(vIn.lightCol.a * vIn.WsunVec, np3));
+			color = color * cloud.a + cloud.rgb;
 
-		outColor3 = clamp(fp10Dither(color * 8.0/3.0, triangularize(noise)), 0.0, 65000.0);
+			outColor3 = clamp(fp10Dither(color * 8.0/3.0, triangularize(noise)), 0.0, 65000.0);
+		#endif
 
 		//if (outColor3.r > 65000.) outColor3 = vec3(0.0);
 		vec4 trpData = texture(colortex7, texcoord);

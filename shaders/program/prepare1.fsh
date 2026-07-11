@@ -153,36 +153,42 @@ void main() {
         outColor4 = vec4(vIn.moonColorCloud, 1.0);
 
     // Sky gradient (no clouds)
-    if (gl_FragCoord.x > 18. && gl_FragCoord.y > 1.0 && gl_FragCoord.x < 18+257){
-        vec2 p = saturate(floor(gl_FragCoord.xy - vec2(18.0, 1.0)) / 256.0 + vIn.tempOffsets / 256.0);
-        vec3 viewVector = cartToSphere(p);
+    if (gl_FragCoord.x > 18.0 && gl_FragCoord.y > 1.0 && gl_FragCoord.x < 18.0+257.0) {
+        #ifdef WORLD_NETHER
+            outColor4 = vec4(100.0, 40.0, 12.0, 1.0);
+        #else
+            vec2 p = saturate(floor(gl_FragCoord.xy - vec2(18.0, 1.0)) / 256.0 + vIn.tempOffsets / 256.0);
+            vec3 viewVector = cartToSphere(p);
 
-        vec2 planetSphere = vec2(0.0);
-        vec3 sky = vec3(0.0);
-        vec3 skyAbsorb = vec3(0.0);
-        vec3 WsunVec = mat3(gbufferModelViewInverse) * sunVec;
+            vec2 planetSphere = vec2(0.0);
+            vec3 sky = vec3(0.0);
+            vec3 skyAbsorb = vec3(0.0);
+            vec3 WsunVec = mat3(gbufferModelViewInverse) * sunVec;
 
-        sky = calculateAtmosphere(vIn.avgSky * 4000.0/2.0, viewVector, vec3(0.0, 1.0, 0.0), WsunVec, -WsunVec, planetSphere, skyAbsorb, 10, blueNoise(gl_FragCoord.xy, frameCounter));
+            sky = calculateAtmosphere(vIn.avgSky * 4000.0/2.0, viewVector, vec3(0.0, 1.0, 0.0), WsunVec, -WsunVec, planetSphere, skyAbsorb, 10, blueNoise(gl_FragCoord.xy, frameCounter));
 
-        sky = mix(sky, vec3(0.02, 0.022, 0.025) * dot(vIn.sunColorCloud + vIn.moonColorCloud, vec3(0.21, 0.72, 0.07)) * 4000.0, rainStrength * 0.99);
+            sky = mix(sky, vec3(0.02, 0.022, 0.025) * dot(vIn.sunColorCloud + vIn.moonColorCloud, vec3(0.21, 0.72, 0.07)) * 4000.0, rainStrength * 0.99);
 
-        //	transmittance *= exp(-(rainCoef)*rainDensity*L);
-        outColor4 = vec4(sky / 4000.0 * Sky_Brightness, 1.0);
+            //	transmittance *= exp(-(rainCoef)*rainDensity*L);
+            outColor4 = vec4(sky / 4000.0 * Sky_Brightness, 1.0);
+        #endif
     }
 
-    // Sky gradient with clouds
-    if (gl_FragCoord.x > 18.+257. && gl_FragCoord.y > 1. && gl_FragCoord.x < 18+257+257.){
-        vec2 p = saturate(floor(gl_FragCoord.xy - vec2(18.0+257.0, 1.0))/256.0 + vIn.tempOffsets/256.0);
-        vec3 viewVector = mat3(gbufferModelView) * cartToSphere(p);
-        vec4 clouds = renderClouds(viewVector * 1024.0, vec3(0.0), blueNoise(gl_FragCoord.xy, frameCounter), vIn.sunColorCloud, vIn.moonColor, vIn.avgSky);
-        mat2x3 vL = getVolumetricRays(fract(frameCounter / 1.6180339887), viewVector * 1024.0, lightCol);
-        float absorbance = dot(vL[1], vec3(0.22, 0.71, 0.07));
+    #ifndef WORLD_NETHER
+        // Sky gradient with clouds
+        if (gl_FragCoord.x > 18.0+257.0 && gl_FragCoord.y > 1.0 && gl_FragCoord.x < 18.0+257.0+257.0) {
+            vec2 p = saturate(floor(gl_FragCoord.xy - vec2(18.0+257.0, 1.0))/256.0 + vIn.tempOffsets/256.0);
+            vec3 viewVector = mat3(gbufferModelView) * cartToSphere(p);
+            vec4 clouds = renderClouds(viewVector * 1024.0, vec3(0.0), blueNoise(gl_FragCoord.xy, frameCounter), vIn.sunColorCloud, vIn.moonColor, vIn.avgSky);
+            mat2x3 vL = getVolumetricRays(fract(frameCounter / 1.6180339887), viewVector * 1024.0, lightCol);
+            float absorbance = dot(vL[1], vec3(0.22, 0.71, 0.07));
 
-        vec3 skytex = texelFetch(colortex4, ivec2(gl_FragCoord.xy) - ivec2(257, 0), 0).rgb / 150.0;
-        skytex = skytex * clouds.a + clouds.rgb;
+            vec3 skytex = texelFetch(colortex4, ivec2(gl_FragCoord.xy) - ivec2(257, 0), 0).rgb / 150.0;
+            skytex = skytex * clouds.a + clouds.rgb;
 
-        outColor4 = vec4(skytex * absorbance + vL[0].rgb, 1.0);
-    }
+            outColor4 = vec4(skytex * absorbance + vL[0].rgb, 1.0);
+        }
+    #endif
 
     // Temporally accumulate sky and light values
     vec3 temp = texelFetch(colortex4, ivec2(gl_FragCoord.xy), 0).rgb;
