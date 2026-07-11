@@ -76,90 +76,104 @@ void main() {
 	vOut.ambientF = vec3(0.0);
 	vOut.avgSky = vec3(0.0);
 
-	// Integrate sky light for each block side
-	int maxIT = 20;
-	for (int i = 0; i < maxIT; i++) {
-		vec2 ij = R2_samples((frameCounter % 1000) * maxIT + i);
-		vec3 pos = normalize(rodSample(ij));
+	#ifndef WORLD_NETHER
+		// Integrate sky light for each block side
+		int maxIT = 20;
+		for (int i = 0; i < maxIT; i++) {
+			vec2 ij = R2_samples((frameCounter % 1000) * maxIT + i);
+			vec3 pos = normalize(rodSample(ij));
 
-		vec3 samplee = 1.72 * skyFromTex(pos, colortex4).rgb / maxIT / 150.0;
-		vOut.avgSky += samplee / 1.72;
+			vec3 samplee = 1.72 * skyFromTex(pos, colortex4).rgb / maxIT / 150.0;
+			vOut.avgSky += samplee / 1.72;
 
-		vOut.ambientUp += samplee * (pos.y + abs(pos.x)/7.0 + abs(pos.z)/7.0);
-		vOut.ambientLeft += samplee * (saturate(-pos.x) + saturate(pos.y/7.0) + abs(pos.z)/7.0);
-		vOut.ambientRight += samplee * (saturate(pos.x) + saturate(pos.y/7.0) + abs(pos.z)/7.0);
-		vOut.ambientB += samplee * (saturate(pos.z) + abs(pos.x)/7.0 + saturate(pos.y/7.0));
-		vOut.ambientF += samplee * (saturate(-pos.z) + abs(pos.x)/7.0 + saturate(pos.y/7.0));
-		vOut.ambientDown += samplee * (saturate(pos.y / 6.0) + abs(pos.x)/7.0 + abs(pos.z)/7.0);
-	}
+			vOut.ambientUp += samplee * (pos.y + abs(pos.x)/7.0 + abs(pos.z)/7.0);
+			vOut.ambientLeft += samplee * (saturate(-pos.x) + saturate(pos.y/7.0) + abs(pos.z)/7.0);
+			vOut.ambientRight += samplee * (saturate(pos.x) + saturate(pos.y/7.0) + abs(pos.z)/7.0);
+			vOut.ambientB += samplee * (saturate(pos.z) + abs(pos.x)/7.0 + saturate(pos.y/7.0));
+			vOut.ambientF += samplee * (saturate(-pos.z) + abs(pos.x)/7.0 + saturate(pos.y/7.0));
+			vOut.ambientDown += samplee * (saturate(pos.y / 6.0) + abs(pos.x)/7.0 + abs(pos.z)/7.0);
+		}
 
-	vec2 planetSphere = vec2(0.0);
-	vec3 sky = vec3(0.0);
-	vec3 skyAbsorb = vec3(0.0);
+		vec2 planetSphere = vec2(0.0);
+		vec3 sky = vec3(0.0);
+		vec3 skyAbsorb = vec3(0.0);
 
-	float sunVis = clamp(sunElevation, 0.0, 0.05) / 0.05 * clamp(sunElevation, 0.0, 0.05) / 0.05;
-	float moonVis = clamp(-sunElevation, 0.0, 0.05) / 0.05 * clamp(-sunElevation, 0.0, 0.05) / 0.05;
+		float sunVis = clamp(sunElevation, 0.0, 0.05) / 0.05 * clamp(sunElevation, 0.0, 0.05) / 0.05;
+		float moonVis = clamp(-sunElevation, 0.0, 0.05) / 0.05 * clamp(-sunElevation, 0.0, 0.05) / 0.05;
 
-	// TODO: unused?
-	vec3 zenithColor = calculateAtmosphere(vec3(0.0), vec3(0.0, 1.0, 0.0), vec3(0.0, 1.0, 0.0), sunVec, -sunVec, planetSphere, skyAbsorb, 25, vOut.tempOffsets.x);
+		// TODO: unused?
+		vec3 zenithColor = calculateAtmosphere(vec3(0.0), vec3(0.0, 1.0, 0.0), vec3(0.0, 1.0, 0.0), sunVec, -sunVec, planetSphere, skyAbsorb, 25, vOut.tempOffsets.x);
 
-	skyAbsorb = vec3(0.0);
-	vec3 absorb = vec3(0.0);
-	vOut.sunColor = calculateAtmosphere(vec3(0.0), sunVec, vec3(0.0, 1.0, 0.0), sunVec, -sunVec, planetSphere, skyAbsorb, 25, 0.0);
-	vOut.sunColor = sunColorBase / 4000.0 * skyAbsorb;
+		skyAbsorb = vec3(0.0);
+		vec3 absorb = vec3(0.0);
+		vOut.sunColor = calculateAtmosphere(vec3(0.0), sunVec, vec3(0.0, 1.0, 0.0), sunVec, -sunVec, planetSphere, skyAbsorb, 25, 0.0);
+		vOut.sunColor = sunColorBase / 4000.0 * skyAbsorb;
 
-	skyAbsorb = vec3(1.0);
-	float dSun = 0.03;
-	vec3 modSunVec = sunVec * (1.0 - dSun) + vec3(0.0, dSun, 0.0);
-	vec3 modSunVec2 = sunVec * (1.0 - dSun) + vec3(0.0, dSun, 0.0);
-	if (modSunVec2.y > modSunVec.y) modSunVec = modSunVec2;
+		skyAbsorb = vec3(1.0);
+		float dSun = 0.03;
+		vec3 modSunVec = sunVec * (1.0 - dSun) + vec3(0.0, dSun, 0.0);
+		vec3 modSunVec2 = sunVec * (1.0 - dSun) + vec3(0.0, dSun, 0.0);
+		if (modSunVec2.y > modSunVec.y) modSunVec = modSunVec2;
 
-	vOut.sunColorCloud = calculateAtmosphere(vec3(0.0), modSunVec, vec3(0.0, 1.0, 0.0), sunVec, -sunVec, planetSphere, skyAbsorb, 25, 0.0);
-	vOut.sunColorCloud = sunColorBase / 4000.0 * skyAbsorb;
+		vOut.sunColorCloud = calculateAtmosphere(vec3(0.0), modSunVec, vec3(0.0, 1.0, 0.0), sunVec, -sunVec, planetSphere, skyAbsorb, 25, 0.0);
+		vOut.sunColorCloud = sunColorBase / 4000.0 * skyAbsorb;
 
-	skyAbsorb = vec3(1.0);
-	vOut.moonColor = calculateAtmosphere(vec3(0.0), -sunVec, vec3(0.0, 1.0, 0.0), sunVec, -sunVec, planetSphere, skyAbsorb, 25, 0.5);
-	vOut.moonColor = moonColorBase / 4000.0 * skyAbsorb;
+		skyAbsorb = vec3(1.0);
+		vOut.moonColor = calculateAtmosphere(vec3(0.0), -sunVec, vec3(0.0, 1.0, 0.0), sunVec, -sunVec, planetSphere, skyAbsorb, 25, 0.5);
+		vOut.moonColor = moonColorBase / 4000.0 * skyAbsorb;
 
-	skyAbsorb = vec3(1.0);
-	modSunVec = -sunVec * (1.0 - dSun) + vec3(0.0, dSun, 0.0);
-	modSunVec2 = -sunVec * (1.0 - dSun) + vec3(0.0, dSun, 0.0);
-	if (modSunVec2.y > modSunVec.y) modSunVec = modSunVec2;
+		skyAbsorb = vec3(1.0);
+		modSunVec = -sunVec * (1.0 - dSun) + vec3(0.0, dSun, 0.0);
+		modSunVec2 = -sunVec * (1.0 - dSun) + vec3(0.0, dSun, 0.0);
+		if (modSunVec2.y > modSunVec.y) modSunVec = modSunVec2;
 
-	vOut.moonColorCloud = calculateAtmosphere(vec3(0.0), modSunVec, vec3(0.0, 1.0, 0.0), sunVec, -sunVec, planetSphere, skyAbsorb, 25, 0.5);
-	vOut.moonColorCloud = moonColorBase / 4000.0 * 0.55;
+		vOut.moonColorCloud = calculateAtmosphere(vec3(0.0), modSunVec, vec3(0.0, 1.0, 0.0), sunVec, -sunVec, planetSphere, skyAbsorb, 25, 0.5);
+		vOut.moonColorCloud = moonColorBase / 4000.0 * 0.55;
 
-	#ifndef CLOUDS_SHADOWS
-		vOut.sunColor *= (1.0 - rainStrength * vec3(0.96));
-		vOut.moonColor *= (1.0 - rainStrength * vec3(0.96));
+		#ifndef CLOUDS_SHADOWS
+			vOut.sunColor *= (1.0 - rainStrength * vec3(0.96));
+			vOut.moonColor *= (1.0 - rainStrength * vec3(0.96));
+		#endif
+
+		vOut.lightSourceColor = sunVis >= 1e-5 ? vOut.sunColor * sunVis : vOut.moonColor * moonVis;
+
+		float lightDir = float(sunVis >= 1e-5) * 2.0 - 1.0;
 	#endif
 
-	vOut.lightSourceColor = sunVis >= 1e-5 ? vOut.sunColor * sunVis : vOut.moonColor * moonVis;
-
-	float lightDir = float(sunVis >= 1e-5) * 2.0 - 1.0;
-
 	// Fake bounced sunlight
-	vec3 bouncedSun = vOut.lightSourceColor * 0.1/5.0 * 0.5 * saturate(lightDir * sunVec.y) * saturate(lightDir * sunVec.y);
-	vec3 cloudAmbientSun = vOut.sunColorCloud * 0.007 * (1.0-rainStrength*0.5);
-	vec3 cloudAmbientMoon = vOut.moonColorCloud * 0.007 * (1.0-rainStrength*0.5);
-	vOut.ambientUp += bouncedSun * clamp(-lightDir*sunVec.y+4.0,0.0,4.0) + cloudAmbientSun*clamp(sunVec.y+2.,0.,4.0) + cloudAmbientMoon*clamp(-sunVec.y+2.,0.,4.0);
-	vOut.ambientLeft += bouncedSun * clamp(lightDir*sunVec.x+4.0,0.0,4.0) + cloudAmbientSun*clamp(-sunVec.x+2.,0.0,4.)*0.7 + cloudAmbientMoon*clamp(sunVec.x+2.,0.0,4.)*0.7;
-	vOut.ambientRight += bouncedSun * clamp(-lightDir*sunVec.x+4.0,0.0,4.0) + cloudAmbientSun*clamp(sunVec.x+2.,0.0,4.)*0.7 + cloudAmbientMoon*clamp(-sunVec.x+2.,0.0,4.)*0.7;
-	vOut.ambientB += bouncedSun * clamp(-lightDir*sunVec.z+4.0,0.0,4.0) + cloudAmbientSun*clamp(sunVec.z+2.,0.0,4.)*0.7 + cloudAmbientMoon*clamp(-sunVec.z+2.,0.0,4.)*0.7;
-	vOut.ambientF += bouncedSun * clamp(lightDir*sunVec.z+4.0,0.0,4.0) + cloudAmbientSun*clamp(-sunVec.z+2.,0.0,4.)*0.7 + cloudAmbientMoon*clamp(sunVec.z+2.,0.0,4.)*0.7;
-	vOut.ambientDown += bouncedSun * clamp(lightDir*sunVec.y+4.0,0.0,4.0)*0.7 + cloudAmbientSun*clamp(-sunVec.y+2.,0.0,4.)*0.5 + cloudAmbientMoon*clamp(sunVec.y+2.,0.0,4.)*0.5;
+	#ifdef WORLD_NETHER
+		vec3 bouncedSun = saturate(gl_Fog.color.rgb * pow(luma(gl_Fog.color.rgb), -0.75) * 0.65) / 4000.0 * 0.08;
 
-	vOut.avgSky += bouncedSun * 2.5;
+		vOut.ambientUp += bouncedSun * clamp(-sunVec.y + 5.0, 0.0, 6.0);
+		vOut.ambientLeft += bouncedSun * clamp(sunVec.x + 5.0, 0.0, 6.0);
+		vOut.ambientRight += bouncedSun * clamp(-sunVec.x + 5.0, 0.0, 6.0);
+		vOut.ambientB += bouncedSun * clamp(-sunVec.z+5.0, 0.0, 6.0);
+		vOut.ambientF += bouncedSun * clamp(sunVec.z+5.0, 0.0, 6.0);
+		vOut.ambientDown += bouncedSun * clamp(sunVec.y+5.0, 0.0, 6.0);
+	#else
+		vec3 bouncedSun = vOut.lightSourceColor * 0.1/5.0 * 0.5 * saturate(lightDir * sunVec.y) * saturate(lightDir * sunVec.y);
+		vec3 cloudAmbientSun = vOut.sunColorCloud * 0.007 * (1.0-rainStrength*0.5);
+		vec3 cloudAmbientMoon = vOut.moonColorCloud * 0.007 * (1.0-rainStrength*0.5);
 
-	vec3 rainNightBoost = vOut.moonColorCloud * rainStrength * 0.05;
+		vOut.ambientUp += bouncedSun * clamp(-lightDir*sunVec.y+4.0,0.0,4.0) + cloudAmbientSun*clamp(sunVec.y+2.,0.,4.0) + cloudAmbientMoon*clamp(-sunVec.y+2.,0.,4.0);
+		vOut.ambientLeft += bouncedSun * clamp(lightDir*sunVec.x+4.0,0.0,4.0) + cloudAmbientSun*clamp(-sunVec.x+2.,0.0,4.)*0.7 + cloudAmbientMoon*clamp(sunVec.x+2.,0.0,4.)*0.7;
+		vOut.ambientRight += bouncedSun * clamp(-lightDir*sunVec.x+4.0,0.0,4.0) + cloudAmbientSun*clamp(sunVec.x+2.,0.0,4.)*0.7 + cloudAmbientMoon*clamp(-sunVec.x+2.,0.0,4.)*0.7;
+		vOut.ambientB += bouncedSun * clamp(-lightDir*sunVec.z+4.0,0.0,4.0) + cloudAmbientSun*clamp(sunVec.z+2.,0.0,4.)*0.7 + cloudAmbientMoon*clamp(-sunVec.z+2.,0.0,4.)*0.7;
+		vOut.ambientF += bouncedSun * clamp(lightDir*sunVec.z+4.0,0.0,4.0) + cloudAmbientSun*clamp(-sunVec.z+2.,0.0,4.)*0.7 + cloudAmbientMoon*clamp(sunVec.z+2.,0.0,4.)*0.7;
+		vOut.ambientDown += bouncedSun * clamp(lightDir*sunVec.y+4.0,0.0,4.0)*0.7 + cloudAmbientSun*clamp(-sunVec.y+2.,0.0,4.)*0.5 + cloudAmbientMoon*clamp(sunVec.y+2.,0.0,4.)*0.5;
 
-	vOut.ambientUp += rainNightBoost;
-	vOut.ambientLeft += rainNightBoost;
-	vOut.ambientRight += rainNightBoost;
-	vOut.ambientB += rainNightBoost;
-	vOut.ambientF += rainNightBoost;
-	vOut.ambientDown += rainNightBoost;
-	vOut.avgSky += rainNightBoost;
+		vOut.avgSky += bouncedSun * 2.5;
+
+		vec3 rainNightBoost = vOut.moonColorCloud * rainStrength * 0.05;
+
+		vOut.ambientUp += rainNightBoost;
+		vOut.ambientLeft += rainNightBoost;
+		vOut.ambientRight += rainNightBoost;
+		vOut.ambientB += rainNightBoost;
+		vOut.ambientF += rainNightBoost;
+		vOut.ambientDown += rainNightBoost;
+		vOut.avgSky += rainNightBoost;
+	#endif
 
 	float avgLuma = 0.0;
 	float m2 = 0.0;
