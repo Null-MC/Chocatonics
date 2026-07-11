@@ -13,8 +13,8 @@ vec3 GetFloodFillSamplePos(const in vec3 voxelPos, const in vec3 geoNormal, cons
 vec3 TransformFloodFillSample(in vec3 color) {
     color = InputTransform(color);
 
-//    float L = luma(color);
-//    color *= L*L * 16.0;
+    float L = luma(color);
+    color *= L * 9.0;
 
     return color;
 }
