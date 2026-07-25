@@ -1,4 +1,4 @@
-#ifdef VOXY
+#ifdef LOD_ENABLED
     mat4 GetLodProjection() {
         return mat4(
             gbufferProjection[0][0], 0.0, 0.0, 0.0,
@@ -43,7 +43,7 @@ bool isDepthSky(const in float depth) {
     return IS_DEPTH_SKY;
 }
 
-#ifdef VOXY
+#ifdef LOD_ENABLED
     #define OP_DEPTH_NEARER >
 
     vec3 screenToNdc(in vec3 screenPos) {

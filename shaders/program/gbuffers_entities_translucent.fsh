@@ -77,6 +77,8 @@ uniform int isEyeInWater;
 uniform int frameCounter;
 uniform int framemod8;
 
+uniform float dhFarPlane;
+
 #include "/lib/r2.glsl"
 #include "/lib/ign.glsl"
 #include "/lib/ggx.glsl"

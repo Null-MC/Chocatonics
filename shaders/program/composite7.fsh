@@ -5,7 +5,7 @@
 #include "/lib/common.glsl"
 #include "/lib/settings.glsl"
 
-#ifdef VOXY
+#ifdef LOD_ENABLED
     #define TEX_DEPTH_TRANSLUCENT texVoxyDepthTranslucent
 #else
     #define TEX_DEPTH_TRANSLUCENT depthtex0
@@ -35,6 +35,7 @@ uniform vec3 cameraPosition;
 
 uniform mat4 gbufferProjection;
 uniform mat4 gbufferPreviousProjection;
+uniform float dhFarPlane;
 
 #include "/lib/projections.glsl"
 #include "/lib/lod_projections.glsl"
@@ -45,7 +46,7 @@ uniform mat4 gbufferPreviousProjection;
 float sampleDepth(const in ivec2 uv) {
     float depth = texelFetch(TEX_DEPTH_TRANSLUCENT, uv, 0).r;
 
-    #ifdef VOXY
+    #ifdef LOD_ENABLED
         depth = depth > 0.0 ? near / depth : farPlane;
         depth = 1.0 / depth;
     #else
@@ -141,7 +142,7 @@ void main() {
     float z = texture(TEX_DEPTH_TRANSLUCENT, texcoord).x;
     z = max(z, near/farPlane);
 
-    #ifdef VOXY
+    #ifdef LOD_ENABLED
 //        float frDepth = z > 0.0 ? near / z : farPlane;
         float frDepth = near / z;
         frDepth = 1.0 / frDepth;

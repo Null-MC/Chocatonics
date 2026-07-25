@@ -250,3 +250,7 @@ const vec2 RENDER_SCALE_2 = vec2(RENDER_SCALE);
 
 #ifdef PHOTONICS_GI_BLOCK
 #endif
+
+#if defined(VOXY) || defined(DISTANT_HORIZONS)
+    #define LOD_ENABLED
+#endif

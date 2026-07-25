@@ -8,6 +8,7 @@ flat out vec3 zMults;
 
 uniform float far;
 uniform float near;
+uniform float dhFarPlane;
 
 
 void main() {

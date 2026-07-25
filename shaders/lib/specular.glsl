@@ -38,7 +38,7 @@ vec3 rayTraceSpeculars(vec3 dir, vec3 position, float dither, float quality, boo
 
 		spos += stepv;
 
-		#ifdef VOXY
+		#ifdef LOD_ENABLED
 			// small bias
 			float biasamount = 0.004;
 			if (hand) biasamount = 0.01;
@@ -59,7 +59,7 @@ vec3 rayTraceSpeculars(vec3 dir, vec3 position, float dither, float quality, boo
 		#endif
 	}
 
-	#ifdef VOXY
+	#ifdef LOD_ENABLED
 		return vec3(-0.1);
 	#else
 		return vec3(1.1);

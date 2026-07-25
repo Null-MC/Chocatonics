@@ -3,6 +3,14 @@
 #include "/lib/common.glsl"
 #include "/lib/settings.glsl"
 
+#ifdef DISTANT_HORIZONS
+    #define TEX_DEPTH_LOD dhDepthTex0
+    #define MAT_LOD_PROJ_INV dhProjectionInverse
+#elif defined(VOXY)
+    #define TEX_DEPTH_LOD vxDepthTexOpaque
+    #define MAT_LOD_PROJ_INV vxProjInv
+#endif
+
 
 layout (local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
 
@@ -23,7 +31,7 @@ layout (local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
 layout(r32f) uniform writeonly image2D imgVoxyDepthTranslucent;
 
 uniform sampler2D depthtex0;
-uniform sampler2D vxDepthTexTrans;
+uniform sampler2D TEX_DEPTH_LOD;
 
 uniform float far;
 uniform float near;
@@ -31,7 +39,7 @@ uniform float viewWidth;
 uniform float viewHeight;
 uniform mat4 gbufferProjection;
 uniform mat4 gbufferProjectionInverse;
-uniform mat4 vxProjInv;
+uniform mat4 MAT_LOD_PROJ_INV;
 
 #include "/lib/projections.glsl"
 
@@ -53,7 +61,7 @@ float getMergedDepth(const in ivec2 uv, sampler2D depthtex, sampler2D vxDepthTex
     if (isSky) return 0.0;
 
     vec3 screenPos = vec3((uv + 0.5) / viewSizeScaled, depth);
-    float viewPosZ = screenToViewSpace(isLod ? vxProjInv : gbufferProjectionInverse, screenPos).z;
+    float viewPosZ = screenToViewSpace(isLod ? MAT_LOD_PROJ_INV : gbufferProjectionInverse, screenPos).z;
     return -near / viewPosZ;
 }
 
@@ -62,6 +70,6 @@ void main() {
     ivec2 uv = ivec2(gl_GlobalInvocationID.xy);
     if (any(greaterThanEqual(uv, viewSizeScaled))) return;
 
-    float depth_translucent = getMergedDepth(uv, depthtex0, vxDepthTexTrans);
+    float depth_translucent = getMergedDepth(uv, depthtex0, TEX_DEPTH_LOD);
     imageStore(imgVoxyDepthTranslucent, uv, vec4(depth_translucent));
 }

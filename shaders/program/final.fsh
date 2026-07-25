@@ -2,7 +2,7 @@
 
 // Vignetting, applies bloom, applies exposure and tonemaps the final image
 
-//#define TEX_DEBUG TEX_GB_NORMAL
+//#define TEX_DEBUG TEX_GB_WORLD
 
 #include "/lib/common.glsl"
 #include "/lib/settings.glsl"
@@ -112,8 +112,9 @@ void main() {
     #ifdef TEX_DEBUG
         vec2 texcoord = (gl_FragCoord.xy - 8.0) / 512.0;
         if (all(equal(saturate(texcoord), texcoord))) {
-            col = OctDecode(texture(TEX_DEBUG, texcoord).ba) * 0.5 + 0.5;
-            col = linearToSRGB(col);
+            col = texture(TEX_DEBUG, texcoord).rgb;
+//            col = OctDecode(texture(TEX_DEBUG, texcoord).ba) * 0.5 + 0.5;
+//            col = linearToSRGB(col);
         }
     #endif
 

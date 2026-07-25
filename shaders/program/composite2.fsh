@@ -3,7 +3,7 @@
 #include "/lib/common.glsl"
 #include "/lib/settings.glsl"
 
-#ifdef VOXY
+#ifdef LOD_ENABLED
 	#define TEX_DEPTH_OPAQUE texVoxyDepthOpaque
 #else
 	#define TEX_DEPTH_OPAQUE depthtex1

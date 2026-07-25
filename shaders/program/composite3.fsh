@@ -9,7 +9,7 @@
 #define TEX_SKY_LUT colortex4
 #define TEX_FINAL_PREV colortex5
 
-#ifdef VOXY
+#ifdef LOD_ENABLED
 	#define TEX_DEPTH_OPAQUE texVoxyDepthOpaque
 	#define TEX_DEPTH_TRANSLUCENT texVoxyDepthTranslucent
 	#define TEX_DEPTH_REFLECT texVoxyDepthOpaque
@@ -54,7 +54,7 @@ uniform sampler2DShadow shadowtex0HW;
 uniform sampler2D depthtex0;
 uniform sampler2D depthtex1;
 
-#ifdef VOXY
+#ifdef LOD_ENABLED
 	uniform sampler2D texVoxyDepthOpaque;
 	uniform sampler2D texVoxyDepthTranslucent;
 #else
@@ -111,6 +111,7 @@ uniform ivec2 eyeBrightnessSmooth;
 uniform vec3 relativeEyePosition;
 uniform int framemod8;
 
+uniform float dhFarPlane;
 
 //vec3 toScreenSpacePrev(vec3 p) {
 //	vec4 iProjDiag = vec4(gbufferProjectionInverse[0].x, gbufferProjectionInverse[1].y, gbufferProjectionInverse[2].zw);
@@ -179,7 +180,7 @@ float rayTraceShadow(vec3 dir, vec3 position, float dither) {
 		float sp = texture(TEX_DEPTH_OPAQUE, spos.xy).x;
 
         if (isDepthNearer(sp, spos.z)) {
-			#ifdef VOXY
+			#ifdef LOD_ENABLED
 				float z2 = near / spos.z;
 				float dist = abs(near / sp - z2) / z2;
 			#else
@@ -330,7 +331,7 @@ vec3 RT(vec3 dir, vec3 position, float noise, vec3 N) {
 	#else
 		float sp = texelFetch(TEX_DEPTH_OPAQUE, ivec2(spos.xy / texelSize), 0).r;
 
-		#ifdef VOXY
+		#ifdef LOD_ENABLED
 			float spL = sp > 0.0 ? near / sp : farPlane;
 		#else
 			float spL = depthScreenToLinear(sp, nearPlane, farPlane);
@@ -356,7 +357,7 @@ vec3 RT(vec3 dir, vec3 position, float noise, vec3 N) {
 		#else
 			float sp = texelFetch(TEX_DEPTH_OPAQUE, ivec2(spos.xy / texelSize), 0).r;
 
-			#ifdef VOXY
+			#ifdef LOD_ENABLED
 				float spL = sp > 0.0 ? near / sp : farPlane;
 			#else
 				float spL = depthScreenToLinear(sp, nearPlane, farPlane);
@@ -753,7 +754,7 @@ void main() {
 			directLighting += sample_photonics_handheld(texcoord/RENDER_SCALE);
 		#endif
 
-		#ifdef VOXY
+		#ifdef LOD_ENABLED
 			bool isLod = texture(depthtex0, texcoord).r >= 1.0;
 		#else
 			const bool isLod = false;

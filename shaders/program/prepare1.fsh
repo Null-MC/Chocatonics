@@ -57,6 +57,8 @@ uniform float sunElevation;
 uniform vec3 cameraPosition;
 uniform ivec2 eyeBrightnessSmooth;
 
+uniform float dhFarPlane;
+
 vec4 lightCol = vec4(vIn.lightSourceColor, float(sunElevation > 1.e-5) * 2.0 - 1.0);
 
 #include "/lib/util.glsl"

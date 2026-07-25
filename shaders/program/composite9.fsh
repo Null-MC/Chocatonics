@@ -5,7 +5,7 @@
 #include "/lib/common.glsl"
 #include "/lib/settings.glsl"
 
-#ifdef VOXY
+#ifdef LOD_ENABLED
 	#define TEX_DEPTH_TRANSLUCENT texVoxyDepthTranslucent
 #else
 	#define TEX_DEPTH_TRANSLUCENT depthtex0
@@ -41,6 +41,7 @@ uniform mat4 gbufferModelViewInverse;
 uniform mat4 shadowModelView;
 uniform mat4 shadowProjection;
 uniform vec3 cameraPosition;
+uniform float dhFarPlane;
 
 #include "/lib/r2.glsl"
 #include "/lib/ign.glsl"

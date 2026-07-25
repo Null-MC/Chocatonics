@@ -7,7 +7,7 @@
 
 #define TEX_SKY_LUT colortex4
 
-#ifdef VOXY
+#ifdef LOD_ENABLED
 	#define TEX_DEPTH_TRANSLUCENT texVoxyDepthTranslucent
 #else
 	#define TEX_DEPTH_TRANSLUCENT depthtex0
@@ -62,6 +62,7 @@ uniform mat4 shadowProjection;
 uniform vec3 cameraPosition;
 
 uniform mat4 gbufferPreviousProjection;
+uniform float dhFarPlane;
 
 #include "/lib/blocks.glsl"
 

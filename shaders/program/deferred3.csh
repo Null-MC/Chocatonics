@@ -16,6 +16,7 @@ uniform sampler2D depthtex0;
 uniform float frameTime;
 uniform float near;
 uniform float far;
+uniform float dhFarPlane;
 
 
 void main() {

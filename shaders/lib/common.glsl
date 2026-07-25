@@ -55,7 +55,10 @@ const float vxFarPlane = 16.0 * 3000.0;
 
 #define fstep(x,y) saturate((y - x) * 1e35)
 
-#ifdef VOXY
+#ifdef DISTANT_HORIZONS
+    #define nearPlane near
+    #define farPlane dhFarPlane
+#elif defined(VOXY)
     #define nearPlane near
     #define farPlane vxFarPlane
 #else
