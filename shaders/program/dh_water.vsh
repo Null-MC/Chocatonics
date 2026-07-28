@@ -4,23 +4,16 @@
 #include "/lib/settings.glsl"
 
 
-in vec4 at_tangent;
-in vec4 mc_Entity;
-
 out VertexData {
-	vec4 lmtexcoord;
 	vec4 color;
 	vec4 normalMat;
-	vec3 binormal;
-	vec3 tangent;
-	vec3 viewVector;
+	vec2 lmcoord;
+	float viewDist;
 } vOut;
 
 uniform vec2 texelSize;
 uniform int framemod8;
 uniform mat4 gbufferModelViewInverse;
-
-#include "/lib/blocks.glsl"
 
 
 vec4 toClipSpace3(vec3 viewSpacePosition) {
@@ -29,8 +22,7 @@ vec4 toClipSpace3(vec3 viewSpacePosition) {
 
 
 void main() {
-	vOut.lmtexcoord.xy = (gl_MultiTexCoord0).xy;
-	vOut.lmtexcoord.zw = gl_MultiTexCoord1.xy / 255.0;
+	vOut.lmcoord  = (gl_TextureMatrix[1] * gl_MultiTexCoord1).xy;
 
 	vec3 viewPos = mul3(gl_ModelViewMatrix, gl_Vertex.xyz);
 	gl_Position = toClipSpace3(viewPos);
@@ -38,26 +30,18 @@ void main() {
 
 	float mat = 0.0;
 	//if (mc_Entity.x == BLOCK_WATER || mc_Entity.x == 9.0) {
-	if (mc_Entity.x == BLOCK_WATER) {
+	if (dhMaterialId == DH_BLOCK_WATER) {
 		mat = 1.0;
 		gl_Position.z -= 1.e-4;
 	}
 
-	if (mc_Entity.x == BLOCK_ICE) mat = 0.5;
-	if (mc_Entity.x == BLOCK_REFLECTIVE) mat = 0.01;
+//	if (dhMaterialId == DH_BLOCK_ICE) mat = 0.5;
+//	if (dhMaterialId == BLOCK_REFLECTIVE) mat = 0.01;
 
 	vOut.normalMat.xyz = normalize(gl_NormalMatrix * gl_Normal);
 	vOut.normalMat.w = mat;
 
-	vOut.tangent = normalize(gl_NormalMatrix * at_tangent.xyz);
-	vOut.binormal = normalize(cross(vOut.tangent, vOut.normalMat.xyz) * at_tangent.w);
-
-	mat3 tbnMatrix = mat3(
-		vOut.tangent.x, vOut.binormal.x, vOut.normalMat.x,
-		vOut.tangent.y, vOut.binormal.y, vOut.normalMat.y,
-		vOut.tangent.z, vOut.binormal.z, vOut.normalMat.z);
-
-	vOut.viewVector = normalize(tbnMatrix * viewPos.xyz);
+	vOut.viewDist = length(viewPos);
 
 	#ifdef TAA_UPSCALING
 		gl_Position.xy = gl_Position.xy * RENDER_SCALE + RENDER_SCALE * gl_Position.w - gl_Position.w;

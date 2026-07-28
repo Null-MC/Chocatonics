@@ -39,7 +39,7 @@ vec3 get_sun_direction() {
 }
 
 vec3 get_sun_color(vec3 playerPos, vec3 direction) {
-    return texelFetch(TEX_SKY_LUT, ivec2(6, 37), 0).rgb / 150.0;
+    return texelFetch(TEX_SKY_LUT, ivec2(6, 37), 0).rgb / 150.0 * 8.0/3.0;
 }
 
 vec3 get_sky_color(vec3 playerPos, vec3 direction) {

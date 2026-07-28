@@ -15,27 +15,22 @@
 
 
 in VertexData {
-	vec4 lmtexcoord;
 	vec4 color;
 	vec4 normalMat;
-	vec3 binormal;
-	vec3 tangent;
-	vec3 viewVector;
+	vec2 lmcoord;
+	float viewDist;
 } vIn;
 
-uniform sampler2D gtexture;
 uniform sampler2D noisetex;
 uniform sampler2D texBlueNoise;
 uniform sampler2DShadow shadowtex0HW;
 uniform sampler2D TEX_SKY_LUT;
 uniform sampler2D gaux2;
 uniform sampler2D texWave;
-uniform sampler2D texDepthQ;
 uniform sampler2D TEX_DEPTH_REFLECT;
 
-#ifdef MAT_PBR_ENABLED
-	uniform sampler2D normals;
-	uniform sampler2D specular;
+#ifdef REFLECTION_QUARTER_RES_DEPTH
+	uniform sampler2D texDepthQ;
 #endif
 
 #ifdef LIGHTING_COLORED
@@ -84,16 +79,14 @@ uniform int isEyeInWater;
 uniform int frameCounter;
 uniform int framemod8;
 
+uniform mat4 dhProjectionInverse;
 uniform float dhFarPlane;
-
-#include "/lib/blocks.glsl"
 
 #include "/lib/r2.glsl"
 #include "/lib/ign.glsl"
 #include "/lib/ggx.glsl"
 #include "/lib/fresnel.glsl"
 #include "/lib/bicubic.glsl"
-#include "/lib/material.glsl"
 #include "/lib/blueNoise.glsl"
 #include "/lib/projections.glsl"
 #include "/lib/lod_projections.glsl"
@@ -121,10 +114,6 @@ uniform float dhFarPlane;
 	#include "/photonics/trace_ray.glsl"
 #endif
 
-#ifdef MAT_PBR_ENABLED
-	#include "/lib/normal_map.glsl"
-#endif
-
 #ifdef CLOUDS_SHADOWS
 	#include "/lib/volumetricClouds.glsl"
 #endif
@@ -135,23 +124,12 @@ uniform float dhFarPlane;
 //#endif
 
 
-float cdist(vec2 coord) {
-	return max(abs(coord.s - 0.5), abs(coord.t - 0.5)) * 2.0;
+vec3 toScreenSpace_dh(const in vec3 screenPos) {
+	return screenToViewSpace(dhProjectionInverse, screenPos);
 }
 
-#define PW_DEPTH 1.0 //[0.5 1.0 1.5 2.0 2.5 3.0]
-#define PW_POINTS 1 //[2 4 6 8 16 32]
-
-vec3 getParallaxDisplacement(vec3 posxz, float iswater, float bumpmult, vec3 viewVec) {
-	float waveZ = mix(20.0,0.25,iswater);
-	float waveM = mix(0.0,4.0,iswater);
-
-	vec3 parallaxPos = posxz;
-	vec2 vec = vIn.viewVector.xy * (1.0 / float(PW_POINTS)) * PW_DEPTH;
-	float waterHeight = getWaterHeightmap(posxz.xz, iswater) * 2.0;
-	parallaxPos.xz += waterHeight * vec;
-
-	return parallaxPos;
+float cdist(vec2 coord) {
+	return max(abs(coord.s - 0.5), abs(coord.t - 0.5)) * 2.0;
 }
 
 vec3 TangentToWorld(vec3 N, vec3 H) {
@@ -170,27 +148,20 @@ layout(location = 1) out vec4 outColor7;
 void main() {
 	if (!all(lessThan(gl_FragCoord.xy * texelSize.xy, RENDER_SCALE_2))) return;
 
+	if (vIn.viewDist < 0.85 * far) discard;
+
 	vec2 taa_offset = taa_offsets[framemod8];
 	float iswater = vIn.normalMat.w;
 
-	vec3 viewPos = toScreenSpace(gl_FragCoord.xyz * vec3(texelSize / RENDER_SCALE, 1.0) - vec3(taa_offset * texelSize * 0.5, 0.0));
+	vec3 viewPos = toScreenSpace_dh(gl_FragCoord.xyz * vec3(texelSize / RENDER_SCALE, 1.0) - vec3(taa_offset * texelSize * 0.5, 0.0));
 
-	outColor2 = texture(gtexture, vIn.lmtexcoord.xy, Texture_MipMap_Bias) * vIn.color;
+	outColor2 = vIn.color;
 
 	vec3 albedo = InputTransform(outColor2.rgb);
 
-	#ifdef MAT_SPECULAR_ENABLED
-		vec4 specularData = texture(specular, vIn.lmtexcoord.xy);
-		float roughness = mat_roughness(specularData.r);
-		float emissive = mat_emission(specularData);
-		float f0 = specularData.g;
-
-		if (f0 < EPSILON) f0 = 0.04;
-	#else
-		float roughness = 1.0;
-		float emissive = 0.0;
-		float f0 = 0.04;
-	#endif
+	float roughness = 1.0;
+	float emissive = 0.0;
+	float f0 = 0.04;
 
 	if (iswater > 0.0) {
 //		f0 = 0.02;//iswater > 0.1 ? 0.02 : 0.05 * (1.0 - outColor2.a);
@@ -215,36 +186,22 @@ void main() {
 
 	vec3 localPos = toWorldSpace(viewPos);
 
-	mat3 tbnMatrix = mat3(
-		vIn.tangent.x, vIn.binormal.x, geoViewNormal.x,
-		vIn.tangent.y, vIn.binormal.y, geoViewNormal.y,
-		vIn.tangent.z, vIn.binormal.z, geoViewNormal.z);
-
 	if (iswater > 0.4) {
 		float bumpmult = 1.0;
 		if (iswater > 0.9) bumpmult = 1.0;
-
-		float parallaxMult = bumpmult;
 
 		vec3 posxz = localPos + cameraPosition;
 		posxz.xz -= posxz.y;
 
 		if (iswater < 0.9) posxz.xz *= 3.0;
 
-		posxz.xyz = getParallaxDisplacement(posxz, iswater, bumpmult, normalize(tbnMatrix * viewPos));
-
 		vec3 bump = normalize(getWaveHeight(posxz.xz, iswater));
 
 		bump = bump * vec3(bumpmult) + vec3(0.0, 0.0, 1.0 - bumpmult);
 
-		texViewNormal = normalize(bump * tbnMatrix);
-	}
-	else {
-		#ifdef MAT_PBR_ENABLED
-			const float wetness = 0.0; // TODO
-			vec3 tex_normal = mat_normal(texture(normals, vIn.lmtexcoord.xy).rgb);
-			texViewNormal = applyBump(tbnMatrix, tex_normal, wetness);
-		#endif
+		vec3 geoLocalNormal = mat3(gbufferModelViewInverse) * geoViewNormal;
+		texViewNormal = TangentToWorld(geoLocalNormal, bump);
+		texViewNormal = mat3(gbufferModelView) * texViewNormal;
 	}
 
 	vec3 texLocalNormal = mat3(gbufferModelViewInverse) * texViewNormal;
@@ -303,7 +260,7 @@ void main() {
 		#endif
 	}
 
-	vec2 lmcoord = vIn.lmtexcoord.zw;
+	vec2 lmcoord = vIn.lmcoord;
 
 	#ifdef LIGHTING_COLORED
 		vec3 geoLocalNormal = mat3(gbufferModelViewInverse) * geoViewNormal;
@@ -337,32 +294,25 @@ void main() {
 
 	color *= albedo;
 
-//	float normalDotEye = dot(texViewNormal, -normalize(viewPos));
 	vec3 viewDir = normalize(viewPos);
 	float F = schlick(dot(texViewNormal, -viewDir), f0, 1.0);
-//	float fresnel = pow(clamp(1.0 + normalDotEye, 0.0, 1.0), 5.0);
-//	fresnel = mix(f0, 1.0, fresnel);
 
 	// premultiply alpha
 	outColor2.rgb = color * outColor2.a;
 	outColor2.a = max(outColor2.a, F);
 
-//	#ifdef MAT_SPECULAR_ENABLED
-		const bool hand = false;
+	const bool hand = false;
 
-		vec2 noise2 = blueNoise(texBlueNoise, gl_FragCoord.xy).rg;
-		vec3 lightCol2 = texelFetch(TEX_SKY_LUT, ivec2(6, 37), 0).rgb;// / PI;
+	vec2 noise2 = blueNoise(texBlueNoise, gl_FragCoord.xy).rg;
+	vec3 lightCol2 = texelFetch(TEX_SKY_LUT, ivec2(6, 37), 0).rgb;// / PI;
 
-//		vec3 texLocalNormal = mat3(gbufferModelViewInverse) * texViewNormal;
-		vec3 localViewDir = mat3(gbufferModelViewInverse) * viewDir;
-//		vec3 localViewDir = normalize(localPos);
+	vec3 localViewDir = mat3(gbufferModelViewInverse) * viewDir;
 
-		float lightCol_a = float(sunElevation > 1.e-5) * 2.0 - 1.0;
-		vec3 localSunDir = normalize(mat3(gbufferModelViewInverse) * sunPosition);
-		vec3 WsunVec = lightCol_a * localSunDir;
+	float lightCol_a = float(sunElevation > 1.e-5) * 2.0 - 1.0;
+	vec3 localSunDir = normalize(mat3(gbufferModelViewInverse) * sunPosition);
+	vec3 WsunVec = lightCol_a * localSunDir;
 
-		MaterialReflections(outColor2.rgb, roughness, f0, albedo, WsunVec, lightCol2, vec3(shading * diffuseSun), lmcoord.y, texLocalNormal, localViewDir, viewPos, vec3(noise2, noise), hand);
-//	#endif
+	MaterialReflections(outColor2.rgb, roughness, f0, albedo, WsunVec, lightCol2, vec3(shading * diffuseSun), lmcoord.y, texLocalNormal, localViewDir, viewPos, vec3(noise2, noise), hand);
 
 	outColor2.rgb = clamp(outColor2.rgb * 0.1, 0.0, 65100.0);
 	outColor7 = vec4(albedo, iswater);

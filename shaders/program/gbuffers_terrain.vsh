@@ -47,6 +47,15 @@ uniform mat4 gbufferProjectionInverse;
 
 
 void main() {
+	vOut.blockId = int(mc_Entity.x);
+
+	#ifdef PHOTONICS_3D_BLOCKS
+		if (vOut.blockId == BLOCK_PLANT_WAVING_TOP) {
+			gl_Position = vec4(-2.0);
+			return;
+		}
+	#endif
+
 	vOut.lmtexcoord.xy = (gl_MultiTexCoord0).xy;
 	vOut.lmtexcoord.zw = gl_MultiTexCoord1.xy / 255.0;
 
@@ -68,7 +77,6 @@ void main() {
 
 	vOut.normalMat = normalize(gl_NormalMatrix * gl_Normal);
 //	vOut.normalMat.w = (mc_Entity.x == BLOCK_SSS || mc_Entity.x == BLOCK_PLANT_WAVING_FULL || mc_Entity.x == BLOCK_PLANT_WAVING_TOP) ? 0.5 : 1.0;
-	vOut.blockId = int(mc_Entity.x);
 
 //	if (mc_Entity.x == BLOCK_IDK) vOut.normalMat.a = 0.6;
 

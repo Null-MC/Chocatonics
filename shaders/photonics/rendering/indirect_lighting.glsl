@@ -12,15 +12,23 @@ uniform vec3 sunVec;
 #include "/photonics/utility/random.glsl"
 
 #include "/photonics/modifiers/indirect_surface_sample_modifier.glsl"
-#include "/photonics/trace_ray.glsl"
+
+#ifndef PHOTONICS_3D_BLOCKS
+    // TODO: duplicated by interface with 3D blocks
+    #include "/photonics/trace_ray.glsl"
+#endif
 
 #if defined(CLOUDS_SHADOWS) && !defined(PHOTONICS_GI_SHADOWMAP)
     #include "/lib/blueNoise.glsl"
 #endif
 
 
-void sample_indirect(inout vec3 indirect_color, vec3 sample_rt_pos, vec3 geo_normal, vec3 tex_normal, inout uint rnd_state,
-    out vec3 first_hit, out vec3 first_normal) {
+//void sample_indirect(inout vec3 indirect_color, vec3 sample_rt_pos, vec3 geo_normal, vec3 tex_normal, inout uint rnd_state,
+//    out vec3 first_hit, out vec3 first_normal) {
+void sample_indirect(inout vec3 indirect_color, vec3 sample_rt_pos, vec3 normal,
+    inout uint rnd_state, out vec3 first_hit, out vec3 first_normal) {
+    vec3 geo_normal = normal;
+    vec3 tex_normal = normal;
 
     vec3 trace_localDir = ph_rand_direction(rnd_state, tex_normal);
 
@@ -144,5 +152,5 @@ void sample_indirect(inout vec3 indirect_color, vec3 sample_rt_pos, vec3 geo_nor
         final_color = radiance;
     }
 
-    indirect_color += final_color * tint * 8.0/3.0;
+    indirect_color += final_color * tint;// * 8.0/3.0;
 }

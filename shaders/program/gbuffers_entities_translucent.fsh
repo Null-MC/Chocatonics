@@ -24,8 +24,11 @@ uniform sampler2D texBlueNoise;
 uniform sampler2DShadow shadowtex0HW;
 uniform sampler2D TEX_SKY_LUT;
 uniform sampler2D gaux2;
-uniform sampler2D texDepthQ;
 uniform sampler2D depthtex1;
+
+#ifdef REFLECTION_QUARTER_RES_DEPTH
+	uniform sampler2D texDepthQ;
+#endif
 
 #ifdef MAT_PBR_ENABLED
 	uniform sampler2D normals;

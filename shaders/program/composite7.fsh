@@ -5,6 +5,12 @@
 #include "/lib/common.glsl"
 #include "/lib/settings.glsl"
 
+#ifdef PHOTONICS_3D_BLOCKS
+    #define TEX_DEPTH_OPAQUE texVoxelDepth
+#else
+    #define TEX_DEPTH_OPAQUE depthtex1
+#endif
+
 #ifdef LOD_ENABLED
     #define TEX_DEPTH_TRANSLUCENT texVoxyDepthTranslucent
 #else
@@ -21,6 +27,7 @@ uniform sampler2D colortex7;
 //uniform sampler2D depthtex0;
 uniform sampler2D noisetex;
 
+uniform sampler2D TEX_DEPTH_OPAQUE;
 uniform sampler2D TEX_DEPTH_TRANSLUCENT;
 
 uniform float frameTimeCounter;
@@ -140,10 +147,21 @@ void main() {
 
     // 3x3 bilateral upscale from half resolution
     float z = texture(TEX_DEPTH_TRANSLUCENT, texcoord).x;
-    z = max(z, near/farPlane);
+
+    #ifdef PHOTONICS_3D_BLOCKS
+        float z_opaque = texture(TEX_DEPTH_OPAQUE, texcoord).x;
+
+        if (z_opaque < z) {
+            vec3 color = texture(colortex3, texcoord).rgb;
+            outColor7 = 1.0;
+            outColor3 = clamp(color, 6.11*1.e-5, 65000.0);
+            return;
+        }
+    #endif
 
     #ifdef LOD_ENABLED
 //        float frDepth = z > 0.0 ? near / z : farPlane;
+        z = max(z, near/farPlane);
         float frDepth = near / z;
         frDepth = 1.0 / frDepth;
     #else

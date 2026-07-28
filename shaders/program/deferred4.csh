@@ -4,7 +4,8 @@
 #include "/lib/settings.glsl"
 
 #ifdef DISTANT_HORIZONS
-    #define TEX_DEPTH_LOD dhDepthTex1
+    // This SHOULD be dhDepthTex1, but that is a frame behind here
+    #define TEX_DEPTH_LOD dhDepthTex0
     #define MAT_LOD_PROJ_INV dhProjectionInverse
 #elif defined(VOXY)
     #define TEX_DEPTH_LOD vxDepthTexOpaque

@@ -29,6 +29,8 @@ uniform int isEyeInWater;
 #include "/lib/color_transforms.glsl"
 #include "/lib/color_dither.glsl"
 
+//#include "/photonics/samplers.glsl"
+
 
 vec4 SampleTextureCatmullRom(sampler2D tex, vec2 uv, vec2 texSize) {
     // We're going to sample a a 4x4 grid of texels surrounding the target UV coordinate. We'll do this by rounding
@@ -117,6 +119,13 @@ void main() {
 //            col = linearToSRGB(col);
         }
     #endif
+
+//    vec2 texcoord = (gl_FragCoord.xy - 8.0) / vec2(640,480);
+//    if (all(equal(saturate(texcoord), texcoord))) {
+//        col = sample_photonics_direct(texcoord) * 0.25;
+//        col = col / (col + 1.0);
+//        col = linearToSRGB(col);
+//    }
 
     gl_FragColor.rgb = saturate(int8Dither(col, vIn.texcoord));
 }
