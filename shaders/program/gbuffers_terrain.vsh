@@ -49,7 +49,7 @@ uniform mat4 gbufferProjectionInverse;
 void main() {
 	vOut.blockId = int(mc_Entity.x);
 
-	#ifdef PHOTONICS_3D_BLOCKS
+	#if PHOTONICS_3D_BLOCKS != PH_VOXEL_NONE
 		if (vOut.blockId == BLOCK_PLANT_WAVING_TOP) {
 			gl_Position = vec4(-2.0);
 			return;

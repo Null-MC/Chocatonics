@@ -42,6 +42,10 @@ uniform sampler2D colortex4;
 	uniform sampler3D texFloodFill;
 #endif
 
+#if PHOTONICS_3D_BLOCKS != PH_VOXEL_NONE
+	uniform sampler2D texVoxelDepth;
+#endif
+
 uniform float far;
 uniform float near;
 uniform vec3 sunVec;
@@ -374,7 +378,13 @@ layout(location = 0) out vec4 outColor0;
 void main() {
 	vec2 tc = floor(gl_FragCoord.xy) / VL_RENDER_RESOLUTION * texelSize + 0.5 * texelSize;
 	float z = texture(TEX_DEPTH_TRANSLUCENT, tc).x;
-	z = max(z, near / farPlane);
+
+	#ifdef LOD_ENABLED
+		z = max(z, near / farPlane);
+	#elif PHOTONICS_3D_BLOCKS != PH_VOXEL_NONE
+		float z_opaque = texture(texVoxelDepth, tc).r;
+		z = min(z, z_opaque);
+	#endif
 
 	vec3 fragpos = toScreenSpace_lod(vec3(tc/RENDER_SCALE, z));
 

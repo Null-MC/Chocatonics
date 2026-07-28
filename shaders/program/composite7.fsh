@@ -5,7 +5,7 @@
 #include "/lib/common.glsl"
 #include "/lib/settings.glsl"
 
-#ifdef PHOTONICS_3D_BLOCKS
+#if PHOTONICS_3D_BLOCKS != PH_VOXEL_NONE
     #define TEX_DEPTH_OPAQUE texVoxelDepth
 #else
     #define TEX_DEPTH_OPAQUE depthtex1
@@ -57,6 +57,11 @@ float sampleDepth(const in ivec2 uv) {
         depth = depth > 0.0 ? near / depth : farPlane;
         depth = 1.0 / depth;
     #else
+        #if PHOTONICS_3D_BLOCKS != PH_VOXEL_NONE
+            float depth_opaque = texelFetch(TEX_DEPTH_OPAQUE, uv, 0).x;
+            depth = min(depth, depth_opaque);
+        #endif
+
         depth = ld_reverse(depth, zMults.y, zMults.z);
     #endif
 
@@ -146,17 +151,12 @@ void main() {
     vec2 texcoord = gl_FragCoord.xy * texelSize;
 
     // 3x3 bilateral upscale from half resolution
-    float z = texture(TEX_DEPTH_TRANSLUCENT, texcoord).x;
+    float z_trans = texture(TEX_DEPTH_TRANSLUCENT, texcoord).x;
+    float z = z_trans;
 
-    #ifdef PHOTONICS_3D_BLOCKS
+    #if PHOTONICS_3D_BLOCKS != PH_VOXEL_NONE
         float z_opaque = texture(TEX_DEPTH_OPAQUE, texcoord).x;
-
-        if (z_opaque < z) {
-            vec3 color = texture(colortex3, texcoord).rgb;
-            outColor7 = 1.0;
-            outColor3 = clamp(color, 6.11*1.e-5, 65000.0);
-            return;
-        }
+        z = min(z, z_opaque);
     #endif
 
     #ifdef LOD_ENABLED
@@ -173,6 +173,11 @@ void main() {
     vec4 transparencies = texture(colortex2, texcoord);
     vec4 trpData = texture(colortex7, texcoord);
     bool iswater = trpData.a > 0.99;
+
+    bool hasOverlay = true;
+    #if PHOTONICS_3D_BLOCKS != PH_VOXEL_NONE
+        hasOverlay = z_trans <= z_opaque;
+    #endif
 
     #ifdef PHOTONICS_REFRACTION_ENABLED
         vec3 tex_normal = ; // TODO
@@ -211,7 +216,7 @@ void main() {
     #else
         vec2 refractedCoord = texcoord;
 
-        if (iswater) {
+        if (iswater && hasOverlay) {
     //        vec3 fragpos = toScreenSpace(vec3(texcoord-vec2(0.0)*texelSize*0.5,z));
             vec3 fragpos = toScreenSpace_lod(vec3(texcoord, z));
             vec3 np3 = toWorldSpaceCamera(fragpos);
@@ -226,7 +231,7 @@ void main() {
 
         vec3 color = texture(colortex3, refractedCoord).rgb;
 
-        if (!iswater) {
+        if (!iswater && hasOverlay) {
             // multiplicative tinting
             vec3 albedo_translucent = InputTransform(trpData.rgb);
 //            albedo_translucent = normalize(albedo_translucent + EPSILON) / sqrt(3.0);
@@ -234,8 +239,10 @@ void main() {
         }
     #endif
 
-    if (frDepth > 2.5/farPlane || transparencies.a < 0.99)  // Discount fix for transparencies through hand
-        color = color * (1.0 - transparencies.a) + transparencies.rgb * 10.0;
+    if (hasOverlay) {
+        if (frDepth > 2.5 / farPlane || transparencies.a < 0.99)  // Discount fix for transparencies through hand
+            color = color * (1.0 - transparencies.a) + transparencies.rgb * 10.0;
+    }
 
     float dirtAmount = Dirt_Amount;
     vec3 waterEpsilon = vec3(Water_Absorb_R, Water_Absorb_G, Water_Absorb_B);

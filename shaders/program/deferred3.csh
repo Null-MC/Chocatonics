@@ -1,35 +1,53 @@
 #version 430 compatibility
 
-// computes center-depth values
-
 #include "/lib/common.glsl"
 #include "/lib/settings.glsl"
 
-layout (local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
-const ivec3 workGroups = ivec3(1, 1, 1);
+#define TEX_DEPTH depthtex1
 
 
-layout(rgba16f) uniform image2D colorimg4;
+layout (local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+//const vec2 workGroupsRender = vec2(RENDER_SCALE*0.25, RENDER_SCALE*0.25);
 
-uniform sampler2D depthtex0;
+#if TAA_RENDER_SCALE == 100
+    const vec2 workGroupsRender = vec2(0.250, 0.250);
+#elif TAA_RENDER_SCALE == 90
+    const vec2 workGroupsRender = vec2(0.225, 0.225);
+#elif TAA_RENDER_SCALE == 80
+    const vec2 workGroupsRender = vec2(0.200, 0.200);
+#elif TAA_RENDER_SCALE == 70
+    const vec2 workGroupsRender = vec2(0.175, 0.175);
+#elif TAA_RENDER_SCALE == 60
+    const vec2 workGroupsRender = vec2(0.150, 0.150);
+#elif TAA_RENDER_SCALE == 50
+    const vec2 workGroupsRender = vec2(0.125, 0.125);
+#endif
 
-uniform float frameTime;
+layout(r16f) uniform writeonly image2D imgDepthQ;
+
+uniform sampler2D TEX_DEPTH;
+
 uniform float near;
 uniform float far;
-uniform float dhFarPlane;
 
 
 void main() {
-    const ivec2 uv = ivec2(14, 37);
-    vec4 data = imageLoad(colorimg4, uv);
+    ivec2 bufferSize = imageSize(imgDepthQ);
 
-    float currCenterDepth = texture(depthtex0, vec2(0.5) * RENDER_SCALE).r;
-    currCenterDepth = depthScreenToLinear(currCenterDepth, nearPlane, farPlane);// * farPlane;
+    ivec2 uv_dest = ivec2(gl_GlobalInvocationID.xy);
+    if (any(greaterThanEqual(uv_dest, bufferSize))) return;
 
-    float prevCenterDepth = sqrt(data.g / 65000.0) * farPlane;
-    float mixF = DoF_Adaptation_Speed * exp(-0.016/frameTime + 1.0) / (6.0 + currCenterDepth);
-    float centerDepth = mix(prevCenterDepth, currCenterDepth, saturate(mixF));
+    ivec2 uv_src = ivec2((uv_dest + 0.5) * 4.0);
+	float depth = texelFetch(TEX_DEPTH, uv_src, 0).r;
+    float depthL;
 
-    data.g = square(centerDepth / farPlane) * 65000.0;
-    imageStore(colorimg4, uv, data);
+    if (depth < 1.0) {
+        float z = depthScreenToLinear(depth, nearPlane, farPlane) / farPlane;
+        depthL = z*z * 65000.0;
+    }
+    else {
+        depthL = 2.0;
+    }
+
+    imageStore(imgDepthQ, uv_dest, vec4(depthL));
 }

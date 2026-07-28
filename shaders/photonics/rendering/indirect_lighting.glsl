@@ -13,7 +13,7 @@ uniform vec3 sunVec;
 
 #include "/photonics/modifiers/indirect_surface_sample_modifier.glsl"
 
-#ifndef PHOTONICS_3D_BLOCKS
+#if PHOTONICS_3D_BLOCKS == PH_VOXEL_NONE
     // TODO: duplicated by interface with 3D blocks
     #include "/photonics/trace_ray.glsl"
 #endif

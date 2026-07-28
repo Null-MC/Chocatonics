@@ -1,0 +1,17 @@
+worlds:
+  - name: "world1"
+    defines:
+      - "WORLD_END"
+  - name: "world0"
+    defines:
+      - "WORLD_OVERWORLD"
+  - name: "world-1"
+    defines:
+      - "WORLD_NETHER"
+programs:
+  - name: "prepare1"
+    types: ['csh']
+    exclude_worlds: [1, 0]
+  - name: "composite1"
+    types: ['vsh', 'fsh']
+    exclude_worlds: [1, -1]

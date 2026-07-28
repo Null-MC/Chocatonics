@@ -141,6 +141,10 @@ float pow5(const in float value) {
 #define MAT_FORMAT_OLDPBR 1
 #define MAT_FORMAT_LABPBR 2
 
+#define PH_VOXEL_NONE 0
+#define PH_VOXEL_HYBRID 1
+#define PH_VOXEL_FULL 2
+
 const vec2[8] taa_offsets = vec2[8](
     vec2( 1.0, -3.0) / 8.0,
     vec2(-1.0,  3.0) / 8.0,

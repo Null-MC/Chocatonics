@@ -1,76 +1,35 @@
 #version 430 compatibility
 
+// computes center-depth values
+
 #include "/lib/common.glsl"
 #include "/lib/settings.glsl"
 
-#ifdef DISTANT_HORIZONS
-    // This SHOULD be dhDepthTex1, but that is a frame behind here
-    #define TEX_DEPTH_LOD dhDepthTex0
-    #define MAT_LOD_PROJ_INV dhProjectionInverse
-#elif defined(VOXY)
-    #define TEX_DEPTH_LOD vxDepthTexOpaque
-    #define MAT_LOD_PROJ_INV vxProjInv
-#endif
+layout (local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+const ivec3 workGroups = ivec3(1, 1, 1);
 
 
-layout (local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+layout(rgba16f) uniform image2D colorimg4;
 
-#if TAA_RENDER_SCALE == 100
-    const vec2 workGroupsRender = vec2(1.0, 1.0);
-#elif TAA_RENDER_SCALE == 90
-    const vec2 workGroupsRender = vec2(0.9, 0.9);
-#elif TAA_RENDER_SCALE == 80
-    const vec2 workGroupsRender = vec2(0.8, 0.8);
-#elif TAA_RENDER_SCALE == 70
-    const vec2 workGroupsRender = vec2(0.7, 0.7);
-#elif TAA_RENDER_SCALE == 60
-    const vec2 workGroupsRender = vec2(0.6, 0.6);
-#elif TAA_RENDER_SCALE == 50
-    const vec2 workGroupsRender = vec2(0.5, 0.5);
-#endif
+uniform sampler2D depthtex0;
 
-layout(r32f) uniform writeonly image2D imgVoxyDepthOpaque;
-
-uniform sampler2D depthtex1;
-uniform sampler2D TEX_DEPTH_LOD;
-
-uniform float far;
+uniform float frameTime;
 uniform float near;
-uniform float viewWidth;
-uniform float viewHeight;
-uniform mat4 gbufferProjection;
-uniform mat4 gbufferProjectionInverse;
-uniform mat4 MAT_LOD_PROJ_INV;
-
-#include "/lib/projections.glsl"
-
-
-ivec2 viewSizeScaled = ivec2(ceil(vec2(viewWidth, viewHeight) * RENDER_SCALE));
-
-
-float getMergedDepth(const in ivec2 uv, sampler2D depthtex, sampler2D lodDepthTex) {
-    float depth = texelFetch(depthtex, uv, 0).r;
-
-    bool isSky = false;
-    bool isLod = false;
-    if (isLod = (depth >= 1.0)) {
-        depth = texelFetch(lodDepthTex, uv, 0).r;
-
-        if (depth >= 1.0) isSky = true;
-    }
-
-    if (isSky) return 0.0;
-
-    vec3 screenPos = vec3((uv + 0.5) / viewSizeScaled, depth);
-    float viewPosZ = screenToViewSpace(isLod ? MAT_LOD_PROJ_INV : gbufferProjectionInverse, screenPos).z;
-    return -near / viewPosZ;
-}
+uniform float far;
+uniform float dhFarPlane;
 
 
 void main() {
-    ivec2 uv = ivec2(gl_GlobalInvocationID.xy);
-    if (any(greaterThanEqual(uv, viewSizeScaled))) return;
+    const ivec2 uv = ivec2(14, 37);
+    vec4 data = imageLoad(colorimg4, uv);
 
-    float depth_opaque = getMergedDepth(uv, depthtex1, TEX_DEPTH_LOD);
-    imageStore(imgVoxyDepthOpaque, uv, vec4(depth_opaque));
+    float currCenterDepth = texture(depthtex0, vec2(0.5) * RENDER_SCALE).r;
+    currCenterDepth = depthScreenToLinear(currCenterDepth, nearPlane, farPlane);// * farPlane;
+
+    float prevCenterDepth = sqrt(data.g / 65000.0) * farPlane;
+    float mixF = DoF_Adaptation_Speed * exp(-0.016/frameTime + 1.0) / (6.0 + currCenterDepth);
+    float centerDepth = mix(prevCenterDepth, currCenterDepth, saturate(mixF));
+
+    data.g = square(centerDepth / farPlane) * 65000.0;
+    imageStore(colorimg4, uv, data);
 }

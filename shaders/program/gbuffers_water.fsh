@@ -119,7 +119,7 @@ uniform float dhFarPlane;
 #include "/lib/handLight.glsl"
 
 #ifdef PHOTONICS_REFLECT_ENABLED
-	#include "/photonics/uniforms.glsl"
+//	#include "/photonics/uniforms.glsl"
 	#include "/photonics/tracing.glsl"
 	#include "/photonics/trace_ray.glsl"
 #endif

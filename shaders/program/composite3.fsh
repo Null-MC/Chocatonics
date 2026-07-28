@@ -18,7 +18,7 @@
 	#define TEX_DEPTH_TRANSLUCENT depthtex0
 	#define TEX_DEPTH_REFLECT depthtex1
 
-	#ifdef PHOTONICS_3D_BLOCKS
+	#if PHOTONICS_3D_BLOCKS != PH_VOXEL_NONE
 		#define TEX_DEPTH_OPAQUE texVoxelDepth
 	#else
 		#define TEX_DEPTH_OPAQUE depthtex1
@@ -59,7 +59,7 @@ uniform sampler2DShadow shadowtex0HW;
 uniform sampler2D depthtex0;
 uniform sampler2D depthtex1;
 
-#ifdef PHOTONICS_3D_BLOCKS
+#if PHOTONICS_3D_BLOCKS != PH_VOXEL_NONE
 	uniform sampler2D texVoxelDepth;
 #endif
 
@@ -944,7 +944,7 @@ void main() {
 			ambientLight *= mix(caustics, 1.0, 0.85);
 			ambientLight += torchLight;
 
-			#ifdef SSGI
+			#ifdef SSGI_ENABLED
 				if (!hand) {
 					float ao = 1.0;
 					ssao(ao, viewPos_opaque, 1.0, noise, texViewNormal);
@@ -953,7 +953,7 @@ void main() {
 			#endif
 		}
 		else {
-			#ifdef SSGI
+			#ifdef SSGI_ENABLED
 				if (!hand)
 					ambientLight = rtGI(texLocalNormal, noise2, viewPos_opaque, ambientLight * custom_lightmap.x, sssAmount, custom_lightmap.z * vec3(0.9, 1.0, 1.5) + torchLight, normalize(albedo + 1.e-5) * 0.7);
 				else

@@ -17,11 +17,11 @@
 //#endif
 
 
-#ifdef PHOTONICS_3D_BLOCKS
+#if PHOTONICS_3D_BLOCKS != PH_VOXEL_NONE
     layout(r32f) uniform image2D imgVoxelDepth;
-    layout(rgba8) uniform image2D colorimg8;
-    layout(rgba16) uniform image2D colorimg9;
-    layout(rgba8) uniform image2D colorimg10;
+    layout(rgba8) uniform writeonly image2D colorimg8;
+    layout(rgba16) uniform writeonly image2D colorimg9;
+    layout(rgba8) uniform writeonly image2D colorimg10;
 #endif
 
 uniform sampler2D TEX_DEPTH;
@@ -45,7 +45,7 @@ uniform mat4 shadowProjection;
 #include "/lib/projections.glsl"
 #include "/lib/color_transforms.glsl"
 
-#ifdef PHOTONICS_3D_BLOCKS
+#if PHOTONICS_3D_BLOCKS != PH_VOXEL_NONE
     #include "/lib/material.glsl"
     #include "/photonics/tracing.glsl"
     #include "/photonics/trace_ray.glsl"
@@ -55,7 +55,7 @@ uniform mat4 shadowProjection;
 vec3 load_player_position() {
     ivec2 uv = ivec2(gl_FragCoord.xy);
 
-    #ifdef PHOTONICS_3D_BLOCKS
+    #if PHOTONICS_3D_BLOCKS != PH_VOXEL_NONE
         float depth = imageLoad(imgVoxelDepth, uv).r;
     #else
         float depth = texelFetch(TEX_DEPTH, uv, 0).r;
@@ -82,7 +82,7 @@ void load_fragment_data(out vec3 geometry_normal, out vec3 texture_normal) {
     texture_normal  = mat3(gbufferModelViewInverse) * OctDecode(normalData.zw);
 
     // TODO: manual 3D block trace
-    #ifdef PHOTONICS_3D_BLOCKS
+    #if PHOTONICS_3D_BLOCKS != PH_VOXEL_NONE
         vec2 tempOffset = vec2(0.0);
         #ifdef TAA_ENABLED
             tempOffset = taa_offsets[framemod8];

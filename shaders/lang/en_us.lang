@@ -10,6 +10,16 @@ screen.PHOTONICS=Photonics
     option.PHOTONICS_BLOCK_LIGHT_ENABLED=Block Light
 
     option.PHOTONICS_HAND_LIGHT_ENABLED=Hand Light
+    option.PHOTONICS_HAND_LIGHT_ENABLED.comment=Replaces simple lighting from held blocks/items with Photonics ray-tracing.
+
+    option.PHOTONICS_SHADOWS=Shadows
+    option.PHOTONICS_SHADOWS.comment=Replaces shadow mapping with Photonics ray-traced shadows.
+
+    option.PHOTONICS_3D_BLOCKS=3D Blocks
+    option.PHOTONICS_3D_BLOCKS.comment=Replaces regular block geometry with voxel-based ray tracing.
+    value.PHOTONICS_3D_BLOCKS.0=Disabled
+    value.PHOTONICS_3D_BLOCKS.1=Hybrid
+    value.PHOTONICS_3D_BLOCKS.2=Full
 
     option.PHOTONICS_TINTING=Tint Mode
     value.PHOTONICS_TINTING.0=Disabled
