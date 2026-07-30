@@ -50,7 +50,16 @@ void main() {
 	vOut.blockId = int(mc_Entity.x);
 
 	#if PHOTONICS_3D_BLOCKS != PH_VOXEL_NONE
-		if (vOut.blockId == BLOCK_PLANT_WAVING_TOP) {
+		bool _discard = false;
+		#if PHOTONICS_3D_BLOCKS == PH_VOXEL_FULL
+			_discard = true;
+		#elif PHOTONICS_3D_BLOCKS == PH_VOXEL_HYBRID
+			if (vOut.blockId == BLOCK_PLANT_WAVING_TOP) {
+				_discard = true;
+			}
+		#endif
+
+		if (_discard) {
 			gl_Position = vec4(-2.0);
 			return;
 		}

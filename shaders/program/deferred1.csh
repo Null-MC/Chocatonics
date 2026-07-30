@@ -26,6 +26,7 @@ layout(r32f) uniform writeonly image2D imgVoxelDepth;
 layout(rgba8) uniform writeonly image2D colorimg8;
 layout(rgba16) uniform writeonly image2D colorimg9;
 layout(rgba8) uniform writeonly image2D colorimg10;
+layout(rgba8) uniform writeonly image2D colorimg11;
 
 uniform sampler2D TEX_DEPTH;
 
@@ -58,11 +59,11 @@ void main() {
         tempOffset = taa_offsets[framemod8];
     #endif
 
-    #if PHOTONICS_3D_BLOCKS == PH_VOXEL_FULL
-        float depth = 1.0;
-    #else
+//    #if PHOTONICS_3D_BLOCKS == PH_VOXEL_FULL
+//        float depth = 1.0;
+//    #else
         float depth = texelFetch(TEX_DEPTH, uv, 0).r;
-    #endif
+//    #endif
 
     vec2 texcoord = (uv + 0.5) * texelSize;
 
@@ -71,13 +72,14 @@ void main() {
     vec3 viewPos = toScreenSpace(screenPos);
     vec3 localPos = toWorldSpace(viewPos);
 
-//    vec3 trace_localDir = mat3(gbufferModelViewInverse) * normalize(scene_viewPos);
-    vec3 trace_localDir = normalize(localPos - gbufferModelViewInverse[3].xyz);
+    vec3 trace_localDir = normalize(localPos);
+//    vec3 trace_localDir = mat3(gbufferModelViewInverse) * normalize(viewPos);
+//    vec3 trace_localDir = normalize(localPos - gbufferModelViewInverse[3].xyz);
 
     RayIterator ray;
     ray.iterations = 100;
-//    ray_iter_set_position(ray, rt_camera_position);
-    ray_iter_set_position(ray, rt_camera_position + gbufferModelViewInverse[3].xyz);
+    ray_iter_set_position(ray, rt_camera_position);
+//    ray_iter_set_position(ray, rt_camera_position + gbufferModelViewInverse[3].xyz);
     ray_iter_set_direction(ray, trace_localDir);
 //    ray_iter_offset_position(ray, vec3(0.0));
 
@@ -86,7 +88,7 @@ void main() {
         vec3 hit_localPos = ray_result_position(hit) - rt_camera_position;
         float hitDist = length(hit_localPos);
 
-        if (hitDist < length(localPos) - 0.04) {
+        if (hitDist < length(localPos) - 0.0004) {
             // update depth
             vec3 hit_viewPos = worldToViewSpace(hit_localPos);
             vec3 hit_screenPos = toClipSpace3(hit_viewPos);
@@ -111,6 +113,12 @@ void main() {
             vec4 specularFinal = hit_specular;
             specularFinal.a = mat_emission(hit_specular);
             imageStore(colorimg10, uv, specularFinal);
+
+            // update world buffer
+            float mat = 0.0;
+            vec2 lmcoord = vec2(0.0, ray_result_skylight(hit)) / 15.0;
+            vec4 worldData = vec4(lmcoord, 0.0, mat);
+            imageStore(colorimg11, uv, worldData);
         }
     }
 

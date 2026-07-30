@@ -508,34 +508,55 @@ void ssao(inout float occlusion, vec3 fragpos, float mulfov, float dither, vec3 
 }
 
 #ifdef PHOTONICS_SHADOWS
-	void createOrthonormalBasis(in vec3 n, out vec3 b1, out vec3 b2) {
-		if (n.z < -0.9999999f) {
-			b1 = vec3(0.0f, -1.0f, 0.0f);
-			b2 = vec3(-1.0f, 0.0f, 0.0f);
-			return;
-		}
-		float a = 1.0f / (1.0f + n.z);
-		float b = -n.x * n.y * a;
-		b1 = vec3(1.0f - n.x * n.x * a, b, -n.x);
-		b2 = vec3(b, 1.0f - n.y * n.y * a, -n.y);
+//	void createOrthonormalBasis(in vec3 n, out vec3 b1, out vec3 b2) {
+//		if (n.z < -0.9999999f) {
+//			b1 = vec3(0.0f, -1.0f, 0.0f);
+//			b2 = vec3(-1.0f, 0.0f, 0.0f);
+//			return;
+//		}
+//		float a = 1.0f / (1.0f + n.z);
+//		float b = -n.x * n.y * a;
+//		b1 = vec3(1.0f - n.x * n.x * a, b, -n.x);
+//		b2 = vec3(b, 1.0f - n.y * n.y * a, -n.y);
+//	}
+//
+//	// Maps a 2D blue noise sample to a uniform disk distribution
+//	vec2 mapToDisk(vec2 noiseSamples) {
+//		// Concentric mapping or basic polar mapping
+//		float r = sqrt(noiseSamples.x);
+//		float theta = noiseSamples.y * 6.28318530718f; // 2 * PI
+//		return vec2(r * cos(theta), r * sin(theta));
+//	}
+//
+//	vec3 getSampledSunDirection(const in vec3 sunVec, const in float sunAngularRadius, const in vec2 noise) {
+//		vec2 diskSample = mapToDisk(noise);
+//
+//		vec3 tangent, bitangent;
+//		createOrthonormalBasis(sunVec, tangent, bitangent);
+//
+//		vec3 offset = (diskSample.x * tangent + diskSample.y * bitangent) * sunAngularRadius;
+//		return normalize(sunVec + offset);
+//	}
+	void buildOrthonormalBasis(vec3 v, out vec3 b1, out vec3 b2) {
+		float sign = v.z >= 0.0 ? 1.0 : -1.0;
+		float a = -1.0 / (sign + v.z);
+		float b = v.x * v.y * a;
+		b1 = vec3(1.0 + sign * v.x * v.x * a, sign * b, -sign * v.x);
+		b2 = vec3(b, sign + v.y * v.y * a, -v.y);
 	}
 
-	// Maps a 2D blue noise sample to a uniform disk distribution
-	vec2 mapToDisk(vec2 noiseSamples) {
-		// Concentric mapping or basic polar mapping
-		float r = sqrt(noiseSamples.x);
-		float theta = noiseSamples.y * 6.28318530718f; // 2 * PI
-		return vec2(r * cos(theta), r * sin(theta));
-	}
+	vec3 getSampledSunDirection(vec3 dir, float radius, vec2 jitter) {
+		float z = 1.0 - jitter.y * (1.0 - cos(radius));
 
-	vec3 getSampledSunDirection(const in vec3 sunVec, const in vec2 noise, const in float sunAngularRadius) {
-		vec2 diskSample = mapToDisk(noise);
+		float sinTheta = sqrt(1.0 - z * z);
+		float phi = 2.0 * PI * jitter.x;
 
-		vec3 tangent, bitangent;
-		createOrthonormalBasis(sunVec, tangent, bitangent);
+		vec3 localDir = vec3(cos(phi) * sinTheta, sin(phi) * sinTheta, z);
 
-		vec3 offset = (diskSample.x * tangent + diskSample.y * bitangent) * sunAngularRadius;
-		return normalize(sunVec + offset);
+		vec3 tan, biTan;
+		buildOrthonormalBasis(dir, tan, biTan);
+
+		return tan * localDir.x + biTan * localDir.y + dir * localDir.z;
 	}
 #endif
 
@@ -663,16 +684,22 @@ void main() {
 
 		#ifdef PHOTONICS_SHADOWS
 			const float sunAngularRadius = 0.008;
+//			float t = blueNoise(gl_FragCoord.xy).a + 1.0/1.6180339887 * frameCounter;
+//			vec2 noise3 = blueNoise(texBlueNoise, t).rg;
 			vec2 noise3 = blueNoise(texBlueNoise, gl_FragCoord.xy + vec2(3,9)*frameCounter).rg;
-			vec3 randomSunVec = getSampledSunDirection(vIn.WsunVec, noise3, sunAngularRadius);
+			vec3 randomSunVec = getSampledSunDirection(vIn.WsunVec, sunAngularRadius, noise3);
+//			vec3 randomSunVec = vIn.WsunVec;
 //			randomSunVec = mix(vIn.WsunVec, randomSunVec, vIn.WsunVec);
 //			randomSunVec = normalize(randomSunVec);
+
+			float viewDist = length(localPos_opaque);
 
 			RayIterator sun_ray;
 			sun_ray.iterations = 100; // TODO: setting?
 			ray_iter_set_position(sun_ray, localPos_opaque + rt_camera_position);
 			ray_iter_set_direction(sun_ray, randomSunVec);
-			ray_iter_offset_position(sun_ray, 0.04 * geoLocalNormal);
+//			ray_iter_offset_position(sun_ray, 0.0004 * geoLocalNormal);
+			ray_iter_offset_position(sun_ray, (0.002 * viewDist - 0.03) * randomSunVec);
 
 			RayResult sun_hit;
 
