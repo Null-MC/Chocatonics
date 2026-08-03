@@ -72,19 +72,19 @@ void main() {
     vec3 viewPos = toScreenSpace(screenPos);
     vec3 localPos = toWorldSpace(viewPos);
 
-    vec3 trace_localDir = normalize(localPos);
+//    vec3 trace_localDir = normalize(localPos);
 //    vec3 trace_localDir = mat3(gbufferModelViewInverse) * normalize(viewPos);
-//    vec3 trace_localDir = normalize(localPos - gbufferModelViewInverse[3].xyz);
+    vec3 trace_localDir = normalize(localPos - gbufferModelViewInverse[3].xyz);
 
     RayIterator ray;
     ray.iterations = 100;
-    ray_iter_set_position(ray, rt_camera_position);
-//    ray_iter_set_position(ray, rt_camera_position + gbufferModelViewInverse[3].xyz);
+//    ray_iter_set_position(ray, rt_camera_position);
+    ray_iter_set_position(ray, rt_camera_position + gbufferModelViewInverse[3].xyz);
     ray_iter_set_direction(ray, trace_localDir);
 //    ray_iter_offset_position(ray, vec3(0.0));
 
     RayResult hit;
-    if (trace_ray(ray, hit)) {
+    if (trace_ray_opaque(ray, hit)) {
         vec3 hit_localPos = ray_result_position(hit) - rt_camera_position;
         float hitDist = length(hit_localPos);
 
@@ -111,7 +111,11 @@ void main() {
             // update gbuffer specular
             vec4 hit_specular = voxel_data_specular(voxel_data);
             vec4 specularFinal = hit_specular;
+            specularFinal.b = mat_sss(hit_specular.b);
             specularFinal.a = mat_emission(hit_specular);
+            #ifndef MAT_PBR_ENABLED
+                // TODO: IPBR
+            #endif
             imageStore(colorimg10, uv, specularFinal);
 
             // update world buffer

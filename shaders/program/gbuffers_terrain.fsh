@@ -26,6 +26,8 @@ uniform sampler2D noisetex;
 #ifdef MAT_PBR_ENABLED
 	uniform sampler2D normals;
 	uniform sampler2D specular;
+#else
+	uniform usampler2D texBlockMeta;
 #endif
 
 uniform vec2 texelSize;
@@ -55,6 +57,8 @@ uniform int framemod8;
 
 #ifdef MAT_PBR_ENABLED
 	#include "/lib/normal_map.glsl"
+#else
+	#include "/lib/blockMeta.glsl"
 #endif
 
 
@@ -226,20 +230,27 @@ void main() {
 		if (f0 < EPSILON) f0 = 0.04;
 	#else
 		float smoothness = 0.0;
-		const float f0 = 0.04;
+		float f0 = 0.04;
 		float emission = 0.0;
 		float porosity = 0.85;
 		float sss = 0.0;
 
-		if (vIn.blockId == BLOCK_SSS || vIn.blockId == BLOCK_PLANT_WAVING_FULL || vIn.blockId == BLOCK_PLANT_WAVING_TOP) {
+		uint blockMeta = SampleBlockMeta(vIn.blockId);
+
+		if (hasBit(blockMeta, BIT_REFLECTIVE)) {
+			smoothness = 0.98;
+			f0 = 0.05;
+		}
+
+		if (hasBit(blockMeta, BIT_SSS_HIGH)) {
 			sss = 0.5;
 		}
 
-		if (vIn.blockId == BLOCK_IDK || vIn.blockId == BLOCK_SNOW || vIn.blockId == BLOCK_SNOW_LAYERS) {
+		if (hasBit(blockMeta, BIT_SSS_LOW)) {
 			sss = 0.2;
 		}
 
-		if (vIn.blockId == BLOCK_EMISSIVE) {
+		if (hasBit(blockMeta, BIT_EMISSIVE)) {
 			emission = saturate(luma(toLinear(color.rgb)));
 			emission = pow(emission, 1.4);
 //			vOut.color.rgb = normalize(vOut.color.rgb) * sqrt(3.0);

@@ -507,59 +507,6 @@ void ssao(inout float occlusion, vec3 fragpos, float mulfov, float dither, vec3 
 	occlusion = saturate(1.0 - occlusion/n*1.6);
 }
 
-#ifdef PHOTONICS_SHADOWS
-//	void createOrthonormalBasis(in vec3 n, out vec3 b1, out vec3 b2) {
-//		if (n.z < -0.9999999f) {
-//			b1 = vec3(0.0f, -1.0f, 0.0f);
-//			b2 = vec3(-1.0f, 0.0f, 0.0f);
-//			return;
-//		}
-//		float a = 1.0f / (1.0f + n.z);
-//		float b = -n.x * n.y * a;
-//		b1 = vec3(1.0f - n.x * n.x * a, b, -n.x);
-//		b2 = vec3(b, 1.0f - n.y * n.y * a, -n.y);
-//	}
-//
-//	// Maps a 2D blue noise sample to a uniform disk distribution
-//	vec2 mapToDisk(vec2 noiseSamples) {
-//		// Concentric mapping or basic polar mapping
-//		float r = sqrt(noiseSamples.x);
-//		float theta = noiseSamples.y * 6.28318530718f; // 2 * PI
-//		return vec2(r * cos(theta), r * sin(theta));
-//	}
-//
-//	vec3 getSampledSunDirection(const in vec3 sunVec, const in float sunAngularRadius, const in vec2 noise) {
-//		vec2 diskSample = mapToDisk(noise);
-//
-//		vec3 tangent, bitangent;
-//		createOrthonormalBasis(sunVec, tangent, bitangent);
-//
-//		vec3 offset = (diskSample.x * tangent + diskSample.y * bitangent) * sunAngularRadius;
-//		return normalize(sunVec + offset);
-//	}
-	void buildOrthonormalBasis(vec3 v, out vec3 b1, out vec3 b2) {
-		float sign = v.z >= 0.0 ? 1.0 : -1.0;
-		float a = -1.0 / (sign + v.z);
-		float b = v.x * v.y * a;
-		b1 = vec3(1.0 + sign * v.x * v.x * a, sign * b, -sign * v.x);
-		b2 = vec3(b, sign + v.y * v.y * a, -v.y);
-	}
-
-	vec3 getSampledSunDirection(vec3 dir, float radius, vec2 jitter) {
-		float z = 1.0 - jitter.y * (1.0 - cos(radius));
-
-		float sinTheta = sqrt(1.0 - z * z);
-		float phi = 2.0 * PI * jitter.x;
-
-		vec3 localDir = vec3(cos(phi) * sinTheta, sin(phi) * sinTheta, z);
-
-		vec3 tan, biTan;
-		buildOrthonormalBasis(dir, tan, biTan);
-
-		return tan * localDir.x + biTan * localDir.y + dir * localDir.z;
-	}
-#endif
-
 
 /* RENDERTARGETS: 3 */
 layout(location = 0) out vec3 outColor3;
@@ -575,6 +522,12 @@ void main() {
 
 	float depth_trans = texture(TEX_DEPTH_TRANSLUCENT, texcoord).x;
 	float depth_opaque = texture(TEX_DEPTH_OPAQUE, texcoord).x;
+
+	#ifdef LOD_ENABLED
+		depth_trans = max(depth_trans, depth_opaque);
+	#else
+		depth_trans = min(depth_trans, depth_opaque);
+	#endif
 
 	float noise = blueNoise(gl_FragCoord.xy, frameCounter);
 
@@ -611,7 +564,8 @@ void main() {
 		vec4 trpData = texture(colortex7, texcoord);
 
 		if (trpData.a > 0.99) {
-			vec3 fragpos_trans = toScreenSpace_lod(vec3(texcoord/RENDER_SCALE - vIn.TAA_Offset*texelSize*0.5, max(depth_trans, near/farPlane)));
+			float z2 = max(depth_trans, near/farPlane);
+			vec3 fragpos_trans = toScreenSpace_lod(vec3(texcoord/RENDER_SCALE - vIn.TAA_Offset*texelSize*0.5, z2));
 			float Vdiff = distance(viewPos_opaque, fragpos_trans);
 			float VdotU = np3.y;
 
@@ -682,26 +636,111 @@ void main() {
 		float sssAmount = specularData.b;
 		vec4 noise2 = blueNoise(texBlueNoise, gl_FragCoord.xy);
 
+		float shading = 1.0 - filtered.b;
+
+		vec3 projectedShadowPosition = worldToShadowSpaceProjected(localPos_opaque);
+		bool inShadowMap = IsInShadowMap(projectedShadowPosition);
+
+		#ifdef Variable_Penumbra_Shadows
+			// compute shadows only if not backfacing the sun
+			// or if the blocker search was full or empty
+			// always compute all shadows at close range where artifacts may be more visible
+			if (diffuseSun > 0.001)
+		#else
+			if (sssAmount > 0.5) {
+				float scattered = max(phaseg(dot(np3, vIn.WsunVec), 0.5), 2.0 * phaseg(dot(np3, vIn.WsunVec), 0.1)) * PI*1.6;
+				diffuseSun = mix(diffuseSun, scattered, sssAmount); // mix=0.7
+			}
+
+			if (diffuseSun > 0.000)
+		#endif
+		{
+//			vec3 projectedShadowPosition = worldToShadowSpaceProjected(localPos_opaque);
+
+			// apply distortion
+			float distortFactor = calcDistort(projectedShadowPosition.xy);
+			projectedShadowPosition.xy *= distortFactor;
+
+			// do shadows only if on shadow map
+//			if (IsInShadowMap(projectedShadowPosition)) {
+			if (inShadowMap) {
+//				inShadowMap = true;
+
+				float rdMul = filtered.x * distortFactor * shadow_d0 * shadow_k / shadowMapResolution;
+				const float threshMul = max(2048.0/shadowMapResolution * shadowDistance/128.0, 0.95);
+				float distortThresh = (sqrt(1.0 - square(NdotLGeom)) / NdotLGeom + 0.7) / distortFactor;
+
+				#ifdef Variable_Penumbra_Shadows
+					float diffthresh = distortThresh/6000.0 * threshMul;
+				#else
+					float diffthresh = sssAmount > 0.0 ? 0.0001 : distortThresh/6000.0 * threshMul;
+				#endif
+
+				#if defined(MAT_PARALLAX_ENABLED) && defined(MAT_PARALLAX_DEPTH_WRITE)
+					diffthresh += Parallax_Depth / 128.0/4.0/6.0;
+				#endif
+
+				projectedShadowPosition = projectedShadowPosition * vec3(0.5, 0.5, 0.5/6.0) + vec3(0.5, 0.5, 0.5);
+
+				shading = 0.0;
+
+				for (int i = 0; i < SHADOW_FILTER_SAMPLE_COUNT; i++) {
+					vec2 offsetS = tapLocation_Shadow(i, SHADOW_FILTER_SAMPLE_COUNT, 84.0, noise);
+
+					float bias = 1.0 + (i+noise) * rdMul/SHADOW_FILTER_SAMPLE_COUNT * shadowMapResolution;
+					vec3 samplePos = vec3(projectedShadowPosition + vec3(rdMul * offsetS, -diffthresh * bias));
+//					float isShadow = texture(shadowtex0HW, samplePos);
+
+					#ifdef SHADOW_COLORED
+						float isShadow = texture(shadowtex1HW, samplePos);
+
+						float shadowColorF = texture(shadowtex0HW, samplePos);
+
+						vec4 sampleColor = texture(shadowcolor0, samplePos.xy);
+
+						sampleColor.rgb = mix(sampleColor.rgb, vec3(1.0), shadowColorF);
+
+						shadowColor += InputTransform(sampleColor.rgb) * isShadow;
+					#else
+						float isShadow = texture(shadowtex0HW, samplePos);
+					#endif
+
+					shading += isShadow;
+				}
+
+				shading /= float(SHADOW_FILTER_SAMPLE_COUNT);
+				#ifdef SHADOW_COLORED
+					shadowColor /= float(SHADOW_FILTER_SAMPLE_COUNT);
+				#endif
+			}
+		}
+
 		#ifdef PHOTONICS_SHADOWS
-			const float sunAngularRadius = 0.008;
-//			float t = blueNoise(gl_FragCoord.xy).a + 1.0/1.6180339887 * frameCounter;
-//			vec2 noise3 = blueNoise(texBlueNoise, t).rg;
 			vec2 noise3 = blueNoise(texBlueNoise, gl_FragCoord.xy + vec2(3,9)*frameCounter).rg;
 			vec3 randomSunVec = getSampledSunDirection(vIn.WsunVec, sunAngularRadius, noise3);
-//			vec3 randomSunVec = vIn.WsunVec;
-//			randomSunVec = mix(vIn.WsunVec, randomSunVec, vIn.WsunVec);
-//			randomSunVec = normalize(randomSunVec);
 
 			float viewDist = length(localPos_opaque);
+			float biasDist = 0.002 * viewDist - 0.03;// + 0.2*sssAmount*noise;
 
 			RayIterator sun_ray;
+			RayResult sun_hit;
+
+			// SSS
+//			sun_ray.iterations = 16;
+//			ray_iter_set_position(sun_ray, localPos_opaque + rt_camera_position);
+//			ray_iter_set_direction(sun_ray, randomSunVec);
+////			ray_iter_offset_position(sun_ray, 0.04 * geoLocalNormal);
+//			ray_iter_offset_position(sun_ray, biasDist * randomSunVec);
+//
+//			filtered.y = max(trace_ray_sss(sun_ray)*2.0, 1e-8);
+//			filtered.y = 10.0;
+
+			// Shadows
 			sun_ray.iterations = 100; // TODO: setting?
 			ray_iter_set_position(sun_ray, localPos_opaque + rt_camera_position);
 			ray_iter_set_direction(sun_ray, randomSunVec);
 //			ray_iter_offset_position(sun_ray, 0.0004 * geoLocalNormal);
-			ray_iter_offset_position(sun_ray, (0.002 * viewDist - 0.03) * randomSunVec);
-
-			RayResult sun_hit;
+			ray_iter_offset_position(sun_ray, biasDist * randomSunVec);
 
 			#if PHOTONICS_TINTING > 0 && defined(SHADOW_COLORED)
 //				vec3 shadowTint = vec3(1.0);
@@ -711,114 +750,40 @@ void main() {
 				bool is_hit = trace_ray(sun_ray, sun_hit);
 			#endif
 
-//			if (is_hit) skyLightColor = vec3(0.0);
-			float shading = float(!is_hit);
-		#else
-			float shading = 1.0 - filtered.b;
+			//			if (is_hit) skyLightColor = vec3(0.0);
+			shading *= float(!is_hit);
+		#endif
 
-			vec3 projectedShadowPosition = worldToShadowSpaceProjected(localPos_opaque);
-			bool inShadowMap = IsInShadowMap(projectedShadowPosition);
+		#ifndef PHOTONICS_SHADOWS
+		// custom shading model for translucent objects
+		#ifdef Variable_Penumbra_Shadows
+			if (sssAmount > 0.5) {
+//				sssAmount = 0.5;
+				vec3 extinction = 1.0 - albedo*0.85;
 
-			#ifdef Variable_Penumbra_Shadows
-				// compute shadows only if not backfacing the sun
-				// or if the blocker search was full or empty
-				// always compute all shadows at close range where artifacts may be more visible
-				if (diffuseSun > 0.001)
-			#else
-				if (sssAmount > 0.5) {
-					diffuseSun = mix(max(phaseg(dot(np3, vIn.WsunVec), 0.5), 2.0 * phaseg(dot(np3, vIn.WsunVec), 0.1)) * PI*1.6, diffuseSun, 0.3);
-				}
-
-				if (diffuseSun > 0.000)
-			#endif
-			{
-	//			vec3 projectedShadowPosition = worldToShadowSpaceProjected(localPos_opaque);
-
-				// apply distortion
-				float distortFactor = calcDistort(projectedShadowPosition.xy);
-				projectedShadowPosition.xy *= distortFactor;
-
-				// do shadows only if on shadow map
-	//			if (IsInShadowMap(projectedShadowPosition)) {
-				if (inShadowMap) {
-	//				inShadowMap = true;
-
-					float rdMul = filtered.x * distortFactor * shadow_d0 * shadow_k / shadowMapResolution;
-					const float threshMul = max(2048.0/shadowMapResolution * shadowDistance/128.0, 0.95);
-					float distortThresh = (sqrt(1.0 - square(NdotLGeom)) / NdotLGeom + 0.7) / distortFactor;
-
-					#ifdef Variable_Penumbra_Shadows
-						float diffthresh = distortThresh/6000.0 * threshMul;
-					#else
-						float diffthresh = sssAmount > 0.0 ? 0.0001 : distortThresh/6000.0 * threshMul;
-					#endif
-
-					#if defined(MAT_PARALLAX_ENABLED) && defined(MAT_PARALLAX_DEPTH_WRITE)
-						diffthresh += Parallax_Depth / 128.0/4.0/6.0;
-					#endif
-
-					projectedShadowPosition = projectedShadowPosition * vec3(0.5, 0.5, 0.5/6.0) + vec3(0.5, 0.5, 0.5);
-
-					shading = 0.0;
-
-					for (int i = 0; i < SHADOW_FILTER_SAMPLE_COUNT; i++) {
-						vec2 offsetS = tapLocation_Shadow(i, SHADOW_FILTER_SAMPLE_COUNT, 84.0, noise);
-
-						float bias = 1.0 + (i+noise) * rdMul/SHADOW_FILTER_SAMPLE_COUNT * shadowMapResolution;
-						vec3 samplePos = vec3(projectedShadowPosition + vec3(rdMul * offsetS, -diffthresh * bias));
-	//					float isShadow = texture(shadowtex0HW, samplePos);
-
-						#ifdef SHADOW_COLORED
-							float isShadow = texture(shadowtex1HW, samplePos);
-
-							float shadowColorF = texture(shadowtex0HW, samplePos);
-
-							vec4 sampleColor = texture(shadowcolor0, samplePos.xy);
-
-							sampleColor.rgb = mix(sampleColor.rgb, vec3(1.0), shadowColorF);
-
-							shadowColor += InputTransform(sampleColor.rgb) * isShadow;
-						#else
-							float isShadow = texture(shadowtex0HW, samplePos);
-						#endif
-
-						shading += isShadow;
-					}
-
-					shading /= float(SHADOW_FILTER_SAMPLE_COUNT);
-					#ifdef SHADOW_COLORED
-						shadowColor /= float(SHADOW_FILTER_SAMPLE_COUNT);
-					#endif
-				}
+				// Should be somewhat energy conserving
+				SSS = exp(-filtered.y*11.0*extinction) + 3.0*exp(-filtered.y*11./3.*extinction);
+				float scattering = saturate((0.7+0.3*PI * phaseg(dot(np3, vIn.WsunVec), 0.85)) * 1.5/4.0 * sssAmount);
+				SSS *= scattering;
+				diffuseSun *= 1.0 - sssAmount;
+				SSS *= sqrt(lightmap.y);
 			}
 
-			// custom shading model for translucent objects
-			#ifdef Variable_Penumbra_Shadows
-				if (sssAmount > 0.5) {
-	//				sssAmount = 0.5;
-					vec3 extinction = 1.0 - albedo*0.85;
+			if (sssAmount > 0.2) {
+//				sssAmount = 0.2;
+				vec3 extinction = 1.0 - albedo*0.85;
 
-					// Should be somewhat energy conserving
-					SSS = exp(-filtered.y*11.0*extinction) + 3.0*exp(-filtered.y*11./3.*extinction);
-					float scattering = saturate((0.7+0.3*PI * phaseg(dot(np3, vIn.WsunVec), 0.85)) * 1.5/4.0 * sssAmount);
-					SSS *= scattering;
-					diffuseSun *= 1.0 - sssAmount;
-					SSS *= sqrt(lightmap.y);
-				}
+				// Should be somewhat energy conserving
+				SSS = exp(-filtered.y*11.0*extinction) + 3.0*exp(-filtered.y*11./3.*extinction);
+				float scattering = saturate((0.7+0.3*PI * phaseg(dot(np3, vIn.WsunVec), 0.85)) * 1.26/4.0 * sssAmount);
+				SSS *= scattering;
+				diffuseSun *= 1.0 - sssAmount;
+				SSS *= sqrt(lightmap.y);
+			}
+		#endif
+		#endif
 
-				if (sssAmount > 0.2) {
-	//				sssAmount = 0.2;
-					vec3 extinction = 1.0 - albedo*0.85;
-
-					// Should be somewhat energy conserving
-					SSS = exp(-filtered.y*11.0*extinction) + 3.0*exp(-filtered.y*11./3.*extinction);
-					float scattering = saturate((0.7+0.3*PI * phaseg(dot(np3, vIn.WsunVec), 0.85)) * 1.26/4.0 * sssAmount);
-					SSS *= scattering;
-					diffuseSun *= 1.0 - sssAmount;
-					SSS *= sqrt(lightmap.y);
-				}
-			#endif
-
+		#ifndef PHOTONICS_SHADOWS
 	//		bool apply_sss = true;//abs(filtered.y-0.1) < 0.0004;
 			if ((diffuseSun * shading > 0.001 || sssAmount > 0.0) && !hand) {
 				#ifdef SCREENSPACE_CONTACT_SHADOWS

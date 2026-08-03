@@ -1,6 +1,12 @@
 screen.CHOCAPIC=Chocatonics
 screen.CHOCAPIC.comment=An edit of Chocapic13' V9 Shaders for Photonics
 
+    option.DEBUG_VIEW=Debug View
+    value.DEBUG_VIEW.0=None
+    value.DEBUG_VIEW.1=Opaque Albedo
+    value.DEBUG_VIEW.2=Opaque Normals
+    value.DEBUG_VIEW.3=Opaque Specular
+
     option.DEBUG_WHITEWORLD=White-World
     option.DEBUG_WHITEWORLD.comment=Makes all textures white for debugging lighting alone.
 

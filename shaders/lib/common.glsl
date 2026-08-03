@@ -68,6 +68,10 @@ const float vxFarPlane = 16.0 * 3000.0;
 #endif
 
 
+bool hasBit(const in uint data, const in uint flag) {
+    return (data & flag) == flag;
+}
+
 //float facos(float sx) {
 //    float x = saturate(abs(sx));
 //    return sqrt(1.0 - x) * (-0.16882 * x + 1.56734);

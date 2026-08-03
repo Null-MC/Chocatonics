@@ -17,10 +17,11 @@
 in VertexData {
 	vec4 lmtexcoord;
 	vec4 color;
-	vec4 normalMat;
+	vec3 normalMat;
 	vec3 binormal;
 	vec3 tangent;
 	vec3 viewVector;
+	flat int blockId;
 } vIn;
 
 uniform sampler2D gtexture;
@@ -39,6 +40,8 @@ uniform sampler2D TEX_DEPTH_REFLECT;
 #ifdef MAT_PBR_ENABLED
 	uniform sampler2D normals;
 	uniform sampler2D specular;
+#else
+	uniform usampler2D texBlockMeta;
 #endif
 
 #ifdef LIGHTING_COLORED
@@ -126,6 +129,8 @@ uniform float dhFarPlane;
 
 #ifdef MAT_PBR_ENABLED
 	#include "/lib/normal_map.glsl"
+#else
+	#include "/lib/blockMeta.glsl"
 #endif
 
 #ifdef CLOUDS_SHADOWS
@@ -174,7 +179,7 @@ void main() {
 	if (!all(lessThan(gl_FragCoord.xy * texelSize.xy, RENDER_SCALE_2))) return;
 
 	vec2 taa_offset = taa_offsets[framemod8];
-	float iswater = vIn.normalMat.w;
+//	float iswater = vIn.normalMat.w;
 
 	vec3 viewPos = toScreenSpace(gl_FragCoord.xyz * vec3(texelSize / RENDER_SCALE, 1.0) - vec3(taa_offset * texelSize * 0.5, 0.0));
 
@@ -195,25 +200,36 @@ void main() {
 		float f0 = 0.04;
 	#endif
 
-	if (iswater > 0.0) {
-//		f0 = 0.02;//iswater > 0.1 ? 0.02 : 0.05 * (1.0 - outColor2.a);
-//		roughness = 0.02;
-	}
-
-	if (iswater > 0.4) {
-		f0 = 0.018;
+	if (vIn.blockId == BLOCK_WATER || vIn.blockId == BLOCK_ICE) {
 		albedo = vec3(0.42, 0.6, 0.7);
-		outColor2 = vec4(albedo, 0.7);
+	}
+
+	float water_mat = 0.0;
+
+	if (vIn.blockId == BLOCK_ICE) {
+		f0 = 0.018;
 		roughness = 0.1;
+		outColor2 = vec4(albedo, 0.7);
+		water_mat = 0.5;
 	}
 
-	if (iswater > 0.9) {
+	if (vIn.blockId == BLOCK_WATER) {
 		f0 = 0.020;
-		outColor2 = vec4(0.0);
 		roughness = 0.0;
+		outColor2 = vec4(0.0);
+		water_mat = 1.0;
 	}
 
-	vec3 geoViewNormal = vIn.normalMat.xyz;
+	#ifndef MAT_PBR_ENABLED
+		uint blockMeta = SampleBlockMeta(vIn.blockId);
+
+		if (hasBit(blockMeta, BIT_REFLECTIVE)) {
+			f0 = 0.05;
+			roughness = 0.02;
+		}
+	#endif
+
+	vec3 geoViewNormal = vIn.normalMat;
 	vec3 texViewNormal = geoViewNormal;
 
 	vec3 localPos = toWorldSpace(viewPos);
@@ -223,20 +239,20 @@ void main() {
 		vIn.tangent.y, vIn.binormal.y, geoViewNormal.y,
 		vIn.tangent.z, vIn.binormal.z, geoViewNormal.z);
 
-	if (iswater > 0.4) {
+	if (water_mat > 0.4) {
 		float bumpmult = 1.0;
-		if (iswater > 0.9) bumpmult = 1.0;
+		if (water_mat > 0.9) bumpmult = 1.0;
 
 		float parallaxMult = bumpmult;
 
 		vec3 posxz = localPos + cameraPosition;
 		posxz.xz -= posxz.y;
 
-		if (iswater < 0.9) posxz.xz *= 3.0;
+		if (water_mat < 0.9) posxz.xz *= 3.0;
 
-		posxz.xyz = getParallaxDisplacement(posxz, iswater, bumpmult, normalize(tbnMatrix * viewPos));
+		posxz.xyz = getParallaxDisplacement(posxz, water_mat, bumpmult, normalize(tbnMatrix * viewPos));
 
-		vec3 bump = normalize(getWaveHeight(posxz.xz, iswater));
+		vec3 bump = normalize(getWaveHeight(posxz.xz, water_mat));
 
 		bump = bump * vec3(bumpmult) + vec3(0.0, 0.0, 1.0 - bumpmult);
 
@@ -287,12 +303,46 @@ void main() {
 				shading += texture(shadowtex0HW, vec3(projectedShadowPosition + vec3(rdMul*offsetS, -diffthresh*bias)));
 			}
 
-			direct *= shading / SHADOW_FILTER_SAMPLE_COUNT;
+			shading /= SHADOW_FILTER_SAMPLE_COUNT;
+//			direct *= shading;
 		}
+
+		vec3 localSkyLightDir = mat3(gbufferModelViewInverse) * sunVec;
+
+		#ifdef PHOTONICS_SHADOWS
+			vec2 noise3 = blueNoise(texBlueNoise, gl_FragCoord.xy + vec2(3,9)*frameCounter).rg;
+			vec3 randomSunVec = getSampledSunDirection(localSkyLightDir, sunAngularRadius, noise3);
+
+			float viewDist = length(localPos);
+			float biasDist = 0.002 * viewDist - 0.03;// + 0.2*sssAmount*noise;
+
+			RayIterator sun_ray;
+			RayResult sun_hit;
+
+			// Shadows
+			sun_ray.iterations = 100; // TODO: setting?
+			ray_iter_set_position(sun_ray, localPos + rt_camera_position);
+			ray_iter_set_direction(sun_ray, randomSunVec);
+//			ray_iter_offset_position(sun_ray, 0.0004 * geoLocalNormal);
+//			ray_iter_offset_position(sun_ray, biasDist * randomSunVec);
+
+//			#if PHOTONICS_TINTING > 0 && defined(SHADOW_COLORED)
+////				vec3 shadowTint = vec3(1.0);
+//				bool is_hit = trace_ray(sun_ray, sun_hit, shadowColor);
+////				skyLightColor *= shadowTint;
+//			#else
+			bool is_hit = trace_ray(sun_ray, sun_hit);
+//			#endif
+
+			shading *= float(!is_hit);
+//			direct *= shading;
+		#endif
+
+		direct *= shading;
 
 		#ifdef CLOUDS_SHADOWS
 			vec3 world_pos = localPos + cameraPosition;
-			vec3 localSkyLightDir = mat3(gbufferModelViewInverse) * sunVec;
+//			vec3 localSkyLightDir = mat3(gbufferModelViewInverse) * sunVec;
 
 			const int rayMarchSteps = 6;
 			float cloudShadow = 0.0;
@@ -324,7 +374,8 @@ void main() {
 		lmcoord.x = max(lmcoord.x, maxLit);
 	#endif
 
-	direct *= (iswater > 0.9 ? 0.2 : 1.0) * diffuseSun * lmcoord.y;
+	float directF = vIn.blockId == BLOCK_WATER ? 0.2 : 1.0;
+	direct *= directF * diffuseSun * lmcoord.y;
 
 	vec3 color = direct + texture(TEX_SKY_LUT, (lmcoord * 15.0 + 0.5) * texelSize).rgb;
 	color *= 8.0/3.0 / 150.0;
@@ -368,5 +419,5 @@ void main() {
 //	#endif
 
 	outColor2.rgb = clamp(outColor2.rgb * 0.1, 0.0, 65100.0);
-	outColor7 = vec4(albedo, iswater);
+	outColor7 = vec4(albedo, water_mat);
 }

@@ -3,15 +3,21 @@
 #include "/lib/common.glsl"
 #include "/lib/settings.glsl"
 
+#define RENDER_SETUP
+
 
 layout (local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
 const ivec3 workGroups = ivec3(16, 16, 1);
 
+layout(r8ui) uniform writeonly uimage2D imgBlockMeta;
 
-layout(rgba8) uniform writeonly image2D imgBlockLight;
-layout(r8ui) uniform writeonly uimage2D imgBlockLightMask;
+#if defined(LIGHTING_COLORED) || defined(PHOTONICS)
+    layout(rgba8) uniform writeonly image2D imgBlockLight;
+    layout(r8ui) uniform writeonly uimage2D imgBlockLightMask;
+#endif
 
 #include "/lib/blocks.glsl"
+#include "/lib/blockMeta.glsl"
 
 
 const vec3 color_White = vec3(255);
@@ -59,6 +65,7 @@ void main() {
     uint faceMask = 0u;
     vec3 color = vec3(0.0);
     float range = 0.0;
+    uint meta = 0u;
 
     // LIGHTS
 
@@ -93,6 +100,7 @@ void main() {
     }
 
     if IS(BLOCK_BEACON) {
+        meta |= BIT_EMISSIVE;
         color = color_White;
         range = 15;
     }
@@ -109,6 +117,7 @@ void main() {
     }
 
     if IS(BLOCK_CAMPFIRE_LIT) {
+        meta |= BIT_EMISSIVE;
         color = color_Fire;
         range = 15;
         solid = false;
@@ -130,12 +139,14 @@ void main() {
     }
 
     if IS(BLOCK_COPPER_LANTERN) {
+        meta |= BIT_EMISSIVE;
         color = color_CopperLantern;
         range = 15;
         solid = false;
     }
 
     if IS(BLOCK_COPPER_TORCH) {
+        meta |= BIT_EMISSIVE;
         color = color_CopperTorch;
         range = 14;
         solid = false;
@@ -147,18 +158,21 @@ void main() {
     }
 
     if IS(BLOCK_END_ROD) {
+        meta |= BIT_EMISSIVE;
         color = vec3(244, 237, 223);
         range = 14;
         solid = false;
     }
 
     if IS(BLOCK_FIRE) {
+        meta |= BIT_EMISSIVE;
         color = color_Fire;
         range = 15;
         solid = false;
     }
 
     if RANGE(BLOCK_FROGLIGHT_OCHRE, BLOCK_FROGLIGHT_VERDANT) {
+        meta |= BIT_EMISSIVE;
         range = 15;
 
         if IS(BLOCK_FROGLIGHT_OCHRE) color = vec3(196, 165, 28);
@@ -172,6 +186,7 @@ void main() {
     }
 
     if IS(BLOCK_GLOWSTONE) {
+        meta |= BIT_EMISSIVE;
         color = vec3(199, 156, 113);
         range = 15;
     }
@@ -182,23 +197,27 @@ void main() {
     }
 
     if IS(BLOCK_LANTERN) {
+        meta |= BIT_EMISSIVE;
         color = vec3(181, 86, 51);
         range = 12;
         solid = false;
     }
 
     if IS(BLOCK_LAVA) {
+        meta |= BIT_EMISSIVE;
         color = vec3(color_Fire);
         range = 15;
     }
 
     if IS(BLOCK_LIGHTING_ROD_POWERED) {
+        meta |= BIT_EMISSIVE;
         color = vec3(222, 244, 249);
         range = 8;
         solid = false;
     }
 
     if IS(BLOCK_MAGMA) {
+        meta |= BIT_EMISSIVE;
         color = vec3(190, 82, 28);
         range = 3;
     }
@@ -210,6 +229,7 @@ void main() {
     }
 
     if IS(BLOCK_REDSTONE_LAMP_LIT) {
+        meta |= BIT_EMISSIVE;
         color = vec3(242, 198, 172);
         range = 15;
     }
@@ -222,6 +242,7 @@ void main() {
     if IS(BLOCK_REDSTONE_TORCH_LIT) {
         color = color_RedstoneTorch;
         range = 7;
+        meta |= BIT_EMISSIVE;
         solid = false;
     }
 
@@ -240,6 +261,7 @@ void main() {
     }
 
     if IS(BLOCK_SEA_LANTERN) {
+        meta |= BIT_EMISSIVE;
         color = vec3(141, 191, 219);
         range = 15;
     }
@@ -255,6 +277,7 @@ void main() {
     }
 
     if IS(BLOCK_SHROOMLIGHT) {
+        meta |= BIT_EMISSIVE;
         color = vec3(216, 120, 52);
         range = 15;
     }
@@ -265,38 +288,45 @@ void main() {
     }
 
     if IS(BLOCK_SOUL_CAMPFIRE_LIT) {
+        meta |= BIT_EMISSIVE;
         color = color_SoulFire;
         range = 12;
         solid = false;
     }
 
     if IS(BLOCK_SOUL_FIRE) {
+        meta |= BIT_EMISSIVE;
         color = color_SoulFire;
         range = 12;
         solid = false;
     }
 
     if IS(BLOCK_SOUL_LANTERN) {
+        meta |= BIT_EMISSIVE;
         color = color_SoulFire;
         range = 12;
         solid = false;
     }
 
     if IS(BLOCK_SOUL_TORCH) {
+        meta |= BIT_EMISSIVE;
         color = color_SoulFire;
         range = 10;
         solid = false;
     }
 
     if IS(BLOCK_TORCH) {
+        meta |= BIT_EMISSIVE;
         color = color_Fire;
         range = 12;
         solid = false;
     }
 
+
     // TINTED
 
     if RANGE(BLOCK_HONEY, BLOCK_TINTED_GLASS) {
+        meta |= BIT_REFLECTIVE;
         solid = false;
 
         if IS(BLOCK_HONEY) color = vec3(251, 187, 64);
@@ -320,6 +350,7 @@ void main() {
         if IS(BLOCK_TINTED_GLASS) color = vec3(51, 26, 51);
     }
 
+
     // OTHER
 
     if (IS(BLOCK_SLAB_BOTTOM) || IS(BLOCK_SLAB_TOP)) {
@@ -331,17 +362,54 @@ void main() {
 
     // TODO: stairs
 
-    if (IS(BLOCK_IGNORED) || IS(BLOCK_PLANT_WAVING_FULL) || IS(BLOCK_PLANT_WAVING_TOP)) {
+    if IS(BLOCK_IGNORED) solid = false;
+
+
+    // METADATA
+
+    if IS(BLOCK_IRON_BARS) {
+        meta |= BIT_REFLECTIVE;
         solid = false;
     }
+
+    if IS(BLOCK_PLANT_WAVING_TOP) {
+        meta |= BIT_WAVING_TOP | BIT_SSS_HIGH;
+        solid = false;
+    }
+
+    if IS(BLOCK_SSS_LOW) meta |= BIT_SSS_LOW;
+    if IS(BLOCK_SSS_HIGH) meta |= BIT_SSS_HIGH;
+
+    if IS(BLOCK_LEAVES) {
+        meta |= BIT_WAVING_FULL | BIT_SSS_HIGH;
+        solid = false;
+    }
+
+    if IS(BLOCK_VINE) {
+        meta |= BIT_WAVING_FULL | BIT_SSS_LOW;
+        solid = false;
+    }
+
+    if (IS(BLOCK_SNOW) || IS(BLOCK_SNOW_LAYERS)) meta |= BIT_SSS_LOW;
+
+    if IS(BLOCK_REFLECTIVE) meta |= BIT_REFLECTIVE;
+
+    if (IS(BLOCK_BLUE_ICE) || IS(BLOCK_PACKED_ICE)) {
+        meta |= BIT_REFLECTIVE | BIT_SSS_LOW;
+    }
+
 
     // FINAL
 
     ivec2 uv = ivec2(gl_GlobalInvocationID.xy);
 
-    vec4 dataLight = vec4(color / 255.0, range / 32.0);
-    imageStore(imgBlockLight, uv, dataLight);
+    imageStore(imgBlockMeta, uv, uvec4(meta));
 
-    uvec4 dataMask = uvec4((uint(solid) << 7) | (~faceMask & 0x3Fu));
-    imageStore(imgBlockLightMask, uv, dataMask);
+    #if defined(LIGHTING_COLORED) || defined(PHOTONICS)
+        vec4 dataLight = vec4(color / 255.0, range / 32.0);
+        imageStore(imgBlockLight, uv, dataLight);
+
+        uvec4 dataMask = uvec4((uint(solid) << 7) | (~faceMask & 0x3Fu));
+        imageStore(imgBlockLightMask, uv, dataMask);
+    #endif
 }

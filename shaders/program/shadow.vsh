@@ -16,6 +16,8 @@ out VertexData {
     layout(r16ui) uniform writeonly uimage3D imgVoxels;
 #endif
 
+uniform usampler2D texBlockMeta;
+
 uniform mat4 shadowProjectionInverse;
 uniform mat4 shadowProjection;
 uniform mat4 shadowModelViewInverse;
@@ -37,6 +39,7 @@ uniform float shadowMaxProj;
 uniform int renderStage;
 
 #include "/lib/blocks.glsl"
+#include "/lib/blockMeta.glsl"
 #include "/lib/Shadow_Params.glsl"
 #include "/lib/windWaving.glsl"
 
@@ -87,6 +90,11 @@ vec4 toClipSpace3(vec3 viewSpacePosition) {
 void main() {
     int blockId = int(mc_Entity.x);
 
+    bool isRenderTerrain = renderStage == MC_RENDER_STAGE_TERRAIN_SOLID
+        || renderStage == MC_RENDER_STAGE_TERRAIN_CUTOUT
+        || renderStage == MC_RENDER_STAGE_TERRAIN_CUTOUT_MIPPED
+        || renderStage == MC_RENDER_STAGE_TERRAIN_TRANSLUCENT;
+
 //    if (blockId == BLOCK_WATER || blockId == 9) gl_Position.w = -1.0;
     if (blockId == BLOCK_WATER) {
         gl_Position.w = -1.0;
@@ -104,14 +112,14 @@ void main() {
 
         vec3 originPos = vec3(-9999.0);
 
-        bool isRenderTerrain = renderStage == MC_RENDER_STAGE_TERRAIN_SOLID
-            || renderStage == MC_RENDER_STAGE_TERRAIN_CUTOUT
-            || renderStage == MC_RENDER_STAGE_TERRAIN_CUTOUT_MIPPED
-            || renderStage == MC_RENDER_STAGE_TERRAIN_TRANSLUCENT;
+//        bool isRenderTerrain = renderStage == MC_RENDER_STAGE_TERRAIN_SOLID
+//            || renderStage == MC_RENDER_STAGE_TERRAIN_CUTOUT
+//            || renderStage == MC_RENDER_STAGE_TERRAIN_CUTOUT_MIPPED
+//            || renderStage == MC_RENDER_STAGE_TERRAIN_TRANSLUCENT;
 
         if (isRenderTerrain) {
             bool ignoreBlock = blockId == BLOCK_WATER || blockId == BLOCK_IGNORED
-                    || blockId == BLOCK_PLANT_WAVING_FULL || blockId == BLOCK_SSS
+                    || blockId == BLOCK_VINE || blockId == BLOCK_SSS_HIGH
                     || blockId == BLOCK_GLASS;
 
             if (!ignoreBlock && (gl_VertexID % 4) == 0) {
@@ -122,6 +130,19 @@ void main() {
         ivec3 voxelPos = ivec3(GetVoxelPosition(originPos));
         if (IsInVoxelBounds(voxelPos) && voxelId > 0u) {
             imageStore(imgVoxels, voxelPos, uvec4(voxelId));
+        }
+    #endif
+
+    #if PHOTONICS_3D_BLOCKS == PH_VOXEL_FULL || defined(PHOTONICS_SHADOWS)
+        if (isRenderTerrain) {
+            gl_Position = vec4(0.0, 0.0, 1e30, 0.0); // Degenerates the triangle
+            return;
+        }
+    #elif PHOTONICS_3D_BLOCKS == PH_VOXEL_HYBRID
+        // TODO
+        if (blockId == BLOCK_PLANT_WAVING_TOP || blockId == BLOCK_LEAVES) {
+            gl_Position = vec4(0.0, 0.0, 1e30, 0.0); // Degenerates the triangle
+            return;
         }
     #endif
 
@@ -137,11 +158,15 @@ void main() {
         bool istopv = gl_MultiTexCoord0.t < mc_midTexCoord.t;
 //        vec3 localPos = mul3(shadowModelViewInverse, viewPos);
 
-        if (blockId == BLOCK_PLANT_WAVING_TOP && istopv && length(viewPos.xy) < 24.0) {
+        uint blockMeta = SampleBlockMeta(blockId);
+
+//        if (blockId == BLOCK_PLANT_WAVING_TOP && istopv && length(viewPos.xy) < 24.0) {
+        if (hasBit(blockMeta, BIT_WAVING_TOP) && istopv && length(viewPos.xy) < 24.0) {
             localPos += calcMovePlants(localPos + cameraPosition) / 255.0 * gl_MultiTexCoord1.y;
         }
 
-        if (blockId == BLOCK_PLANT_WAVING_FULL && length(viewPos.xy) < 24.0) {
+//        if (blockId == BLOCK_PLANT_WAVING_FULL && length(viewPos.xy) < 24.0) {
+        if (hasBit(blockMeta, BIT_WAVING_FULL) && length(viewPos.xy) < 24.0) {
             localPos += calcMoveLeaves(localPos + cameraPosition, 0.0040, 0.0064, 0.0043, 0.0035, 0.0037, 0.0041, vec3(1.0,0.2,1.0), vec3(0.5,0.1,0.5)) / 255.0 * gl_MultiTexCoord1.y;
         }
 

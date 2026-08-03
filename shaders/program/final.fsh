@@ -14,9 +14,16 @@ in VertexData {
 
 uniform sampler2D colortex7;
 
+#if DEBUG_VIEW == 1
+    uniform sampler2D TEX_GB_COLOR;
+#elif DEBUG_VIEW == 2
+    uniform sampler2D TEX_GB_NORMAL;
+#elif DEBUG_VIEW == 3
+    uniform sampler2D TEX_GB_SPECULAR;
+#endif
+
 #ifdef TEX_DEBUG
     uniform sampler2D TEX_DEBUG;
-    #include "/lib/octohedral.glsl"
 #endif
 
 uniform vec2 texelSize;
@@ -29,7 +36,24 @@ uniform int isEyeInWater;
 #include "/lib/color_transforms.glsl"
 #include "/lib/color_dither.glsl"
 
+#if DEBUG_VIEW > 0 || defined(TEX_DEBUG)
+    #include "/lib/octohedral.glsl"
+#endif
+
 //#include "/photonics/samplers.glsl"
+
+
+bool debugWindow(const in vec2 screenPos, const in vec2 screenSize, out vec2 texcoord) {
+    texcoord = (gl_FragCoord.xy - screenPos) / screenSize;
+    return all(equal(saturate(texcoord), texcoord));
+}
+
+bool debugWindow(const in vec2 screenPos, const in float screenWidth, out vec2 texcoord) {
+    float aspect = viewHeight / viewWidth;
+    vec2 screenSize = vec2(screenWidth, screenWidth * aspect);
+
+    return debugWindow(screenPos, screenSize, texcoord);
+}
 
 
 vec4 SampleTextureCatmullRom(sampler2D tex, vec2 uv, vec2 texSize) {
@@ -111,11 +135,33 @@ void main() {
     vec3 diff = col - lum;
     col = col + diff * (-lum * CROSSTALK + SATURATION);
 
+    vec2 debugCoord;
+    #if DEBUG_VIEW == 1
+        // opaque albedo
+        if (debugWindow(vec2(8.0), 512.0, debugCoord)) {
+            col = texture(TEX_GB_COLOR, debugCoord).rgb;
+        }
+    #elif DEBUG_VIEW == 2
+        // opaque normals
+        if (debugWindow(vec2(8.0), 512.0, debugCoord)) {
+            col = OctDecode(texture(TEX_GB_NORMAL, debugCoord).rg);
+            col = linearToSRGB(col * 0.5 + 0.5);
+        }
+        if (debugWindow(vec2(528.0, 8.0), 512.0, debugCoord)) {
+            col = OctDecode(texture(TEX_GB_NORMAL, debugCoord).ba);
+            col = linearToSRGB(col * 0.5 + 0.5);
+        }
+    #elif DEBUG_VIEW == 3
+        // opaque specular
+        if (debugWindow(vec2(8.0), 512.0, debugCoord)) {
+            col = texture(TEX_GB_SPECULAR, debugCoord).rga;
+        }
+    #endif
+
     #ifdef TEX_DEBUG
-        vec2 texcoord = (gl_FragCoord.xy - 8.0) / 512.0;
-        if (all(equal(saturate(texcoord), texcoord))) {
-            col = texture(TEX_DEBUG, texcoord).rgb;
-//            col = OctDecode(texture(TEX_DEBUG, texcoord).ba) * 0.5 + 0.5;
+        if (debugWindow(vec2(8.0), vec2(512.0), debugCoord)) {
+            col = texture(TEX_DEBUG, debugCoord).rgb;
+//            col = OctDecode(texture(TEX_DEBUG, debugCoord).ba) * 0.5 + 0.5;
 //            col = linearToSRGB(col);
         }
     #endif

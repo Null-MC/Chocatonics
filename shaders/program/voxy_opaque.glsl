@@ -14,11 +14,14 @@ layout(location = 3) out vec4 outWorld;
 
 void voxy_emitFragment(VoxyFragmentParameters parameters) {
 	vec4 color = parameters.sampledColour;
-
 	vec3 tint = parameters.tinting.rgb;
-	if (parameters.customId == BLOCK_EMISSIVE) {
-		tint = normalize(tint) * sqrt(3.0);
-	}
+
+	uint blockMeta = SampleBlockMeta(parameters.customId);
+
+//	if (hasBit(blockMeta, BIT_EMISSIVE)) {
+//		// TODO: wtf is this?
+//		tint = normalize(tint) * sqrt(3.0);
+//	}
 
 	color.rgb *= tint;
 
@@ -33,28 +36,35 @@ void voxy_emitFragment(VoxyFragmentParameters parameters) {
 	// TODO: normalize?
 	vec2 lmcoord = parameters.lightMap;
 
-	const float smoothness = 0.0;
-	const float f0 = 0.04;
+	float smoothness = 0.0;
+	float f0 = 0.04;
 	float emission = 0.0;
 	float sss = 0.0;
 
-	float mat = (parameters.customId == BLOCK_SSS || parameters.customId == BLOCK_PLANT_WAVING_FULL || parameters.customId == BLOCK_PLANT_WAVING_TOP) ? 0.5 : 1.0;
+//	float mat = (parameters.customId == BLOCK_SSS_HIGH || parameters.customId == BLOCK_PLANT_WAVING_FULL || parameters.customId == BLOCK_PLANT_WAVING_TOP) ? 0.5 : 1.0;
+	float mat = 1.0;
 
-	if (parameters.customId == BLOCK_IDK) mat = 0.6;
+//	if (parameters.customId == BLOCK_SSS_LOW) mat = 0.6;
 
-	if (parameters.customId == BLOCK_EMISSIVE) {
-		mat = 0.9;
+	if (hasBit(blockMeta, BIT_REFLECTIVE)) {
+		smoothness = 0.98;
+		f0 = 0.05;
 	}
 
-	if (mat < 0.51) {
+	if (hasBit(blockMeta, BIT_SSS_HIGH)) {
 		sss = 0.5;
+		mat = 0.5;
 	}
-	else if (mat < 0.61) {
+
+	if (hasBit(blockMeta, BIT_SSS_LOW)) {
 		sss = 0.2;
+		mat = 0.6;
 	}
-	else if (mat < 0.91) {
+
+	if (hasBit(blockMeta, BIT_EMISSIVE)) {
 		vec3 albedo = InputTransform(color.rgb);
-		emission = saturate(luma(albedo) * 3.0);
+		emission = saturate(luma(albedo));
+		mat = 0.9;
 	}
 
 	outColor = color;

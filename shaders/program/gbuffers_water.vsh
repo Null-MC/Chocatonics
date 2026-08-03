@@ -10,10 +10,11 @@ in vec4 mc_Entity;
 out VertexData {
 	vec4 lmtexcoord;
 	vec4 color;
-	vec4 normalMat;
+	vec3 normalMat;
 	vec3 binormal;
 	vec3 tangent;
 	vec3 viewVector;
+	flat int blockId;
 } vOut;
 
 uniform vec2 texelSize;
@@ -36,18 +37,19 @@ void main() {
 	gl_Position = toClipSpace3(viewPos);
 	vOut.color = gl_Color;
 
-	float mat = 0.0;
-	//if (mc_Entity.x == BLOCK_WATER || mc_Entity.x == 9.0) {
-	if (mc_Entity.x == BLOCK_WATER) {
-		mat = 1.0;
+//	float mat = 0.0;
+	int blockId = int(mc_Entity.x);
+//	if (mc_Entity.x == BLOCK_WATER || mc_Entity.x == 9.0) {
+	if (blockId == BLOCK_WATER) {
+//		mat = 1.0;
 		gl_Position.z -= 1.e-4;
 	}
 
-	if (mc_Entity.x == BLOCK_ICE) mat = 0.5;
-	if (mc_Entity.x == BLOCK_REFLECTIVE) mat = 0.01;
+//	if (mc_Entity.x == BLOCK_ICE) mat = 0.5;
+//	if (mc_Entity.x == BLOCK_REFLECTIVE) mat = 0.01;
 
 	vOut.normalMat.xyz = normalize(gl_NormalMatrix * gl_Normal);
-	vOut.normalMat.w = mat;
+	vOut.blockId = blockId;
 
 	vOut.tangent = normalize(gl_NormalMatrix * at_tangent.xyz);
 	vOut.binormal = normalize(cross(vOut.tangent, vOut.normalMat.xyz) * at_tangent.w);

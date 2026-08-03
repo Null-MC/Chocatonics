@@ -23,6 +23,10 @@ uniform sampler2D colortex5;
 //uniform sampler2D depthtex0;
 uniform sampler2D TEX_DEPTH_TRANSLUCENT;
 
+#if PHOTONICS_3D_BLOCKS != PH_VOXEL_NONE
+	uniform sampler2D texVoxelDepth;
+#endif
+
 uniform vec2 texelSize;
 uniform float frameTimeCounter;
 uniform float viewHeight;
@@ -208,10 +212,19 @@ vec3 TAA_hq() {
 	#ifdef TAA_CLOSEST_VELOCITY
 		vec3 closestToCamera = closestToCamera5taps(adjTC);
 	#else
-		vec3 closestToCamera = vec3(texcoord, texture(TEX_DEPTH_TRANSLUCENT, adjTC).x);
+		float depth = texture(TEX_DEPTH_TRANSLUCENT, adjTC).r;
+
+		#if PHOTONICS_3D_BLOCKS != PH_VOXEL_NONE
+			float depth_voxel = texture(texVoxelDepth, adjTC).r;
+			depth = min(depth, depth_voxel);
+		#endif
+
+		vec3 closestToCamera = vec3(texcoord, depth);
 	#endif
 
-	closestToCamera.z = max(closestToCamera.z, near/farPlane);
+	#ifdef LOD_ENABLED
+		closestToCamera.z = max(closestToCamera.z, near/farPlane);
+	#endif
 
 	// reproject previous frame
 	vec3 fragposition = toScreenSpace_lod(closestToCamera);

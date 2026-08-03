@@ -27,6 +27,8 @@ out VertexData {
 	#endif
 } vOut;
 
+uniform usampler2D texBlockMeta;
+
 uniform float frameTimeCounter;
 uniform mat4 gbufferModelView;
 uniform mat4 gbufferModelViewInverse;
@@ -37,6 +39,7 @@ uniform int framemod8;
 uniform mat4 gbufferProjectionInverse;
 
 #include "/lib/blocks.glsl"
+#include "/lib/blockMeta.glsl"
 #include "/lib/projections.glsl"
 #include "/lib/windWaving.glsl"
 
@@ -49,20 +52,10 @@ uniform mat4 gbufferProjectionInverse;
 void main() {
 	vOut.blockId = int(mc_Entity.x);
 
-	#if PHOTONICS_3D_BLOCKS != PH_VOXEL_NONE
+	#if PHOTONICS_3D_BLOCKS == PH_VOXEL_FULL
+		bool _discard = true;
+	#elif PHOTONICS_3D_BLOCKS == PH_VOXEL_HYBRID
 		bool _discard = false;
-		#if PHOTONICS_3D_BLOCKS == PH_VOXEL_FULL
-			_discard = true;
-		#elif PHOTONICS_3D_BLOCKS == PH_VOXEL_HYBRID
-			if (vOut.blockId == BLOCK_PLANT_WAVING_TOP) {
-				_discard = true;
-			}
-		#endif
-
-		if (_discard) {
-			gl_Position = vec4(-2.0);
-			return;
-		}
 	#endif
 
 	vOut.lmtexcoord.xy = (gl_MultiTexCoord0).xy;
@@ -76,8 +69,26 @@ void main() {
 		vOut.vtexcoord.xy    = sign(texcoordminusmid) * 0.5 + 0.5;
 	#endif
 
-	vec3 position = mul3(gl_ModelViewMatrix, gl_Vertex.xyz);
+	vec3 viewPos = mul3(gl_ModelViewMatrix, gl_Vertex.xyz);
+	vec3 localPos = toWorldSpace(viewPos);
 	vOut.color = gl_Color;
+
+	#if PHOTONICS_3D_BLOCKS == PH_VOXEL_HYBRID
+		// TODO: fancier non-axis-aligned check
+		vec3 pos_snapped = fract(localPos) + fract(cameraPosition);
+//			vec3 f = fract()
+
+		if (vOut.blockId == BLOCK_PLANT_WAVING_TOP || vOut.blockId == BLOCK_LEAVES) {
+			_discard = true;
+		}
+	#endif
+
+	#if PHOTONICS_3D_BLOCKS != PH_VOXEL_NONE
+		if (_discard) {
+			gl_Position = vec4(-2.0);
+			return;
+		}
+	#endif
 
 	bool istopv = gl_MultiTexCoord0.t < mc_midTexCoord.t;
 	#ifdef MAT_PBR_ENABLED
@@ -85,22 +96,25 @@ void main() {
 	#endif
 
 	vOut.normalMat = normalize(gl_NormalMatrix * gl_Normal);
-//	vOut.normalMat.w = (mc_Entity.x == BLOCK_SSS || mc_Entity.x == BLOCK_PLANT_WAVING_FULL || mc_Entity.x == BLOCK_PLANT_WAVING_TOP) ? 0.5 : 1.0;
+//	vOut.normalMat.w = (mc_Entity.x == BLOCK_SSS_HIGH || mc_Entity.x == BLOCK_PLANT_WAVING_FULL || mc_Entity.x == BLOCK_PLANT_WAVING_TOP) ? 0.5 : 1.0;
 
-//	if (mc_Entity.x == BLOCK_IDK) vOut.normalMat.a = 0.6;
+//	if (mc_Entity.x == BLOCK_SSS_LOW) vOut.normalMat.a = 0.6;
 
 	#ifdef WAVY_PLANTS
-		if ((vOut.blockId == BLOCK_PLANT_WAVING_TOP && istopv) && abs(position.z) < 64.0) {
-    		vec3 worldpos = toWorldSpaceCamera(position);
-			worldpos.xyz += calcMovePlants(worldpos.xyz) * vOut.lmtexcoord.w - cameraPosition;
-    		position = worldToViewSpace(worldpos);
+		vec3 worldPos = localPos + cameraPosition;
+
+		uint blockMeta = SampleBlockMeta(vOut.blockId);
+
+//		if ((vOut.blockId == BLOCK_PLANT_WAVING_TOP && istopv) && abs(viewPos.z) < 64.0) {
+		if (hasBit(blockMeta, BIT_WAVING_TOP) && istopv && abs(viewPos.z) < 64.0) {
+			worldPos += calcMovePlants(worldPos) * vOut.lmtexcoord.w;
 		}
 
-		if (vOut.blockId == BLOCK_PLANT_WAVING_FULL && abs(position.z) < 64.0) {
-			vec3 worldpos = toWorldSpaceCamera(position);
-			worldpos.xyz += calcMoveLeaves(worldpos.xyz, 0.0040, 0.0064, 0.0043, 0.0035, 0.0037, 0.0041, vec3(1.0, 0.2, 1.0), vec3(0.5, 0.1, 0.5)) * vOut.lmtexcoord.w - cameraPosition;
-    		position = worldToViewSpace(worldpos);
+		if (hasBit(blockMeta, BIT_WAVING_FULL) && abs(viewPos.z) < 64.0) {
+			worldPos += calcMoveLeaves(worldPos, 0.0040, 0.0064, 0.0043, 0.0035, 0.0037, 0.0041, vec3(1.0, 0.2, 1.0), vec3(0.5, 0.1, 0.5)) * vOut.lmtexcoord.w;
 		}
+
+		viewPos = worldToViewSpace(worldPos - cameraPosition);
 	#endif
 
 //	if (mc_Entity.x == BLOCK_EMISSIVE) {
@@ -108,7 +122,7 @@ void main() {
 //		vOut.normalMat.a = 0.9;
 //	}
 
-	gl_Position = viewToNdcSpace(gl_ProjectionMatrix, position);
+	gl_Position = viewToNdcSpace(gl_ProjectionMatrix, viewPos);
 
 	#ifdef SEPARATE_AO
 		vOut.lmtexcoord.z *= sqrt(vOut.color.a);

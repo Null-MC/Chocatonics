@@ -31,3 +31,44 @@ bool trace_ray(inout RayIterator ray, inout RayResult hit, inout vec3 tint) {
 
     return is_hit;
 }
+
+bool trace_ray_opaque(inout RayIterator ray, inout RayResult hit) {
+    bool is_hit = false;
+
+    while (ray_iter_has_next(ray) && !is_hit) {
+        hit = ray_iter_next(ray);
+
+        if (!ray_iter_is_in_bounds(ray)) {
+            break;
+        }
+        else if (ray_result_is_transparent(hit)) {
+            ray_iter_skip_block(ray);
+        }
+        else if (ray_result_is_hit(hit)) {
+            is_hit = true;
+        }
+    }
+
+    return is_hit;
+}
+
+float trace_ray_sss(inout RayIterator ray) {
+    vec3 origin = ray.position;
+
+//    while (ray_iter_has_next(ray)) {
+    for (int i = 0; i < 16; i++) {
+        vec3 lastPos = ray.position;
+        ray.hit = ray_iter_next(ray);
+
+        if (!ray_iter_is_in_bounds(ray)) {
+            break;
+        }
+        else if (!ray_result_is_hit(ray.hit)) {
+            return length(lastPos - origin);
+        }
+
+        ray_iter_skip_voxel(ray);
+    }
+
+    return 100.0;
+}
