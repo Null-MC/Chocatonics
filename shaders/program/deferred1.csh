@@ -30,6 +30,10 @@ layout(rgba8) uniform writeonly image2D colorimg11;
 
 uniform sampler2D TEX_DEPTH;
 
+#ifndef MAT_PBR_ENABLED
+    uniform usampler2D texBlockMeta;
+#endif
+
 uniform float viewWidth;
 uniform float viewHeight;
 uniform int framemod8;
@@ -39,10 +43,15 @@ uniform mat4 gbufferProjection;
 uniform mat4 gbufferModelViewInverse;
 uniform mat4 gbufferProjectionInverse;
 
-#include "/lib/material.glsl"
 #include "/lib/octohedral.glsl"
 #include "/lib/projections.glsl"
 #include "/lib/color_transforms.glsl"
+
+#ifdef MAT_PBR_ENABLED
+    #include "/lib/material.glsl"
+#else
+    #include "/lib/blockMeta.glsl"
+#endif
 
 #include "/photonics/tracing.glsl"
 #include "/photonics/trace_ray.glsl"
@@ -98,8 +107,7 @@ void main() {
 
             // update gbuffer color
             vec3 hit_albedo = voxel_data_albedo(voxel_data).rgb;
-            hit_albedo = linearToSRGB(hit_albedo);
-            imageStore(colorimg8, uv, vec4(hit_albedo, 1.0));
+            imageStore(colorimg8, uv, vec4(linearToSRGB(hit_albedo), 1.0));
 
             // update gbuffer normals
             vec3 geometry_normal = ray_result_normal(hit);
@@ -110,13 +118,41 @@ void main() {
 
             // update gbuffer specular
             vec4 hit_specular = voxel_data_specular(voxel_data);
-            vec4 specularFinal = hit_specular;
-            specularFinal.b = mat_sss(hit_specular.b);
-            specularFinal.a = mat_emission(hit_specular);
-            #ifndef MAT_PBR_ENABLED
-                // TODO: IPBR
+
+            #ifdef MAT_PBR_ENABLED
+                float smoothness = hit_specular.r;
+                float f0 = hit_specular.g;
+                float sss = mat_sss(hit_specular.b);
+                float emission = mat_emission(hit_specular);
+            #else
+                float smoothness = 0.0;
+                float f0 = 0.04;
+                float sss = 0.0;
+                float emission = 0.0;
+
+                int blockId = voxel_data_block_id(voxel_data);
+                uint blockMeta = SampleBlockMeta(blockId);
+
+                if (hasBit(blockMeta, BIT_REFLECTIVE)) {
+                    smoothness = 0.98;
+                    f0 = 0.05;
+                }
+
+                if (hasBit(blockMeta, BIT_SSS_HIGH)) {
+                    sss = 0.5;
+                }
+
+                if (hasBit(blockMeta, BIT_SSS_LOW)) {
+                    sss = 0.2;
+                }
+
+                if (hasBit(blockMeta, BIT_EMISSIVE)) {
+                    emission = saturate(luma(hit_albedo));
+                    emission = pow(emission, 1.4);
+                }
             #endif
-            imageStore(colorimg10, uv, specularFinal);
+
+            imageStore(colorimg10, uv, vec4(smoothness, f0, sss, emission));
 
             // update world buffer
             float mat = 0.0;

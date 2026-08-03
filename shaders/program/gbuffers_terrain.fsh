@@ -253,7 +253,6 @@ void main() {
 		if (hasBit(blockMeta, BIT_EMISSIVE)) {
 			emission = saturate(luma(toLinear(color.rgb)));
 			emission = pow(emission, 1.4);
-//			vOut.color.rgb = normalize(vOut.color.rgb) * sqrt(3.0);
 		}
 	#endif
 
