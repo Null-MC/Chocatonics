@@ -135,6 +135,16 @@ float pow5(const in float value) {
     return value2 * value2 * value;
 }
 
+bool isAxisAligned(vec3 normal) {
+    vec3 absN = abs(normal);
+
+    if (abs(absN.x - 1.0) < EPSILON && absN.y < EPSILON && absN.z < EPSILON) return true;
+    if (abs(absN.y - 1.0) < EPSILON && absN.x < EPSILON && absN.z < EPSILON) return true;
+    if (abs(absN.z - 1.0) < EPSILON && absN.x < EPSILON && absN.y < EPSILON) return true;
+
+    return false;
+}
+
 
 #define TEX_GB_COLOR colortex8
 #define TEX_GB_NORMAL colortex9

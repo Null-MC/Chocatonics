@@ -154,7 +154,7 @@ void main() {
     #elif DEBUG_VIEW == 3
         // opaque specular
         if (debugWindow(vec2(8.0), 512.0, debugCoord)) {
-            col = texture(TEX_GB_SPECULAR, debugCoord).rga;
+            col = texture(TEX_GB_SPECULAR, debugCoord).rgb;
         }
     #endif
 

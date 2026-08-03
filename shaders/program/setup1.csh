@@ -367,6 +367,10 @@ void main() {
 
     // METADATA
 
+    if IS(BLOCK_HONEYCOMB) {
+        meta |= BIT_REFLECTIVE | BIT_SSS_LOW;
+    }
+
     if IS(BLOCK_IRON_BARS) {
         meta |= BIT_REFLECTIVE;
         solid = false;

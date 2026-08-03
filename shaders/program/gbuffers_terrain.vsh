@@ -73,14 +73,19 @@ void main() {
 	vec3 localPos = toWorldSpace(viewPos);
 	vOut.color = gl_Color;
 
+	vOut.normalMat = normalize(gl_NormalMatrix * gl_Normal);
+
 	#if PHOTONICS_3D_BLOCKS == PH_VOXEL_HYBRID
 		// TODO: fancier non-axis-aligned check
-		vec3 pos_snapped = fract(localPos) + fract(cameraPosition);
-//			vec3 f = fract()
+//		vec3 pos_snapped = fract(localPos) + fract(cameraPosition);
+//		vec3 f = fract()
 
-		if (vOut.blockId == BLOCK_PLANT_WAVING_TOP || vOut.blockId == BLOCK_LEAVES) {
+		if (vOut.blockId == BLOCK_PLANT_WAVING_TOP || vOut.blockId == BLOCK_LEAVES || vOut.blockId == BLOCK_VINE) {
 			_discard = true;
 		}
+
+		vec3 localNormal = mat3(gbufferModelViewInverse) * vOut.normalMat;
+		if (!isAxisAligned(localNormal)) _discard = true;
 	#endif
 
 	#if PHOTONICS_3D_BLOCKS != PH_VOXEL_NONE
@@ -95,7 +100,7 @@ void main() {
 		vOut.tangent = vec4(normalize(gl_NormalMatrix * at_tangent.rgb), at_tangent.w);
 	#endif
 
-	vOut.normalMat = normalize(gl_NormalMatrix * gl_Normal);
+//	vOut.normalMat = normalize(gl_NormalMatrix * gl_Normal);
 //	vOut.normalMat.w = (mc_Entity.x == BLOCK_SSS_HIGH || mc_Entity.x == BLOCK_PLANT_WAVING_FULL || mc_Entity.x == BLOCK_PLANT_WAVING_TOP) ? 0.5 : 1.0;
 
 //	if (mc_Entity.x == BLOCK_SSS_LOW) vOut.normalMat.a = 0.6;

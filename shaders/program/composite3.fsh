@@ -647,7 +647,7 @@ void main() {
 			// always compute all shadows at close range where artifacts may be more visible
 			if (diffuseSun > 0.001)
 		#else
-			if (sssAmount > 0.5) {
+			if (sssAmount > 0.0) {
 				float scattered = max(phaseg(dot(np3, vIn.WsunVec), 0.5), 2.0 * phaseg(dot(np3, vIn.WsunVec), 0.1)) * PI*1.6;
 				diffuseSun = mix(diffuseSun, scattered, sssAmount); // mix=0.7
 			}
@@ -757,29 +757,31 @@ void main() {
 		#ifndef PHOTONICS_SHADOWS
 		// custom shading model for translucent objects
 		#ifdef Variable_Penumbra_Shadows
-			if (sssAmount > 0.5) {
+			if (sssAmount > 0.0) {
 //				sssAmount = 0.5;
 				vec3 extinction = 1.0 - albedo*0.85;
 
+				float shitF = mix(1.0, 2.0, sssAmount)/4.0;
+
 				// Should be somewhat energy conserving
 				SSS = exp(-filtered.y*11.0*extinction) + 3.0*exp(-filtered.y*11./3.*extinction);
-				float scattering = saturate((0.7+0.3*PI * phaseg(dot(np3, vIn.WsunVec), 0.85)) * 1.5/4.0 * sssAmount);
+				float scattering = saturate((0.7+0.3*PI * phaseg(dot(np3, vIn.WsunVec), 0.85)) * shitF * sssAmount);
 				SSS *= scattering;
 				diffuseSun *= 1.0 - sssAmount;
 				SSS *= sqrt(lightmap.y);
 			}
 
-			if (sssAmount > 0.2) {
-//				sssAmount = 0.2;
-				vec3 extinction = 1.0 - albedo*0.85;
-
-				// Should be somewhat energy conserving
-				SSS = exp(-filtered.y*11.0*extinction) + 3.0*exp(-filtered.y*11./3.*extinction);
-				float scattering = saturate((0.7+0.3*PI * phaseg(dot(np3, vIn.WsunVec), 0.85)) * 1.26/4.0 * sssAmount);
-				SSS *= scattering;
-				diffuseSun *= 1.0 - sssAmount;
-				SSS *= sqrt(lightmap.y);
-			}
+//			if (sssAmount > 0.2) {
+////				sssAmount = 0.2;
+//				vec3 extinction = 1.0 - albedo*0.85;
+//
+//				// Should be somewhat energy conserving
+//				SSS = exp(-filtered.y*11.0*extinction) + 3.0*exp(-filtered.y*11./3.*extinction);
+//				float scattering = saturate((0.7+0.3*PI * phaseg(dot(np3, vIn.WsunVec), 0.85)) * 1.26/4.0 * sssAmount);
+//				SSS *= scattering;
+//				diffuseSun *= 1.0 - sssAmount;
+//				SSS *= sqrt(lightmap.y);
+//			}
 		#endif
 		#endif
 

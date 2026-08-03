@@ -139,8 +139,16 @@ void main() {
             return;
         }
     #elif PHOTONICS_3D_BLOCKS == PH_VOXEL_HYBRID
-        // TODO
-        if (blockId == BLOCK_PLANT_WAVING_TOP || blockId == BLOCK_LEAVES) {
+        bool _discard = false;
+        if (blockId == BLOCK_PLANT_WAVING_TOP || blockId == BLOCK_LEAVES || blockId == BLOCK_VINE) {
+            _discard = true;
+        }
+
+        vec3 viewNormal = normalize(gl_NormalMatrix * gl_Normal);
+        vec3 localNormal = mat3(gbufferModelViewInverse) * viewNormal;
+        if (!isAxisAligned(localNormal)) _discard = true;
+
+        if (_discard) {
             gl_Position = vec4(0.0, 0.0, 1e30, 0.0); // Degenerates the triangle
             return;
         }
